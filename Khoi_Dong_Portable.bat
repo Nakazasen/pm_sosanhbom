@@ -18,3 +18,4 @@ if exist "dist\SSBOM_Portable\SSBOM_Portable.exe" (
 )
 
 endlocal
+
