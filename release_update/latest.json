@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "channel": "stable",
+  "policy": "HASH_ONLY_LAN",
+  "version": "1.0.0",
+  "package_name": "SSBOM_Manager-1.0.0.mpupdate",
+  "package_sha256": "960bcaad402b6318abb1398bfb79ffa31a9535f7527c7e1926992696b36ff7b9",
+  "package_size": 119668,
+  "published_at": "2026-09-17T09:38:02.709528Z",
+  "min_launcher_version": "1.0.0",
+  "release_notes": "B\u1ea3n ph\u00e1t h\u00e0nh ch\u00ednh th\u1ee9c h\u1ec7 th\u1ed1ng So S\u00e1nh BOM t\u1ef1 \u0111\u1ed9ng (TC14 & SAP R3)."
+}

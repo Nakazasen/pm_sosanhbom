@@ -1,0 +1,53 @@
+' Dang nhap R3
+
+If Not IsObject(SAPguiApp) Then
+On Error Resume Next
+Set SAPguiAuto = GetObject("SAPGUI")
+If Err.Number <> 0 Then
+On Error GoTo 0
+Set WshShell = CreateObject("WScript.Shell")
+Set oExec = WshShell.Exec("C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe")
+
+Do While Not WshShell.AppActivate("SAP Logon 770")
+WScript.Sleep 100
+Loop
+Set SAPguiAuto = GetObject("SAPGUI")
+Else
+On Error GoTo 0
+End If
+Set SAPguiApp = SAPguiAuto.GetScriptingEngine
+End If
+If Not IsObject(Connection) Then
+Set Connection = SAPguiApp.OpenConnection("P1J(ERP60-AWS)-VN", True)
+End If
+If Not IsObject(session) Then
+Set session = Connection.Children(0)
+End If
+
+If session.Children.Count > 1 Then
+session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").Select
+session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").SetFocus
+session.findById("wnd[1]/tbar[0]/btn[0]").press
+End If
+
+If Not IsObject(application) Then
+   Set SapGuiAuto  = GetObject("SAPGUI")
+   Set application = SapGuiAuto.GetScriptingEngine
+End If
+If Not IsObject(connection) Then
+   Set connection = application.Children(0)
+End If
+If Not IsObject(session) Then
+   Set session    = connection.Children(0)
+End If
+If IsObject(WScript) Then
+   WScript.ConnectObject session,     "on"
+   WScript.ConnectObject application, "on"
+End If
+session.findById("wnd[0]").maximize
+session.findById("wnd[0]/usr/txtRSYST-BNAME").text = "v130474"
+session.findById("wnd[0]/usr/pwdRSYST-BCODE").text = "0123456789"
+session.findById("wnd[0]/usr/pwdRSYST-BCODE").setFocus
+session.findById("wnd[0]/usr/pwdRSYST-BCODE").caretPosition = 10
+Session.findById("wnd[0]/usr/txtRSYST-LANGU").Text = "EN"
+session.findById("wnd[0]").sendVKey 0

@@ -1,0 +1,5 @@
+# Orchestrator Context
+
+- Request: D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md
+- Workspace: D:\Sandbox\pm_sosanhbom
+- Working Directory: D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_orchestrator_1

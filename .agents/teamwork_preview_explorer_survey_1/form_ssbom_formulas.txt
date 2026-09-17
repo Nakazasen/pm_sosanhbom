@@ -1,0 +1,261 @@
+
+=========================================
+SHEET: Tongket (max_row=36, max_col=25)
+=========================================
+Row 1:
+  Col 2 (B1): Những nội dung cần xác nhận khi sản xuất  loại máy mới, mã hàng mới
+Row 2:
+  Col 2 (B2): No
+  Col 4 (D2): Công đoạn
+Row 3:
+  Col 4 (D3): UNIT
+  Col 11 (K3): FRAME UNIT
+  Col 20 (T3): ĐIỀU CHỈNH
+  Col 21 (U3): Hoàn thiện 
+Row 4:
+  Col 4 (D4): LSU
+  Col 5 (E4): DLP
+  Col 6 (F4): DRUM
+  Col 7 (G4): IMAGE
+  Col 8 (H4): FUSER
+  Col 9 (I4): DP
+  Col 10 (J4): ISU
+  Col 11 (K4): HONTAI
+  Col 12 (L4): HONTAI SUB
+  Col 13 (M4): MPF
+  Col 14 (N4): COVER
+  Col 15 (O4): DRIVE
+  Col 16 (P4): EXIT
+  Col 17 (Q4): CONVEYING
+  Col 18 (R4): CASSETTE
+  Col 19 (S4): PANEL
+  Col 21 (U4): HOÀN THIỆN
+  Col 22 (V4): ĐÓNG GÓI
+Row 5:
+  Col 3 (C5): =PLM!C2
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+  Col C (3): R5:=PLM!C2
+
+=========================================
+SHEET: List JIG (max_row=50, max_col=22)
+=========================================
+Row 1:
+  Col 2 (B1): LIST JIG thay đổi khi bổ sung mã hàng
+Row 3:
+  Col 22 (V3): 6thA4
+Row 4:
+  Col 22 (V4): Polaris
+Row 5:
+  Col 22 (V5): 6thA3
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+
+=========================================
+SHEET: MSI_7980_7990 (max_row=73, max_col=17)
+=========================================
+Row 1:
+  Col 1 (A1): Mã LK Barcode
+  Col 2 (B1): Mã UNIT/linh kiện bản mạch
+  Col 3 (C1): Tên UNIT
+  Col 4 (D1): 3 ký tự MSI
+  Col 5 (E1): SEVICE
+  Col 6 (F1): ABS
+  Col 7 (G1): Trang CTTT
+  Col 8 (H1): Điện áp
+  Col 9 (I1): Loại Label
+  Col 10 (J1): Tên phụ trách
+  Col 11 (K1): Kết quả so sánh
+  Col 12 (L1): Ghi chú
+  Col 13 (M1): Mã linh kiện trong PLM
+  Col 14 (N1): MSI trong File Fix Serial DLTool
+  Col 15 (O1): SEVICE
+(LABEL_COMMENT)
+Row 2:
+  Col 3 (C2): IMAGE UNIT
+Row 3:
+  Col 3 (C3): FUSER UNIT
+Row 4:
+  Col 3 (C4): DATA LASER -V 
+Row 5:
+  Col 3 (C5): CASE OUTER -V 
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+
+=========================================
+SHEET: CTTT (max_row=9000, max_col=25)
+=========================================
+Row 1:
+  Col 1 (A1): =PLM!C2
+  Col 7 (G1): work instruction and PLM
+  Col 11 (K1): work instruction and R3
+  Col 15 (O1): REV LIST
+Row 2:
+  Col 1 (A2): SUB
+  Col 2 (B2): TRANG CTTT
+  Col 3 (C2): MÃ LINH KIỆN
+  Col 4 (D2): TÊN LINH KIỆN
+  Col 5 (E2): SỐ LƯỢNG
+  Col 6 (F2): PHỤ TRÁCH
+  Col 7 (G2): Q.ty
+  Col 8 (H2): Compare
+  Col 9 (I2): Rev PLM
+  Col 11 (K2): Qty
+  Col 12 (L2): Compare
+  Col 13 (M2): Rev R3
+  Col 14 (N2): Compare
+  Col 15 (O2): REV
+  Col 16 (P2): Compare
+  Col 17 (Q2): Giải thích sai khác của chỉ thị thao tác với PLM và R3
+  Col 18 (R2): Check
+  Col 19 (S2): Lý do sai khác Rev 3 với List Rev
+  Col 24 (X2): Mã Linh kiện
+  Col 25 (Y2): Số lượng
+Row 3:
+  Col 7 (G3): =VLOOKUP(C3,PLM!T:U,2,0)
+  Col 8 (H3): =IF(G3=E3,"OK","NG")
+  Col 9 (I3): =VLOOKUP(C3,PLM!C:L,10,0)
+  Col 11 (K3): =VLOOKUP(C3,'R3'!W:X,2,0)
+  Col 12 (L3): =IF(K3=E3,"OK","NG")
+  Col 13 (M3): =VLOOKUP(C3,'R3'!E:G,3,0)
+  Col 14 (N3): =IF(M3=I3,"OK","NG")
+  Col 15 (O3): =VLOOKUP(C3,#REF!,2,0)
+  Col 16 (P3): =IF(O3=M3,"OK","NG")
+  Col 18 (R3): =IF(OR(G3=0,K3=0,N3="NG"),"NG","OK")
+  Col 24 (X3): =IF(C3="","",C3)
+  Col 25 (Y3): =IF(E3="","",E3)
+Row 4:
+  Col 7 (G4): =VLOOKUP(C4,PLM!T:U,2,0)
+  Col 8 (H4): =IF(G4=E4,"OK","NG")
+  Col 9 (I4): =VLOOKUP(C4,PLM!C:L,10,0)
+  Col 11 (K4): =VLOOKUP(C4,'R3'!W:X,2,0)
+  Col 12 (L4): =IF(K4=E4,"OK","NG")
+  Col 13 (M4): =VLOOKUP(C4,'R3'!E:G,3,0)
+  Col 14 (N4): =IF(M4=I4,"OK","NG")
+  Col 15 (O4): =VLOOKUP(C4,#REF!,2,0)
+  Col 16 (P4): =IF(O4=M4,"OK","NG")
+  Col 18 (R4): =IF(OR(G4=0,K4=0,N4="NG"),"NG","OK")
+  Col 24 (X4): =IF(C4="","",C4)
+  Col 25 (Y4): =IF(E4="","",E4)
+Row 5:
+  Col 7 (G5): =VLOOKUP(C5,PLM!T:U,2,0)
+  Col 8 (H5): =IF(G5=E5,"OK","NG")
+  Col 9 (I5): =VLOOKUP(C5,PLM!C:L,10,0)
+  Col 11 (K5): =VLOOKUP(C5,'R3'!W:X,2,0)
+  Col 12 (L5): =IF(K5=E5,"OK","NG")
+  Col 13 (M5): =VLOOKUP(C5,'R3'!E:G,3,0)
+  Col 14 (N5): =IF(M5=I5,"OK","NG")
+  Col 15 (O5): =VLOOKUP(C5,#REF!,2,0)
+  Col 16 (P5): =IF(O5=M5,"OK","NG")
+  Col 18 (R5): =IF(OR(G5=0,K5=0,N5="NG"),"NG","OK")
+  Col 24 (X5): =IF(C5="","",C5)
+  Col 25 (Y5): =IF(E5="","",E5)
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+  Col A (1): R1:=PLM!C2
+  Col G (7): R3:=VLOOKUP(C3,PLM!T:U,2,0), R4:=VLOOKUP(C4,PLM!T:U,2,0), R5:=VLOOKUP(C5,PLM!T:U,2,0)
+  Col H (8): R3:=IF(G3=E3,"OK","NG"), R4:=IF(G4=E4,"OK","NG"), R5:=IF(G5=E5,"OK","NG")
+  Col I (9): R3:=VLOOKUP(C3,PLM!C:L,10,0), R4:=VLOOKUP(C4,PLM!C:L,10,0), R5:=VLOOKUP(C5,PLM!C:L,10,0)
+  Col K (11): R3:=VLOOKUP(C3,'R3'!W:X,2,0), R4:=VLOOKUP(C4,'R3'!W:X,2,0), R5:=VLOOKUP(C5,'R3'!W:X,2,0)
+  Col L (12): R3:=IF(K3=E3,"OK","NG"), R4:=IF(K4=E4,"OK","NG"), R5:=IF(K5=E5,"OK","NG")
+  Col M (13): R3:=VLOOKUP(C3,'R3'!E:G,3,0), R4:=VLOOKUP(C4,'R3'!E:G,3,0), R5:=VLOOKUP(C5,'R3'!E:G,3,0)
+  Col N (14): R3:=IF(M3=I3,"OK","NG"), R4:=IF(M4=I4,"OK","NG"), R5:=IF(M5=I5,"OK","NG")
+  Col O (15): R3:=VLOOKUP(C3,#REF!,2,0), R4:=VLOOKUP(C4,#REF!,2,0), R5:=VLOOKUP(C5,#REF!,2,0)
+  Col P (16): R3:=IF(O3=M3,"OK","NG"), R4:=IF(O4=M4,"OK","NG"), R5:=IF(O5=M5,"OK","NG")
+  Col R (18): R3:=IF(OR(G3=0,K3=0,N3="NG"),"NG","OK"), R4:=IF(OR(G4=0,K4=0,N4="NG"),"NG","OK"), R5:=IF(OR(G5=0,K5=0,N5="NG"),"NG","OK")
+  Col X (24): R3:=IF(C3="","",C3), R4:=IF(C4="","",C4), R5:=IF(C5="","",C5)
+  Col Y (25): R3:=IF(E3="","",E3), R4:=IF(E4="","",E4), R5:=IF(E5="","",E5)
+
+=========================================
+SHEET: PLM (max_row=5619, max_col=23)
+=========================================
+Row 1:
+  Col 1 (A1): Level
+  Col 2 (B1): Item Type
+  Col 3 (C1): Item Id
+  Col 4 (D1): Has Children
+  Col 5 (E1): Quantity
+  Col 6 (F1): 1st Parts
+  Col 7 (G1): 2nd BOM Flag
+  Col 8 (H1): Occurrence Effectivities
+  Col 9 (I1): Item Revision Projects List
+  Col 10 (J1): Item Name
+  Col 11 (K1): Notice No
+  Col 12 (L1): Revision
+  Col 13 (M1): Item Rev Status
+  Col 14 (N1): So sánh ngược
+  Col 15 (O1): Giải thích
+  Col 16 (P1): Phụ trách
+  Col 17 (Q1): Quản lý check
+  Col 18 (R1): PART CODE
+  Col 19 (S1): Q.TY
+Row 2:
+  Col 18 (R2): =IF(C2="","",C2)
+  Col 19 (S2): =IF(E2="","",E2)
+Row 3:
+  Col 14 (N3): =VLOOKUP(C3,CTTT!C:E,3,0)
+  Col 18 (R3): =IF(C3="","",C3)
+  Col 19 (S3): =IF(E3="","",E3)
+Row 4:
+  Col 14 (N4): =VLOOKUP(C4,CTTT!C:E,3,0)
+  Col 18 (R4): =IF(C4="","",C4)
+  Col 19 (S4): =IF(E4="","",E4)
+Row 5:
+  Col 14 (N5): =VLOOKUP(C5,CTTT!C:E,3,0)
+  Col 18 (R5): =IF(C5="","",C5)
+  Col 19 (S5): =IF(E5="","",E5)
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+  Col N (14): R3:=VLOOKUP(C3,CTTT!C:E,3,0), R4:=VLOOKUP(C4,CTTT!C:E,3,0), R5:=VLOOKUP(C5,CTTT!C:E,3,0)
+  Col R (18): R2:=IF(C2="","",C2), R3:=IF(C3="","",C3), R4:=IF(C4="","",C4)
+  Col S (19): R2:=IF(E2="","",E2), R3:=IF(E3="","",E3), R4:=IF(E4="","",E4)
+
+=========================================
+SHEET: R3 (max_row=2520, max_col=23)
+=========================================
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+
+=========================================
+SHEET: CTTT_Total (max_row=5001, max_col=9)
+=========================================
+Row 1:
+  Col 1 (A1): Row Labels
+  Col 2 (B1): 合計 / Số lượng
+  Col 5 (E1): So Sánh SL R3
+  Col 7 (G1): Giải thích Bên Sheet CTTT
+  Col 8 (H1): Tên linh kiện
+  Col 9 (I1): Phụ trách
+Row 2:
+  Col 2 (B2): 0
+Row 3:
+  Col 1 (A3): Grand Total
+  Col 2 (B3): 0
+  Col 3 (C3): =B3
+  Col 5 (E3): =VLOOKUP(A3,'R3'!W:X,2,0)
+  Col 6 (F3): =IF(C3=E3,"OK","NG")
+  Col 7 (G3): =VLOOKUP(A3,CTTT!C:Q,15,0)
+  Col 8 (H3): =VLOOKUP(A3,CTTT!C:D,2,0)
+  Col 9 (I3): =VLOOKUP(A3,CTTT!C:F,4,0)
+Row 4:
+  Col 3 (C4): =B4
+  Col 5 (E4): =VLOOKUP(A4,'R3'!W:X,2,0)
+  Col 6 (F4): =IF(C4=E4,"OK","NG")
+  Col 7 (G4): =VLOOKUP(A4,CTTT!C:Q,15,0)
+  Col 8 (H4): =VLOOKUP(A4,CTTT!C:D,2,0)
+  Col 9 (I4): =VLOOKUP(A4,CTTT!C:F,4,0)
+Row 5:
+  Col 3 (C5): =B5
+  Col 5 (E5): =VLOOKUP(A5,'R3'!W:X,2,0)
+  Col 6 (F5): =IF(C5=E5,"OK","NG")
+  Col 7 (G5): =VLOOKUP(A5,CTTT!C:Q,15,0)
+  Col 8 (H5): =VLOOKUP(A5,CTTT!C:D,2,0)
+  Col 9 (I5): =VLOOKUP(A5,CTTT!C:F,4,0)
+
+Distinct formulas across columns (checking rows 2, 3, 4):
+  Col C (3): R3:=B3, R4:=B4, R5:=B5
+  Col E (5): R3:=VLOOKUP(A3,'R3'!W:X,2,0), R4:=VLOOKUP(A4,'R3'!W:X,2,0), R5:=VLOOKUP(A5,'R3'!W:X,2,0)
+  Col F (6): R3:=IF(C3=E3,"OK","NG"), R4:=IF(C4=E4,"OK","NG"), R5:=IF(C5=E5,"OK","NG")
+  Col G (7): R3:=VLOOKUP(A3,CTTT!C:Q,15,0), R4:=VLOOKUP(A4,CTTT!C:Q,15,0), R5:=VLOOKUP(A5,CTTT!C:Q,15,0)
+  Col H (8): R3:=VLOOKUP(A3,CTTT!C:D,2,0), R4:=VLOOKUP(A4,CTTT!C:D,2,0), R5:=VLOOKUP(A5,CTTT!C:D,2,0)
+  Col I (9): R3:=VLOOKUP(A3,CTTT!C:F,4,0), R4:=VLOOKUP(A4,CTTT!C:F,4,0), R5:=VLOOKUP(A5,CTTT!C:F,4,0)

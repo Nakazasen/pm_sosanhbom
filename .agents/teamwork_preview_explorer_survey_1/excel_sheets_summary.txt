@@ -1,0 +1,228 @@
+
+=========================================
+FILE: Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx
+=========================================
+Sheet names: ['Sheet1']
+
+  --- Sheet: Sheet1 (max_row=5619, max_column=35) ---
+
+=========================================
+FILE: form_ssbom.xlsm
+=========================================
+Sheet names: ['Tongket', 'List JIG', 'MSI_7980_7990', 'CTTT', 'PLM', 'R3', 'CTTT_Total']
+
+  --- Sheet: Tongket (max_row=36, max_column=25) ---
+    Row 1:  | Những nội dung cần xác nhận khi sản xuất  loại máy mới, mã hàng mới |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 2:  | No |  | Công đoạn |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 3:  |  |  | UNIT |  |  |  |  |  |  | FRAME UNIT |  |  |  |  |  |  |  |  | ĐIỀU CHỈNH | Hoàn thiện  |  |  |  | 
+    Row 4:  |  |  | LSU | DLP | DRUM | IMAGE | FUSER | DP | ISU | HONTAI | HONTAI SUB | MPF | COVER | DRIVE | EXIT | CONVEYING | CASSETTE | PANEL |  | HOÀN THIỆN | ĐÓNG GÓI |  |  | 
+    Row 5:  |  | 00:00:00 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 6:  | 1 | Chỉ thị thao tác ( CTTT) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: List JIG (max_row=50, max_column=22) ---
+    Row 1:  | LIST JIG thay đổi khi bổ sung mã hàng |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 2:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 6thA4
+    Row 3:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | Polaris
+    Row 4:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 6thA3
+    Row 5:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | Brazil
+    Row 6:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | Libra
+
+  --- Sheet: MSI_7980_7990 (max_row=79, max_column=17) ---
+    Row 1: Mã LK Barcode | Mã UNIT/linh kiện bản mạch | Tên UNIT | 3 ký tự MSI | SEVICE | ABS | Trang CTTT | Điện áp | Loại Label | Tên phụ trách | Kết quả so sánh | Ghi chú | Mã linh kiện trong PLM | MSI trong File Fix Serial DLTool | SEVICE
+(LABEL_COMMENT) |  | 
+    Row 2:  |  | IMAGE UNIT |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 3:  |  | FUSER UNIT |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 4:  |  | DATA LASER -V  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 5:  |  | CASE OUTER -V  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+    Row 6:  |  | ISU |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: CTTT (max_row=9000, max_column=25) ---
+    Row 1: 0 |  |  |  |  |  | work instruction and PLM |  |  |  | work instruction and R3 |  |  |  | REV LIST |  |  |  |  |  |  |  |  |  | 
+    Row 2: SUB | TRANG CTTT | MÃ LINH KIỆN | TÊN LINH KIỆN | SỐ LƯỢNG | PHỤ TRÁCH | Q.ty | Compare | Rev PLM |  | Qty | Compare | Rev R3 | Compare | REV | Compare | Giải thích sai khác của chỉ thị thao tác với PLM và R3 | Check | Lý do sai khác Rev 3 với List Rev |  |  |  |  | Mã Linh kiện | Số lượng
+    Row 3:  |  |  |  |  |  | #N/A | #N/A | #N/A |  | #N/A | #N/A | #N/A | #N/A | #REF! | #REF! |  | #N/A |  |  |  |  |  |  | 
+    Row 4:  |  |  |  |  |  | #N/A | #N/A | #N/A |  | #N/A | #N/A | #N/A | #N/A | #REF! | #REF! |  | #N/A |  |  |  |  |  |  | 
+    Row 5:  |  |  |  |  |  | #N/A | #N/A | #N/A |  | #N/A | #N/A | #N/A | #N/A | #REF! | #REF! |  | #N/A |  |  |  |  |  |  | 
+    Row 6:  |  |  |  |  |  | #N/A | #N/A | #N/A |  | #N/A | #N/A | #N/A | #N/A | #REF! | #REF! |  | #N/A |  |  |  |  |  |  | 
+
+  --- Sheet: PLM (max_row=5619, max_column=23) ---
+    Row 1: Level | Item Type | Item Id | Has Children | Quantity | 1st Parts | 2nd BOM Flag | Occurrence Effectivities | Item Revision Projects List | Item Name | Notice No | Revision | Item Rev Status | So sánh ngược | Giải thích | Phụ trách | Quản lý check | PART CODE | Q.TY |  |  |  | 
+    Row 2:  |  |  |  |  |  |  |  |  |  |  |  |  | #N/A |  |  |  |  |  |  |  |  | 
+    Row 3:  |  |  |  |  |  |  |  |  |  |  |  |  | #N/A |  |  |  |  |  |  |  |  | 
+    Row 4:  |  |  |  |  |  |  |  |  |  |  |  |  | #N/A |  |  |  |  |  |  |  |  | 
+    Row 5:  |  |  |  |  |  |  |  |  |  |  |  |  | #N/A |  |  |  |  |  |  |  |  | 
+    Row 6:  |  |  |  |  |  |  |  |  |  |  |  |  | #N/A |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: R3 (max_row=2520, max_column=23) ---
+    Row 1:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 変更番号 |  |  |  | 
+    Row 2:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | PART CODE | Q.TY |  | 
+
+  --- Sheet: CTTT_Total (max_row=5001, max_column=9) ---
+    Row 1: Row Labels | 合計 / Số lượng |  |  | So Sánh SL R3 |  | Giải thích Bên Sheet CTTT | Tên linh kiện | Phụ trách
+    Row 2:  | 0 |  |  |  |  |  |  | 
+    Row 3: Grand Total | 0 | 0 |  | #N/A | #N/A | #N/A | #N/A | #N/A
+    Row 4:  |  | 0 |  | #N/A | #N/A | #N/A | #N/A | #N/A
+    Row 5:  |  | 0 |  | #N/A | #N/A | #N/A | #N/A | #N/A
+    Row 6:  |  | 0 |  | #N/A | #N/A | #N/A | #N/A | #N/A
+
+=========================================
+FILE: formnguoidung.xlsm
+=========================================
+Sheet names: ['CTTT', 'MSI', 'Label_7980_7990', 'PLM_R3']
+
+  --- Sheet: CTTT (max_row=546, max_column=17) ---
+    Row 1: Nhập dữ liệu chỉ thị thao tác lần đầu để tạo file So sánh BOM |  |  |  |  |  | PLM |  |  |  | R3 |  |  |  | Giải thích sai khác của chỉ thị thao tác với PLM và R3 |  | Kết quả
+    Row 2: Unit/Assy | Trang | Mã linh kiện | Tên linh kiện | Số lượng | Tên người phụ trách | Số lượng PLM | So sánh số lượng CTTT và PLM | Rev PLM | Số lượng R3 | So sánh số lượng CTTT và R3 | Rev R3 | So sánh Rev PLM và R3 | Check số lượng PLM và kết quả so sánh Rev PLM/R3 |  |  | 
+    Row 3:  |  |  |  |  |  | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A |  |  | 
+    Row 4:  |  |  |  |  |  | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A |  |  | 
+    Row 5:  |  |  |  |  |  | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A |  |  | 
+    Row 6:  |  |  |  |  |  | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A | #N/A |  |  | 
+
+  --- Sheet: MSI (max_row=36, max_column=12) ---
+    Row 1: Mã LK Barcode | Mã UNIT/linh kiện bản mạch | Tên UNIT | 3 ký tự MSI | SEVICE | ABS | Trang CTTT | Điện áp | Loại Label | Tên phụ trách | Kết quả so sánh | Ghi chú
+    Row 2:  |  | IMAGE UNIT |  |  |  |  |  |  |  |  | 
+    Row 3:  |  | FUSER UNIT |  |  |  |  |  |  |  |  | 
+    Row 4:  |  | DATA LASER -V  |  |  |  |  |  |  |  |  | 
+    Row 5:  |  | CASE OUTER -V  |  |  |  |  |  |  |  |  | 
+    Row 6:  |  | ISU |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: Label_7980_7990 (max_row=27, max_column=12) ---
+    Row 1: Công đoạn quản lý | Trang chỉ thị thao tác | Mã label quản lý 7980 | Tên label quản lý 7980 | Số lượng | Tên người phụ trách | Công đoạn quản lý | Trang chỉ thị thao tác | Mã label quản lý 7990 | Tên label quản lý 7990 | Số lượng | Tên người phụ trách
+
+  --- Sheet: PLM_R3 (max_row=1711, max_column=7) ---
+    Row 1: Mã linh kiện trong PLM | Số lượng trong PLM | Rev PLM | Mã linh kiện trong R3 | Số lượng trong R3 | Rev R3 | Tên linh kiện trong PLM
+
+=========================================
+FILE: tonghop_new12052026_ma1.xlsm
+=========================================
+Sheet names: ['duongdan', 'tonghopdl', 'tenphong_pt', 'tonghopMSI_7980_7990', 'BolocBom', 'Lichsu', 'Download_R3_tudong', 'Mail']
+
+  --- Sheet: duongdan (max_row=8, max_column=4) ---
+    Row 1: \\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\15. FORM（BIEU MAU）-形式\Form_VBA\Form_VBA_SS_BOM\ | Đường dẫn đến form tạo file so sánh bom | \\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\15. FORM（BIEU MAU）-形式\Form_VBA\Form_VBA_SS_BOM\PLM_tudongdangnhap_VT_KTCT1.bat | Đăng nhập tự động PLM
+    Row 2: \\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\15. FORM（BIEU MAU）-形式\Form_VBA\Form_VBA_SS_BOM\ | Đường dẫn đến form tạo file cho người dùng điền danh sách linh kiện |  | 
+    Row 3: 888888888 |  |  | 
+    Row 4: So sánh BOM kiểu cũ |  |  | 
+    Row 5: So sánh BOM kiểu mới |  |  | 
+    Row 6:  | Duy trì phiên đăng nhập kiểu so sánh BOM cũ |  | 
+
+  --- Sheet: tonghopdl (max_row=3934, max_column=7) ---
+    Row 1: Unit/Assy | Trang | Mã linh kiện | Tên linh kiện | Số lượng | Tên người phụ trách | Giải thích sai khác của chỉ thị thao tác với PLM và R3
+
+  --- Sheet: tenphong_pt (max_row=39, max_column=11) ---
+    Row 1: Tên phòng làm việc | Tên phụ trách |  |  |  |  | Tên phòng làm việc |  | Tên phòng làm việc |  | Tên phụ trách
+    Row 2: Cơ 1 | Son_mecha1 |  |  |  |  | Cơ 1 |  | Cơ 3 |  | LVThuan_mecha3
+    Row 3: Cơ 1 | Duy_mecha1 |  |  |  |  | Cơ 2 |  |  |  | V.Thuong_mecha3
+    Row 4: Cơ 1 | KhiemA_mecha1 |  |  |  |  | Cơ 3 |  |  |  | Vinh_mecha3
+    Row 5: Cơ 1 | KhiemE_mecha1 |  |  |  |  |  |  |  |  | Viet_mecha3
+    Row 6: Cơ 1 | Nghia_mecha1 |  |  |  |  |  |  |  |  | Nguyet_mecha3
+
+  --- Sheet: tonghopMSI_7980_7990 (max_row=95, max_column=13) ---
+    Row 1: Mã LK Barcode | Mã UNIT/linh kiện bản mạch | Tên UNIT | 3 ký tự MSI | SEVICE | ABS | Trang CTTT | Điện áp | Loại Label | Tên phụ trách | Kết quả so sánh | Ghi chú | 
+    Row 2:  |  | IMAGE UNIT |  |  |  |  |  |  |  |  |  | 
+    Row 3:  |  | FUSER UNIT |  |  |  |  |  |  |  |  |  | 
+    Row 4:  |  | DATA LASER -V  |  |  |  |  |  |  |  |  |  | 
+    Row 5:  |  | CASE OUTER -V  |  |  |  |  |  |  |  |  |  | 
+    Row 6:  |  | ISU |  |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: BolocBom (max_row=135, max_column=18) ---
+    Row 1: Virgo | Trạng thái lọc | Mã Unit/Linh kiện | Libra2 | Trạng thái lọc | Mã Unit/Linh kiện | Iris2024 | Trạng thái lọc | Mã Unit/Linh kiện | Sirius2 | Trạng thái lọc | Mã Unit/Linh kiện | Mebius | Trạng thái lọc | Mã Unit/Linh kiện | Polaris | Trạng thái lọc | Mã Unit/Linh kiện
+    Row 2: BOTTLE WASTE | Full_name |  | FRAME CONVEYING | Full_name |  | PWB ENGINE ASSY WITH SOFTWARE | Part_name |  | PWB SWITCH ASSY | Full_name |  | BOTTLE WASTE | Full_name |  | BOTTLE WASTE | Full_name | 
+    Row 3: FILL UP CONTAINER ASSY | Part_name |  | HOLDER BELT TENSION R | Full_name |  | PWB FEED DRIVE ASSY | Part_name |  | P.W.BOARD ASSY THERMISTOR | Full_name |  | FILL UP CONT ASSY | Part_name |  | FILL UP CONT ASSY | Part_name | 
+    Row 4: PWB PANEL MAIN ASSY WITH SOFTWARE | Full_name |  | HOLDER BELT TENSION L | Full_name |  | PWB MAIN ASSY WITH SOFTWARE | Part_name |  | PWB ID SENSOR ASSY | Full_name |  |  | Full_name | 302FP20250 | PWB ASSY H PANEL | Part_name | 
+    Row 5: PWB KEY-R ASSY | Full_name |  | HOLDER THERMAL-CUTOUT | Full_name |  | PWB RFID ASSY WITH SOFTWARE | Part_name |  | PWB ERASER ASSY | Full_name |  | PULLEY PICKUP ASSY | Full_name |  | P.W.BOARD ASSY H PANEL | Part_name | 
+    Row 6: PWB KEY-L ASSY | Full_name |  | HOLDER HEATER | Full_name |  | PWB IH 200 ASSY WITH SOFTWARE | Full_name |  | PWB MAIN ASSY WITH SOFTWARE | Full_name |  | PULLEY PAPER FEED ASSY | Full_name |  | PWB H PANEL | Part_name | 
+
+  --- Sheet: Lichsu (max_row=268, max_column=13) ---
+    Row 1: Phụ trách | Thực hiện thay đổi | Lựa chọn người phụ trách(bấm vào ↓) | Tên phụ trách | Nhập mã hàng | X: Không áp dụng
+/ Để trống: áp dụng |  |  |  |  |  | Tên phụ trách chưa nhập danh sách linh kiện | Hướng xuất chưa nhập
+    Row 2:  |  |  | BuiVanHai_mecha1 |  |  |  |  |  |  |  |  | 
+    Row 3:  |  |  | DangKhacQuynh_mecha1 |  |  |  |  |  |  |  |  | 
+    Row 4:  |  |  | DangThiLy_mecha1 |  |  |  |  |  |  |  |  | 
+    Row 5:  |  |  | DoanThiNguyet_mecha1 |  |  |  |  |  |  |  |  | 
+    Row 6:  |  |  | HoangThiNhung_mecha1 |  |  |  |  |  |  |  |  | 
+
+  --- Sheet: Download_R3_tudong (max_row=24, max_column=3) ---
+    Row 1: Mã máy | Ngày sản xuất | 
+    Row 2:  |  | ←Chú ý: Phải tuân thủ cách nhập ngày tháng như sau:(Năm 4 số/tháng 2 số/ngày 2 số) VD: 2024/05/20 
+
+  --- Sheet: Mail (max_row=189, max_column=4) ---
+    Row 1: Tiêu đề Mail yêu cầu phụ trách so sánh Bom | Mail liên lạc phụ trách(To: ô B2, CC: ô B3) | Tiêu đề Mail nhờ quản lý check Bom | Mail liên lạc quản lý(To: ô D2, CC: ô D3)
+    Row 2:  So sánh BOM mã hàng mới Libra 2 | vinh.bd@dtvn.kyocera.com |  So sánh BOM mã hàng mới Libra 2 | vinh.bd@dtvn.kyocera.com
+    Row 3: <html>
+<body style="font-family: 'Times New Roman', Times, serif;">
+<p>Dear all,</p>
+    
+    <p>Dự định từ 29/07 sẽ sản xuất 7 mã hàng mới giai đoạn MP máy Libra2</p>
+    
+    <ol>
+        <li><strong>Mọi người kiểm tra các hàng mục xác nhận trước sản xuất: 18 điểm (chi tiết trong file hàng mục chữ ý khi sản xuất mã hàng mới)</strong><br>
+        Khi hoàn thành hàng mục này thì check OK vào hàng mục đó. Yêu cầu trước ngày sản xuất 3 ngày phải hoàn thành 18 điểm chú ý.</li>
+        
+        <li><strong>Chuẩn bị so sánh BOM</strong><br>
+        Mọi người copy danh sách linh kiện và MSI mới nhất vào link dưới<br>
+        Hạn hoàn thành copy danh sách linh kiện và MSI : <span style="background-color: yellow;">trong ngày 25.07.2024</span><br>
+        Hạn hoàn thành xác nhận sai khác : trong ngày <span style="background-color: yellow;">trong ngày 25.07.2024</span></li>
+    </ol>
+    
+    <p><span style="background-color: yellow;">Ưu tiên hoàn thành so sánh BOM hiện tại để đảm bảo sản xuất tốt xác nhân hiệu quả so sánh BOM tự động.</span><br>
+    </p>
+    
+    <p>Link so sánh BOM hiện tại: "{AttachmentPath}"</p>
+    
+</body>
+</html> | vinh.bd@dtvn.kyocera.com | <html>
+<body style="font-family: 'Times New Roman', Times, serif;">
+<p>Dear các anh quản lý,</p>
+    
+    <p>Mọi người đã hoàn thành so sánh BOM mã hàng mới Libra 2 bên dưới.<br>
+Các anh kiểm tra lại giúp em với.</p>
+
+   <p>Ngày sản xuất dự kiến: <span style="background-color: yellow;">trong ngày 25.07.2024</span><br> </p> 
+
+    <p>Link so sánh BOM hiện tại: "{AttachmentPath}"</p>
+</body>
+</html> | vinh.bd@dtvn.kyocera.com
+    Row 4:     <ul style="list-style-type: none;">
+        <li>📎 110C1GJU1.xlsm</li>
+        <li>📎 110C1DJN1.xlsm</li>
+        <li>📎 110C1DJU0.xlsm</li>
+        <li>📎 110C1DJU1.xlsm</li>
+        <li>📎 110C1FJU0.xlsm</li>
+        <li>📎 110C14JU0.xlsm</li>
+        <li>📎 110C15JU0.xlsm</li>
+    </ul> |  |  | 
+    Row 5: <html>
+<body style="font-family: 'Times New Roman', Times, serif;">
+<p>Dear all.</p>
+<p>&nbsp;</p>
+<p>Dự định từ&nbsp;27/05 sẽ sản xuất 7 mã hàng mới giai đoạn MP&nbsp;máy Libra2&nbsp;</p>
+<p>&nbsp;</p>
+<p>
+<span style="color:black;">
+<strong>1.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <u>Mọi người kiểm tra các hạng mục xác nhận trước sản xuất: 18 điểm (chi tiết trong file hạng mục chú ý khi sản xuất mã hàng mới)</u>
+</strong>
+</span>
+</p>
+<p>Khi hoàn thành hạng mục nào thì check OK vào hạng mục đó. Yêu cầu trước ngày sản xuất 3 ngày phải hoàn thành 18 điểm chú ý.</p>
+<p>
+<span style="color:black;">
+<strong>2.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <u>Chuẩn bi so sánh BOM</u>
+</strong>
+</span>
+</p>
+<p>Mọi người copy danh sách linh kiện và MSI mới nhất vào link dưới</p>
+<p>Hạn hoàn thành copy danh sách linh kiện và MSI :&nbsp;<span style="background-color:yellow;color:red;">trong ngày&nbsp;21.05.2024</span>
+</p>
+<p>Hạn hoàn thành xác nhận sai khác &nbsp;: trong ngày&nbsp;<span style="background-color:yellow;color:red;">trong ngày&nbsp;22.05.2024</span>
+</p>
+<p>&nbsp;</p>
+<p>
+<span style="background-color:yellow;">Ngoài ra, lần này sẽ áp dụng đề án so sánh BOM tự động của anh Vinh song song với so sánh BOM hiện tại nên mọi người đối ứng cả 2 nhé.</span>
+</p>
+<p>
+<span style="background-color:yellow;color:red;">Ưu tiên hoàn thành so sánh BOM hiện tại để đảm bảo sản xuất rồi xác nhận hiệu quả so sánh BOM tự động sau.</span>
+</p>
+<p>Link so sánh BOM hiện tại:<br>&nbsp;<a href="file://fstvn01/Data/10_Production%20Engineering%20Department(製造技術部)/02.製造技術課/PE%20Dept/4A.%20QUAN%20LY%20BOM-TDTK-BOM管理-設計変更/SO%20SANH%20PLM-CTTT-R3/Libra2/MP/2024.05/sosanhbomkieucu">\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3\Libra2\MP\2024.05\sosanhbomkieucu</a>
+</p>
+</body>
+</html> |  |  | 
+    Row 6: Công cụ chuyển đổi từ văn bản sang HTML |  |  | 

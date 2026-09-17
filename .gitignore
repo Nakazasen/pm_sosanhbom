@@ -1,0 +1,34 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts & compiled binaries
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Temporary runtime & download directories
+downloads/
+downloads_test/
+downloads_verified/
+scratch/
+*.log
+*.tmp
+tc14_*.png
+tc14_*.html
+
+# OS and Office locks
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+~$*.xlsx
+~$*.xlsm
+~$*.xls

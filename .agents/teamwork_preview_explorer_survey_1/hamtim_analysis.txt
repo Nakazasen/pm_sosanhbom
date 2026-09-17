@@ -1,0 +1,234 @@
+Active sheet: Sheet1, max_row=5619, max_col=35
+
+=== ROW 1 ===
+  Col 24 (X1): =IF(AND(AA1=1,AB2=2,D1="True")," Level 1→2 BOM展開あり",IF(AND(AB1=2,D1="True",AC2=3)," Level 2→3 BOM展開あり",IF(AND(AC1=3,D1="True",AD2=4)," Level 3→4 BOM展開あり",IF(AND(AD1=4,D1="True",AE2=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y1): =IF(OR(AK1="PWB ",AK1="P.W."),"基盤","")
+  Col 26 (Z1): 0
+  Col 27 (AA1): 1
+  Col 28 (AB1): 2
+  Col 29 (AC1): 3
+  Col 30 (AD1): 4
+  Col 31 (AE1): 5
+  Col 32 (AF1): PART CODE
+  Col 33 (AG1): Machine
+  Col 34 (AH1): Phụ trách
+  Col 35 (AI1): =IF(OR(X1="Level 1→2 BOM展開あり",X1=" Level 2→3 BOM展開あり",AA1=$AA$1),AG1,#REF!)
+=== ROW 2 ===
+  Col 24 (X2): =IF(AND(AA2=1,AB3=2,D2="True")," Level 1→2 BOM展開あり",IF(AND(AB2=2,D2="True",AC3=3)," Level 2→3 BOM展開あり",IF(AND(AC2=3,D2="True",AD3=4)," Level 3→4 BOM展開あり",IF(AND(AD2=4,D2="True",AE3=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y2): =IF(OR(AK2="PWB ",AK2="P.W."),"基盤","")
+  Col 26 (Z2): =IF(A2=$Z$1,A2,"")
+  Col 27 (AA2): =IF(A2=$AA$1,A2,"")
+  Col 28 (AB2): =IF(A2=$AB$1,A2,"")
+  Col 29 (AC2): =IF(A2=$AC$1,A2,"")
+  Col 30 (AD2): =IF(A2=$AD$1,A2,"")
+  Col 31 (AE2): =IF(A2=$AE$1,A2,"")
+  Col 32 (AF2): =C2
+  Col 33 (AG2): =J2
+  Col 34 (AH2): =Q2
+  Col 35 (AI2): =IF(AG2="","",IF(OR(X2="Level 1→2 BOM展開あり",X2=" Level 2→3 BOM展開あり",AA2=$AA$1),AG2,AI1))
+=== ROW 3 ===
+  Col 24 (X3): =IF(AND(AA3=1,AB4=2,D3="True")," Level 1→2 BOM展開あり",IF(AND(AB3=2,D3="True",AC4=3)," Level 2→3 BOM展開あり",IF(AND(AC3=3,D3="True",AD4=4)," Level 3→4 BOM展開あり",IF(AND(AD3=4,D3="True",AE4=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y3): =IF(OR(AK3="PWB ",AK3="P.W."),"基盤","")
+  Col 26 (Z3): =IF(A3=$Z$1,A3,"")
+  Col 27 (AA3): =IF(A3=$AA$1,A3,"")
+  Col 28 (AB3): =IF(A3=$AB$1,A3,"")
+  Col 29 (AC3): =IF(A3=$AC$1,A3,"")
+  Col 30 (AD3): =IF(A3=$AD$1,A3,"")
+  Col 31 (AE3): =IF(A3=$AE$1,A3,"")
+  Col 32 (AF3): =C3
+  Col 33 (AG3): =J3
+  Col 34 (AH3): =Q3
+  Col 35 (AI3): =IF(AG3="","",IF(OR(X3="Level 1→2 BOM展開あり",X3=" Level 2→3 BOM展開あり",AA3=$AA$1),AG3,AI2))
+=== ROW 4 ===
+  Col 24 (X4): =IF(AND(AA4=1,AB5=2,D4="True")," Level 1→2 BOM展開あり",IF(AND(AB4=2,D4="True",AC5=3)," Level 2→3 BOM展開あり",IF(AND(AC4=3,D4="True",AD5=4)," Level 3→4 BOM展開あり",IF(AND(AD4=4,D4="True",AE5=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y4): =IF(OR(AK4="PWB ",AK4="P.W."),"基盤","")
+  Col 26 (Z4): =IF(A4=$Z$1,A4,"")
+  Col 27 (AA4): =IF(A4=$AA$1,A4,"")
+  Col 28 (AB4): =IF(A4=$AB$1,A4,"")
+  Col 29 (AC4): =IF(A4=$AC$1,A4,"")
+  Col 30 (AD4): =IF(A4=$AD$1,A4,"")
+  Col 31 (AE4): =IF(A4=$AE$1,A4,"")
+  Col 32 (AF4): =C4
+  Col 33 (AG4): =J4
+  Col 34 (AH4): =Q4
+  Col 35 (AI4): =IF(AG4="","",IF(OR(X4="Level 1→2 BOM展開あり",X4=" Level 2→3 BOM展開あり",AA4=$AA$1),AG4,AI3))
+=== ROW 5 ===
+  Col 24 (X5): =IF(AND(AA5=1,AB6=2,D5="True")," Level 1→2 BOM展開あり",IF(AND(AB5=2,D5="True",AC6=3)," Level 2→3 BOM展開あり",IF(AND(AC5=3,D5="True",AD6=4)," Level 3→4 BOM展開あり",IF(AND(AD5=4,D5="True",AE6=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y5): =IF(OR(AK5="PWB ",AK5="P.W."),"基盤","")
+  Col 26 (Z5): =IF(A5=$Z$1,A5,"")
+  Col 27 (AA5): =IF(A5=$AA$1,A5,"")
+  Col 28 (AB5): =IF(A5=$AB$1,A5,"")
+  Col 29 (AC5): =IF(A5=$AC$1,A5,"")
+  Col 30 (AD5): =IF(A5=$AD$1,A5,"")
+  Col 31 (AE5): =IF(A5=$AE$1,A5,"")
+  Col 32 (AF5): =C5
+  Col 33 (AG5): =J5
+  Col 34 (AH5): =Q5
+  Col 35 (AI5): =IF(AG5="","",IF(OR(X5="Level 1→2 BOM展開あり",X5=" Level 2→3 BOM展開あり",AA5=$AA$1),AG5,AI4))
+=== ROW 6 ===
+  Col 24 (X6): =IF(AND(AA6=1,AB7=2,D6="True")," Level 1→2 BOM展開あり",IF(AND(AB6=2,D6="True",AC7=3)," Level 2→3 BOM展開あり",IF(AND(AC6=3,D6="True",AD7=4)," Level 3→4 BOM展開あり",IF(AND(AD6=4,D6="True",AE7=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y6): =IF(OR(AK6="PWB ",AK6="P.W."),"基盤","")
+  Col 26 (Z6): =IF(A6=$Z$1,A6,"")
+  Col 27 (AA6): =IF(A6=$AA$1,A6,"")
+  Col 28 (AB6): =IF(A6=$AB$1,A6,"")
+  Col 29 (AC6): =IF(A6=$AC$1,A6,"")
+  Col 30 (AD6): =IF(A6=$AD$1,A6,"")
+  Col 31 (AE6): =IF(A6=$AE$1,A6,"")
+  Col 32 (AF6): =C6
+  Col 33 (AG6): =J6
+  Col 34 (AH6): =Q6
+  Col 35 (AI6): =IF(AG6="","",IF(OR(X6="Level 1→2 BOM展開あり",X6=" Level 2→3 BOM展開あり",AA6=$AA$1),AG6,AI5))
+=== ROW 7 ===
+  Col 24 (X7): =IF(AND(AA7=1,AB8=2,D7="True")," Level 1→2 BOM展開あり",IF(AND(AB7=2,D7="True",AC8=3)," Level 2→3 BOM展開あり",IF(AND(AC7=3,D7="True",AD8=4)," Level 3→4 BOM展開あり",IF(AND(AD7=4,D7="True",AE8=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y7): =IF(OR(AK7="PWB ",AK7="P.W."),"基盤","")
+  Col 26 (Z7): =IF(A7=$Z$1,A7,"")
+  Col 27 (AA7): =IF(A7=$AA$1,A7,"")
+  Col 28 (AB7): =IF(A7=$AB$1,A7,"")
+  Col 29 (AC7): =IF(A7=$AC$1,A7,"")
+  Col 30 (AD7): =IF(A7=$AD$1,A7,"")
+  Col 31 (AE7): =IF(A7=$AE$1,A7,"")
+  Col 32 (AF7): =C7
+  Col 33 (AG7): =J7
+  Col 34 (AH7): =Q7
+  Col 35 (AI7): =IF(AG7="","",IF(OR(X7="Level 1→2 BOM展開あり",X7=" Level 2→3 BOM展開あり",AA7=$AA$1),AG7,AI6))
+=== ROW 8 ===
+  Col 24 (X8): =IF(AND(AA8=1,AB9=2,D8="True")," Level 1→2 BOM展開あり",IF(AND(AB8=2,D8="True",AC9=3)," Level 2→3 BOM展開あり",IF(AND(AC8=3,D8="True",AD9=4)," Level 3→4 BOM展開あり",IF(AND(AD8=4,D8="True",AE9=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y8): =IF(OR(AK8="PWB ",AK8="P.W."),"基盤","")
+  Col 26 (Z8): =IF(A8=$Z$1,A8,"")
+  Col 27 (AA8): =IF(A8=$AA$1,A8,"")
+  Col 28 (AB8): =IF(A8=$AB$1,A8,"")
+  Col 29 (AC8): =IF(A8=$AC$1,A8,"")
+  Col 30 (AD8): =IF(A8=$AD$1,A8,"")
+  Col 31 (AE8): =IF(A8=$AE$1,A8,"")
+  Col 32 (AF8): =C8
+  Col 33 (AG8): =J8
+  Col 34 (AH8): =Q8
+  Col 35 (AI8): =IF(AG8="","",IF(OR(X8="Level 1→2 BOM展開あり",X8=" Level 2→3 BOM展開あり",AA8=$AA$1),AG8,AI7))
+=== ROW 9 ===
+  Col 24 (X9): =IF(AND(AA9=1,AB10=2,D9="True")," Level 1→2 BOM展開あり",IF(AND(AB9=2,D9="True",AC10=3)," Level 2→3 BOM展開あり",IF(AND(AC9=3,D9="True",AD10=4)," Level 3→4 BOM展開あり",IF(AND(AD9=4,D9="True",AE10=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y9): =IF(OR(AK9="PWB ",AK9="P.W."),"基盤","")
+  Col 26 (Z9): =IF(A9=$Z$1,A9,"")
+  Col 27 (AA9): =IF(A9=$AA$1,A9,"")
+  Col 28 (AB9): =IF(A9=$AB$1,A9,"")
+  Col 29 (AC9): =IF(A9=$AC$1,A9,"")
+  Col 30 (AD9): =IF(A9=$AD$1,A9,"")
+  Col 31 (AE9): =IF(A9=$AE$1,A9,"")
+  Col 32 (AF9): =C9
+  Col 33 (AG9): =J9
+  Col 34 (AH9): =Q9
+  Col 35 (AI9): =IF(AG9="","",IF(OR(X9="Level 1→2 BOM展開あり",X9=" Level 2→3 BOM展開あり",AA9=$AA$1),AG9,AI8))
+=== ROW 10 ===
+  Col 24 (X10): =IF(AND(AA10=1,AB11=2,D10="True")," Level 1→2 BOM展開あり",IF(AND(AB10=2,D10="True",AC11=3)," Level 2→3 BOM展開あり",IF(AND(AC10=3,D10="True",AD11=4)," Level 3→4 BOM展開あり",IF(AND(AD10=4,D10="True",AE11=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y10): =IF(OR(AK10="PWB ",AK10="P.W."),"基盤","")
+  Col 26 (Z10): =IF(A10=$Z$1,A10,"")
+  Col 27 (AA10): =IF(A10=$AA$1,A10,"")
+  Col 28 (AB10): =IF(A10=$AB$1,A10,"")
+  Col 29 (AC10): =IF(A10=$AC$1,A10,"")
+  Col 30 (AD10): =IF(A10=$AD$1,A10,"")
+  Col 31 (AE10): =IF(A10=$AE$1,A10,"")
+  Col 32 (AF10): =C10
+  Col 33 (AG10): =J10
+  Col 34 (AH10): =Q10
+  Col 35 (AI10): =IF(AG10="","",IF(OR(X10="Level 1→2 BOM展開あり",X10=" Level 2→3 BOM展開あり",AA10=$AA$1),AG10,AI9))
+=== ROW 11 ===
+  Col 24 (X11): =IF(AND(AA11=1,AB12=2,D11="True")," Level 1→2 BOM展開あり",IF(AND(AB11=2,D11="True",AC12=3)," Level 2→3 BOM展開あり",IF(AND(AC11=3,D11="True",AD12=4)," Level 3→4 BOM展開あり",IF(AND(AD11=4,D11="True",AE12=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y11): =IF(OR(AK11="PWB ",AK11="P.W."),"基盤","")
+  Col 26 (Z11): =IF(A11=$Z$1,A11,"")
+  Col 27 (AA11): =IF(A11=$AA$1,A11,"")
+  Col 28 (AB11): =IF(A11=$AB$1,A11,"")
+  Col 29 (AC11): =IF(A11=$AC$1,A11,"")
+  Col 30 (AD11): =IF(A11=$AD$1,A11,"")
+  Col 31 (AE11): =IF(A11=$AE$1,A11,"")
+  Col 32 (AF11): =C11
+  Col 33 (AG11): =J11
+  Col 34 (AH11): =Q11
+  Col 35 (AI11): =IF(AG11="","",IF(OR(X11="Level 1→2 BOM展開あり",X11=" Level 2→3 BOM展開あり",AA11=$AA$1),AG11,AI10))
+=== ROW 12 ===
+  Col 24 (X12): =IF(AND(AA12=1,AB13=2,D12="True")," Level 1→2 BOM展開あり",IF(AND(AB12=2,D12="True",AC13=3)," Level 2→3 BOM展開あり",IF(AND(AC12=3,D12="True",AD13=4)," Level 3→4 BOM展開あり",IF(AND(AD12=4,D12="True",AE13=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y12): =IF(OR(AK12="PWB ",AK12="P.W."),"基盤","")
+  Col 26 (Z12): =IF(A12=$Z$1,A12,"")
+  Col 27 (AA12): =IF(A12=$AA$1,A12,"")
+  Col 28 (AB12): =IF(A12=$AB$1,A12,"")
+  Col 29 (AC12): =IF(A12=$AC$1,A12,"")
+  Col 30 (AD12): =IF(A12=$AD$1,A12,"")
+  Col 31 (AE12): =IF(A12=$AE$1,A12,"")
+  Col 32 (AF12): =C12
+  Col 33 (AG12): =J12
+  Col 34 (AH12): =Q12
+  Col 35 (AI12): =IF(AG12="","",IF(OR(X12="Level 1→2 BOM展開あり",X12=" Level 2→3 BOM展開あり",AA12=$AA$1),AG12,AI11))
+=== ROW 13 ===
+  Col 24 (X13): =IF(AND(AA13=1,AB14=2,D13="True")," Level 1→2 BOM展開あり",IF(AND(AB13=2,D13="True",AC14=3)," Level 2→3 BOM展開あり",IF(AND(AC13=3,D13="True",AD14=4)," Level 3→4 BOM展開あり",IF(AND(AD13=4,D13="True",AE14=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y13): =IF(OR(AK13="PWB ",AK13="P.W."),"基盤","")
+  Col 26 (Z13): =IF(A13=$Z$1,A13,"")
+  Col 27 (AA13): =IF(A13=$AA$1,A13,"")
+  Col 28 (AB13): =IF(A13=$AB$1,A13,"")
+  Col 29 (AC13): =IF(A13=$AC$1,A13,"")
+  Col 30 (AD13): =IF(A13=$AD$1,A13,"")
+  Col 31 (AE13): =IF(A13=$AE$1,A13,"")
+  Col 32 (AF13): =C13
+  Col 33 (AG13): =J13
+  Col 34 (AH13): =Q13
+  Col 35 (AI13): =IF(AG13="","",IF(OR(X13="Level 1→2 BOM展開あり",X13=" Level 2→3 BOM展開あり",AA13=$AA$1),AG13,AI12))
+=== ROW 14 ===
+  Col 24 (X14): =IF(AND(AA14=1,AB15=2,D14="True")," Level 1→2 BOM展開あり",IF(AND(AB14=2,D14="True",AC15=3)," Level 2→3 BOM展開あり",IF(AND(AC14=3,D14="True",AD15=4)," Level 3→4 BOM展開あり",IF(AND(AD14=4,D14="True",AE15=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y14): =IF(OR(AK14="PWB ",AK14="P.W."),"基盤","")
+  Col 26 (Z14): =IF(A14=$Z$1,A14,"")
+  Col 27 (AA14): =IF(A14=$AA$1,A14,"")
+  Col 28 (AB14): =IF(A14=$AB$1,A14,"")
+  Col 29 (AC14): =IF(A14=$AC$1,A14,"")
+  Col 30 (AD14): =IF(A14=$AD$1,A14,"")
+  Col 31 (AE14): =IF(A14=$AE$1,A14,"")
+  Col 32 (AF14): =C14
+  Col 33 (AG14): =J14
+  Col 34 (AH14): =Q14
+  Col 35 (AI14): =IF(AG14="","",IF(OR(X14="Level 1→2 BOM展開あり",X14=" Level 2→3 BOM展開あり",AA14=$AA$1),AG14,AI13))
+=== ROW 15 ===
+  Col 24 (X15): =IF(AND(AA15=1,AB16=2,D15="True")," Level 1→2 BOM展開あり",IF(AND(AB15=2,D15="True",AC16=3)," Level 2→3 BOM展開あり",IF(AND(AC15=3,D15="True",AD16=4)," Level 3→4 BOM展開あり",IF(AND(AD15=4,D15="True",AE16=5)," Level 4→5 BOM展開あり",""))))
+  Col 25 (Y15): =IF(OR(AK15="PWB ",AK15="P.W."),"基盤","")
+  Col 26 (Z15): =IF(A15=$Z$1,A15,"")
+  Col 27 (AA15): =IF(A15=$AA$1,A15,"")
+  Col 28 (AB15): =IF(A15=$AB$1,A15,"")
+  Col 29 (AC15): =IF(A15=$AC$1,A15,"")
+  Col 30 (AD15): =IF(A15=$AD$1,A15,"")
+  Col 31 (AE15): =IF(A15=$AE$1,A15,"")
+  Col 32 (AF15): =C15
+  Col 33 (AG15): =J15
+  Col 34 (AH15): =Q15
+  Col 35 (AI15): =IF(AG15="","",IF(OR(X15="Level 1→2 BOM展開あり",X15=" Level 2→3 BOM展開あり",AA15=$AA$1),AG15,AI14))
+
+=== DISTINCT FORMULAS IN KEY COLUMNS ===
+Col 1: sample=['None', 'None', 'None', 'None']
+Col 2: sample=['None', 'None', 'None', 'None']
+Col 3: sample=['None', 'None', 'None', 'None']
+Col 4: sample=['None', 'None', 'None', 'None']
+Col 5: sample=['None', 'None', 'None', 'None']
+Col 6: sample=['None', 'None', 'None', 'None']
+Col 7: sample=['None', 'None', 'None', 'None']
+Col 8: sample=['None', 'None', 'None', 'None']
+Col 9: sample=['None', 'None', 'None', 'None']
+Col 10: sample=['None', 'None', 'None', 'None']
+Col 11: sample=['None', 'None', 'None', 'None']
+Col 12: sample=['None', 'None', 'None', 'None']
+Col 13: sample=['None', 'None', 'None', 'None']
+Col 14: sample=['None', 'None', 'None', 'None']
+Col 15: sample=['None', 'None', 'None', 'None']
+Col 16: sample=['None', 'None', 'None', 'None']
+Col 17: sample=['None', 'None', 'None', 'None']
+Col 18: sample=['None', 'None', 'None', 'None']
+Col 19: sample=['None', 'None', 'None', 'None']
+Col 20: sample=['None', 'None', 'None', 'None']
+Col 21: sample=['None', 'None', 'None', 'None']
+Col 22: sample=['None', 'None', 'None', 'None']
+Col 23: sample=['None', 'None', 'None', 'None']
+Col 24: sample=['=IF(AND(AA1=1,AB2=2,D1="True")," Level 1→2 BOM展開あり",IF(AND(AB1=2,D1="True",AC2=3)," Level 2→3 BOM展開あり",IF(AND(AC1=3,D1="True",AD2=4)," Level 3→4 BOM展開あり",IF(AND(AD1=4,D1="True",AE2=5)," Level 4→5 BOM展開あり",""))))', '=IF(AND(AA2=1,AB3=2,D2="True")," Level 1→2 BOM展開あり",IF(AND(AB2=2,D2="True",AC3=3)," Level 2→3 BOM展開あり",IF(AND(AC2=3,D2="True",AD3=4)," Level 3→4 BOM展開あり",IF(AND(AD2=4,D2="True",AE3=5)," Level 4→5 BOM展開あり",""))))', '=IF(AND(AA3=1,AB4=2,D3="True")," Level 1→2 BOM展開あり",IF(AND(AB3=2,D3="True",AC4=3)," Level 2→3 BOM展開あり",IF(AND(AC3=3,D3="True",AD4=4)," Level 3→4 BOM展開あり",IF(AND(AD3=4,D3="True",AE4=5)," Level 4→5 BOM展開あり",""))))', '=IF(AND(AA4=1,AB5=2,D4="True")," Level 1→2 BOM展開あり",IF(AND(AB4=2,D4="True",AC5=3)," Level 2→3 BOM展開あり",IF(AND(AC4=3,D4="True",AD5=4)," Level 3→4 BOM展開あり",IF(AND(AD4=4,D4="True",AE5=5)," Level 4→5 BOM展開あり",""))))']
+Col 25: sample=['=IF(OR(AK1="PWB ",AK1="P.W."),"基盤","")', '=IF(OR(AK2="PWB ",AK2="P.W."),"基盤","")', '=IF(OR(AK3="PWB ",AK3="P.W."),"基盤","")', '=IF(OR(AK4="PWB ",AK4="P.W."),"基盤","")']
+Col 26: sample=['0', '=IF(A2=$Z$1,A2,"")', '=IF(A3=$Z$1,A3,"")', '=IF(A4=$Z$1,A4,"")']
+Col 27: sample=['1', '=IF(A2=$AA$1,A2,"")', '=IF(A3=$AA$1,A3,"")', '=IF(A4=$AA$1,A4,"")']
+Col 28: sample=['2', '=IF(A2=$AB$1,A2,"")', '=IF(A3=$AB$1,A3,"")', '=IF(A4=$AB$1,A4,"")']
+Col 29: sample=['3', '=IF(A2=$AC$1,A2,"")', '=IF(A3=$AC$1,A3,"")', '=IF(A4=$AC$1,A4,"")']
+Col 30: sample=['4', '=IF(A2=$AD$1,A2,"")', '=IF(A3=$AD$1,A3,"")', '=IF(A4=$AD$1,A4,"")']
+Col 31: sample=['5', '=IF(A2=$AE$1,A2,"")', '=IF(A3=$AE$1,A3,"")', '=IF(A4=$AE$1,A4,"")']
+Col 32: sample=['PART CODE', '=C2', '=C3', '=C4']
+Col 33: sample=['Machine', '=J2', '=J3', '=J4']
+Col 34: sample=['Phụ trách', '=Q2', '=Q3', '=Q4']
+Col 35: sample=['=IF(OR(X1="Level 1→2 BOM展開あり",X1=" Level 2→3 BOM展開あり",AA1=$AA$1),AG1,#REF!)', '=IF(AG2="","",IF(OR(X2="Level 1→2 BOM展開あり",X2=" Level 2→3 BOM展開あり",AA2=$AA$1),AG2,AI1))', '=IF(AG3="","",IF(OR(X3="Level 1→2 BOM展開あり",X3=" Level 2→3 BOM展開あり",AA3=$AA$1),AG3,AI2))', '=IF(AG4="","",IF(OR(X4="Level 1→2 BOM展開あり",X4=" Level 2→3 BOM展開あり",AA4=$AA$1),AG4,AI3))']
