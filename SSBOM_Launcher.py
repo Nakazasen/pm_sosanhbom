@@ -46,6 +46,7 @@ class AppLauncher:
             return {
                 "active_version": "1.0.0-dev",
                 "entrypoint": "src/gui/app.py",
+                "is_dev": True,
             }
 
         try:

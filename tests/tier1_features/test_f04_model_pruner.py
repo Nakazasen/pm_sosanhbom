@@ -108,3 +108,64 @@ class TestF04ModelPruner:
                 pruned = pruner.prune_tree(BOMTree(roots=[root]), model_name="Mebius")
                 assert len(pruned.roots[0].children) == 1
                 assert pruned.roots[0].children[0].item_id == "OTHER123"
+
+    def test_f04_prune_excel_file_preserves_formatting(self, tmp_path):
+        """Test 6: Verify prune_excel_file preserves 100% of formatting, headers, and column styles."""
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+
+        excel_path = tmp_path / "PLM_test.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+
+        # Headers with custom style
+        headers = ["Home", "Level", "Item Type", "Item Id", "Has Children", "Quantity", "Item Name"]
+        ws.append(headers)
+        ws.column_dimensions["D"].width = 25.0
+
+        header_font = Font(name="Arial", size=12, bold=True)
+        header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(1, col_idx)
+            cell.font = header_font
+            cell.fill = header_fill
+
+        # Data rows
+        # Row 2: Root (Keep)
+        ws.append([1, 0, "Parts", "ROOT01", "True", 1, "MAIN UNIT"])
+        # Row 3: Assembly (Keep)
+        ws.append([2, 1, "Parts", "ASSY01", "True", 1, "BOTTLE WASTE"])
+        # Row 4: Child of BOTTLE WASTE (Delete under Rule 2)
+        ws.append([3, 2, "Parts", "CHILD01", "False", 1, "INTERNAL PART"])
+        # Row 5: Another Level 1 part (Keep)
+        ws.append([4, 1, "Parts", "PART02", "False", 1, "EXTERNAL COVER"])
+
+        wb.save(str(excel_path))
+        wb.close()
+
+        rule = ModelRule(item_name="BOTTLE WASTE", match_mode="Full_name")
+        pruner = ModelPruner()
+        out_path = tmp_path / "PLM_filtered.xlsx"
+
+        pruner.prune_excel_file(excel_path, out_path, rules=[rule])
+
+        # Verify output
+        wb_out = openpyxl.load_workbook(str(out_path))
+        ws_out = wb_out.active
+
+        # Check total surviving rows: Header + Root + ASSY01 + PART02 = 4 rows
+        assert ws_out.max_row == 4
+        # Check header preserved
+        out_headers = [ws_out.cell(1, c).value for c in range(1, len(headers) + 1)]
+        assert out_headers == headers
+        # Check formatting preserved
+        assert ws_out.cell(1, 1).font.name == "Arial"
+        assert ws_out.cell(1, 1).font.bold is True
+        assert ws_out.cell(1, 1).fill.fill_type == "solid"
+        assert ws_out.column_dimensions["D"].width == 25.0
+
+        # Check child row was pruned, PART02 now at row 4
+        assert ws_out.cell(3, 4).value == "ASSY01"
+        assert ws_out.cell(4, 4).value == "PART02"
+        wb_out.close()
