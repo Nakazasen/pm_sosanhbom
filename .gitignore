@@ -33,3 +33,8 @@ Thumbs.db
 ~$*.xlsm
 ~$*.xls
 
+# Agent working files and large local data directories
+.agents/
+2024.12/
+2025.02/
+

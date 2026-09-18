@@ -66,19 +66,24 @@ class PLMProvider(abc.ABC):
         pass
 
 
+from src.core.tc2412_bridge import TC2412CanonicalNormalizer, TC2412SheetPLMBridge
+
 class TeamcenterSeleniumAdapter(PLMProvider):
-    """PLM Adapter wrapping TC14AutomationClient for live Active Workspace extraction."""
+    """PLM Adapter wrapping TC2412AutomationClient for live Active Workspace 2412 extraction."""
 
     def __init__(
         self,
         client: Optional[Any] = None,
         tree_parser: Optional[PLMTreeParser] = None,
     ) -> None:
-        """Initialize adapter with TC14AutomationClient instance."""
+        """Initialize adapter with TC2412AutomationClient instance."""
         if client is None:
-            # Lazy import to avoid selenium dependency unless adapter is used
-            from src.automation.tc14.client import TC14AutomationClient
-            self.client = TC14AutomationClient()
+            try:
+                from src.automation.tc2412.client import TC2412AutomationClient
+                self.client = TC2412AutomationClient()
+            except (ImportError, Exception):
+                from src.automation.tc14.client import TC14AutomationClient
+                self.client = TC14AutomationClient()
         else:
             self.client = client
         self.parser = tree_parser or PLMTreeParser()
@@ -88,8 +93,9 @@ class TeamcenterSeleniumAdapter(PLMProvider):
         item_id: str,
         rev: Optional[str] = None,
         output_path: Optional[Union[str, Path]] = None,
+        progress_callback: Optional[Any] = None,
     ) -> Path:
-        """Export BOM Excel via TC14AutomationClient."""
+        """Export BOM Excel via TC2412AutomationClient."""
         target_dir = (
             Path(output_path).parent
             if output_path and Path(output_path).suffix
@@ -97,11 +103,19 @@ class TeamcenterSeleniumAdapter(PLMProvider):
         )
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        exported_file = self.client.download_bom_full(
-            part_number=item_id,
-            output_dir=target_dir,
-            part_rev=rev,
-        )
+        try:
+            exported_file = self.client.download_bom_full(
+                part_number=item_id,
+                output_dir=target_dir,
+                part_rev=rev,
+                progress_callback=progress_callback,
+            )
+        except TypeError:
+            exported_file = self.client.download_bom_full(
+                part_number=item_id,
+                output_dir=target_dir,
+                part_rev=rev,
+            )
         if output_path and Path(output_path).suffix and Path(exported_file) != Path(output_path):
             shutil.copy2(exported_file, output_path)
             return Path(output_path)
@@ -111,6 +125,7 @@ class TeamcenterSeleniumAdapter(PLMProvider):
         """Export BOM from Active Workspace and parse into a BOMTree."""
         temp_excel = self.export_excel(item_id, rev=rev)
         return self.parser.parse_file(temp_excel)
+
 
 
 class ExcelPLMAdapter(PLMProvider):

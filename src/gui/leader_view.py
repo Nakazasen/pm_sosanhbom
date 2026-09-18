@@ -288,6 +288,14 @@ class LeaderWorkspaceView(QWidget):
         self.btn_create_folders.clicked.connect(self.create_project_folder_structure)
         top_layout.addWidget(self.btn_create_folders)
 
+        self.btn_download_plm = QPushButton("📥 Tải BOM từ Teamcenter (TC2412)")
+        self.btn_download_plm.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_download_plm.setStyleSheet(
+            "background-color: #0d6efd; color: white; padding: 4px 10px; border-radius: 4px;"
+        )
+        self.btn_download_plm.clicked.connect(self._open_plm_download_dialog)
+        top_layout.addWidget(self.btn_download_plm)
+
         top_layout.addStretch()
 
         self.btn_open_folder = QPushButton("📂 Mở thư mục dự án")
@@ -419,6 +427,17 @@ class LeaderWorkspaceView(QWidget):
             os.startfile(str(target))
         except Exception:
             subprocess.Popen(["explorer", str(target)], shell=True)
+
+    def _open_plm_download_dialog(self) -> None:
+        """Open the TC2412 PLM BOM Download Dialog."""
+        from src.gui.plm_download_dialog import PLMDownloadDialog
+
+        model = self.model_combo.currentText().strip()
+        model_dir = self.base_dir / model
+        target_dir = model_dir if model_dir.exists() else self.base_dir
+
+        dialog = PLMDownloadDialog(parent=self, default_dir=target_dir)
+        dialog.exec()
 
     # =========================================================================
     # Member Submission Status Tracking

@@ -48,3 +48,150 @@ Integrity mode: development
 - [ ] Chạy thử nghiệm trích xuất dữ liệu đăng nhập từ web http://tcmp3gwb:3000/.
 - [ ] Xây dựng bộ test so sánh kết quả logic Python với file mẫu form_ssbom.xlsm để đảm bảo kết quả đối soát khớp 100%.
 - [ ] Đóng gói chương trình theo đúng chuẩn MP2027 (`<App>_Launcher.exe`, Inno Setup installer, bundle `apps/<version>/` và script `package_app.py` sinh `.mpupdate` + `latest.json`).
+
+## 2026-09-18T04:32:25Z
+
+Lên đặc tả kỹ thuật theo chuẩn Spec-Kit và lập trình hoàn chỉnh tính năng Tự động tải BOM PLM từ hệ thống Siemens Teamcenter Active Workspace (TC14) sang tệp Excel theo 7 phân hệ trong tài liệu hướng dẫn tai_lieu_huong_dan_download_BOM.pptx.
+
+Working directory: D:\Sandbox\pm_sosanhbom
+Integrity mode: development
+
+## Source Specification Context (Tài liệu gốc PPTX)
+- Đường dẫn: \\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\15. FORM（BIEU MAU）-形式\Form_VBA\Form_VBA_SS_BOM\tai_lieu_huong_dan_download_BOM.pptx
+- Gồm 7 phân hệ nghiệp vụ chính (Phases 1-7):
+  1. AUTH-01: Đăng nhập và lưu thông tin tài khoản an toàn (Hỗ trợ Silent Auto-login, có quản lý cập nhật/xóa thông tin).
+  2. BOM-SEARCH-01: Tìm Item theo mã và điều hướng vào tab cấu trúc Content.
+  3. BOM-EXPAND-01: Mở rộng phân cấp BOM tự động đến mức sâu tối đa (Level 7) ở chế độ ngầm (Headless Mode).
+  4. BOM-SELECT-01: Chọn toàn bộ BOM (Select All) và mở menu lệnh Excel Report.
+  5. BOM-EXPORT-OPEN-01: Kích hoạt tác vụ "Export to Excel" (bảo vệ chống chọn nhầm "Import Changes").
+  6. BOM-EXPORT-CONFIG-01: Cấu hình nguồn thuộc tính (Item) và thứ tự hiển thị chuẩn xác 14 cột Displayed Columns.
+  7. BOM-EXPORT-RUN-01: Kích hoạt xuất dữ liệu (Run in Background), kiểm soát tiến trình và tải file an toàn.
+  8. SPEC-KIT: Biên soạn bộ tài liệu đặc tả chuẩn Spec-Kit (specs/SPEC_PLM_AUTO_DOWNLOAD.md).
+  9. REPORTING: Cơ chế cập nhật và báo cáo tiến độ định kỳ (2 phút/lần) trên tổng số phase thực hiện.
+
+## Requirements
+
+### R1. Spec-Kit Specification (specs/SPEC_PLM_AUTO_DOWNLOAD.md)
+- Soạn thảo tài liệu đặc tả đầy đủ theo phương pháp Spec-Kit: User Stories, Acceptance Criteria (Given-When-Then), Input/Output Schema, Edge Cases, Error Handling Scenarios cho cả 7 phase nghiệp vụ.
+
+### R2. Teamcenter Authentication & Credential Persistence (AUTH-01)
+- Triển khai xác thực tự động với cổng Teamcenter Active Workspace.
+- Cơ chế lưu trữ thông tin đăng nhập an toàn (mã hóa chuẩn hệ điều hành / DPAPI hoặc keyring an toàn).
+- Mặc định tự động đăng nhập ngầm (Auto-login) khi đã lưu thông tin hợp lệ; cung cấp giao diện/lệnh để cập nhật hoặc xóa thông tin tài khoản khi cần.
+
+### R3. Headless Search & Navigation Pipeline (BOM-SEARCH-01)
+- Tìm kiếm mã Item trên ô tìm kiếm toàn cục, xác thực mã và revision được phát hiện.
+- Tự động chuyển hướng chính xác vào tab Content để nạp cây cấu trúc BOM.
+- Xử lý các tình huống biên: Mã linh kiện không tồn tại, phiên làm việc hết hạn, mạng chập chờn.
+
+### R4. Deep BOM Tree Expansion (BOM-EXPAND-01)
+- Tự động chọn nút gốc (Root node) của cấu trúc BOM.
+- Kích hoạt menu Expand -> "Expand Below" và bung tự động đến độ sâu tối đa (Level 7) nhằm đảm bảo không sót linh kiện con.
+- Vận hành ổn định ở chế độ không đầu (Headless Mode), có cơ chế chờ linh hoạt (Dynamic Explicit Waits) tránh lỗi gián đoạn do DOM chưa nạp xong.
+
+### R5. BOM Selection & Safe Export Trigger (BOM-SELECT-01 & BOM-EXPORT-OPEN-01)
+- Thực thi "Select All" toàn bộ tập dòng BOM đã mở rộng.
+- Mở menu Excel Report và kích hoạt chính xác tác vụ "Export to Excel" (tuyệt đối không chọn "Import Changes").
+- Duy trì nguyên vẹn tập dòng được chọn khi panel Export mở ra.
+
+### R6. Exact 14-Column Configuration (BOM-EXPORT-CONFIG-01)
+- Lựa chọn nguồn thuộc tính "Item".
+- Cấu hình chuẩn xác danh sách Displayed Columns theo đúng thứ tự 14 cột tiêu chuẩn của BOM PLM:
+  1. Home
+  2. Level
+  3. Item Type
+  4. Item Id
+  5. Has Children
+  6. Quantity
+  7. 1st Parts
+  8. 2nd BOM Flag
+  9. Occurrence Effectivities
+  10. Item Revision Project List
+  11. Item Name
+  12. Notice No
+  13. Revision
+  14. Item Rev Status
+- Ngăn chặn lỗi trùng cột, thiếu cột hoặc sai thứ tự cột.
+
+### R7. Resilient Download Pipeline & Integrity Verification (BOM-EXPORT-RUN-01)
+- Kích hoạt lệnh Export (hỗ trợ tác vụ nền nếu cây BOM lớn).
+- Giám sát trạng thái sinh tệp, tự động phát hiện khi tệp sẵn sàng và tải về thư mục làm việc an toàn.
+- Xác thực tệp tải về: Đảm bảo mở được bằng thư viện Excel, bảo toàn bảng mã Unicode tiếng Nhật (MS Gothic), đầy đủ số dòng và đúng 14 cột.
+
+### R8. Scheduled Periodic Progress Reporter
+- Cung cấp cơ chế thông báo tiến độ định kỳ (chu kỳ 2 phút / 1 lần) thể hiện: Phase [X/8] - [Tên phân hệ] - [Tỷ lệ hoàn thành %] - [Thời gian trôi qua].
+
+## Acceptance Criteria
+
+### Spec-Kit & Verification
+- [ ] Tệp specs/SPEC_PLM_AUTO_DOWNLOAD.md được khởi tạo hoàn chỉnh theo định dạng Spec-Kit, bao phủ 100% 7 phân hệ từ PPTX.
+- [ ] Bộ kiểm thử tự động (Unit test / Integration test / Mock browser tests) bao phủ 7 phân hệ và đạt 100% Passed.
+- [ ] Bộ điều khiển trình duyệt Headless WebDriver (Edge / Chrome) khởi chạy tin cậy trên Windows.
+- [ ] Cấu hình cột Displayed Columns khớp 14/14 cột theo đúng thứ tự và tên chuẩn.
+- [ ] Cơ chế lưu trữ tài khoản đảm bảo an toàn, hỗ trợ Auto-login và cho phép cập nhật/xóa.
+- [ ] Trình báo cáo tiến độ tự động cập nhật đúng chu kỳ 2 phút / lần.
+
+## 2026-09-18T04:33:53Z
+
+[CHỈ THỊ CỦA NGƯỜI DÙNG]
+Người dùng đính chính: Phiên bản Teamcenter của hệ thống là Teamcenter Version 2412 (TC2412), KHÔNG PHẢI Teamcenter 14.
+Yêu cầu:
+1. Cập nhật Spec-Kit `specs/SPEC_PLM_AUTO_DOWNLOAD.md` chuẩn hóa theo Siemens Teamcenter Version 2412 (Active Workspace).
+2. Cập nhật tất cả module tự động hóa (automation client, selectors, DOM locators) và test suites để tương thích tuyệt đối với Teamcenter 2412.
+3. Báo cáo tiến độ cập nhật thông tin này trong các chu kỳ báo cáo tiếp theo.
+
+## 2026-09-18T04:35:40Z
+
+[CẬP NHẬT CHI TIẾT TỪ TÀI LIỆU PPTX VÀ CHỈ THỊ NGƯỜI DÙNG]
+1. Đã bóc tách 100% nội dung speaker notes gốc từ 7 slide của file:
+   \\fstvn01\...\tai_lieu_huong_dan_download_BOM.pptx
+   và 10 hình ảnh chụp màn hình UI thực tế tại:
+   D:\Sandbox\pm_sosanhbom\scratch\pptx_inspect\extracted\ (image1.png -> image10.png)
+   Nội dung đặc tả thô đã được nạp sẵn tại:
+   D:\Sandbox\pm_sosanhbom\specs\SPEC_PLM_AUTO_DOWNLOAD.md
+
+2. Chốt câu trả lời cho các 'open_questions' trong từng slide:
+   - AUTH-01: Silent Auto-login bằng DPAPI/keyring an toàn; có chức năng đổi/xóa tài khoản.
+   - BOM-SEARCH-01: Tìm chính xác Item ID, điều hướng vào tab Content.
+   - BOM-EXPAND-01: Bung tự động độ sâu tối đa (Level 7) ở chế độ Headless WebDriver.
+   - BOM-SELECT-01: Select All toàn bộ các dòng BOM đã bung.
+   - BOM-EXPORT-OPEN-01: Kích hoạt Export to Excel (ngăn chặn Import Changes).
+   - BOM-EXPORT-CONFIG-01: Nguồn thuộc tính "Item", đúng 14 cột chuẩn:
+     Home, Level, Item Type, Item Id, Has Children, Quantity, 1st Parts, 2nd BOM Flag, Occurrence Effectivities, Item Revision Project List, Item Name, Notice No, Revision, Item Rev Status.
+   - BOM-EXPORT-RUN-01: Run in Background, giám sát tải tệp về, kiểm tra font tiếng Nhật MS Gothic và 14 cột.
+   - Target System: Siemens Teamcenter Version 2412 (TC2412).
+
+Yêu cầu: Orchestrator và các agent triển khai bám sát 100% tài liệu này để hoàn thành Spec-Kit và mã nguồn.
+
+## 2026-09-18T04:57:28Z
+
+[CHỈ THỊ CẤP BÁCH & PHÁT HIỆN FORENSIC TỪ NGƯỜI DÙNG]
+Người dùng cung cấp 2 tệp mẫu đối chiếu:
+1. PLM cũ (TC14): `PLM_1102Z53KR0 Cũ.xlsx` (14 cột: Col C=Item Type, Col D=Item Id, Col K=Item Name, Col M=Revision).
+2. PLM mới (TC2412): `T10C423NL0 Mới.xlsm` (24 cột: Col B=Level, Col C=Item Type, Col D=Name [Mã LK], Col H=Parts Text [Tên LK], Col J=Revision, Col K=Release Status).
+3. File BOM chung: `BOM_110C0Z3LV1.xlsm` Sheet `PLM`.
+
+PHÁT HIỆN TỬ HUYỆT CÔNG THỨC EXCEL TRONG FILE BOM CHUNG:
+- Sheet `Tongket!C5` & `CTTT!A1` có công thức: `=PLM!C2` (yêu cầu Mã máy phải ở Cột C Sheet PLM).
+- Sheet `CTTT` có hàng loạt công thức: `=VLOOKUP(C3, PLM!C:L, 10, 0)` (tra cứu mã ở Cột C, lấy Revision ở Cột L của Sheet PLM).
+- Sheet `CTTT` có công thức: `=VLOOKUP(C3, PLM!T:U, 2, 0)` (tra cứu tổng số lượng trong bảng Pivot ở cột T:U).
+- Sheet `PLM` cột R có `=IF(C2="","",C2)`, cột S có `=IF(E2="","",E2)`.
+
+YÊU CẦU THIẾT KẾ BẮT BUỘC CHO MILESTONE M3 & M4 (TC2412 CANONICAL NORMALIZER & SHEET PLM BRIDGE):
+1. Chuẩn hóa 100% đầu vào theo Teamcenter Version 2412 mới (đọc 24 cột của TC2412, map D='Name' thành item_id, H='Parts Text' thành item_name, B='Level', K='Release Status').
+2. Khi ghi/xuất ra Sheet 'PLM' của file BOM chung (`BOM_*.xlsm`), BẮT BUỘC ánh xạ chính xác vào đúng vị trí cột truyền thống:
+   - Cột A: Level
+   - Cột B: Item Type
+   - Cột C: Item Id (lấy từ Name của TC2412) -> Đảm bảo =PLM!C2 và VLOOKUP(..., PLM!C:L, ...) chạy đúng 100%!
+   - Cột D: Has Children
+   - Cột E: Quantity
+   - Cột J: Item Name (lấy từ Parts Text của TC2412)
+   - Cột L: Revision
+   - Cột M: Item Rev Status (lấy từ Release Status của TC2412)
+   - Cột R: PART CODE, Cột S: Q.TY, Cột T:U: Pivot Table.
+3. Không làm gãy bất kỳ công thức VLOOKUP hay liên kết nào của các thành viên trong các sheet Tongket, CTTT!
+Yêu cầu Orchestrator và Worker đưa cơ chế Bridge này vào Spec-Kit và mã nguồn ngay lập tức.
+
+
+
+

@@ -126,7 +126,13 @@ class SSBOMMainWindow(QMainWindow):
         # Menu: Hệ thống (File)
         file_menu = menu_bar.addMenu("Hệ thống")
 
-        action_settings = QAction("⚙️ Cấu hình Hệ thống...", self)
+        # Action: Tải BOM từ Teamcenter PLM
+        action_download_plm = QAction("📥 Tải BOM từ Teamcenter (TC2412)", self)
+        action_download_plm.setShortcut("Ctrl+D")
+        action_download_plm.triggered.connect(self.leader_view._open_plm_download_dialog)
+        file_menu.addAction(action_download_plm)
+
+        action_settings = QAction("⚙ Cấu hình kết nối hệ thống...", self)
         action_settings.setShortcut("Ctrl+,")
         action_settings.triggered.connect(self.open_settings_dialog)
         file_menu.addAction(action_settings)
@@ -162,6 +168,8 @@ class SSBOMMainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
+        toolbar.addAction(action_download_plm)
+        toolbar.addSeparator()
         toolbar.addAction(action_goto_leader)
         toolbar.addAction(action_goto_member)
         toolbar.addSeparator()
