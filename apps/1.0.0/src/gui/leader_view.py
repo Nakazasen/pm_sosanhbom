@@ -1140,6 +1140,10 @@ class Step2DataSourcingWidget(QWidget):
         date_button_group.addButton(self.radio_common_date)
         date_button_group.addButton(self.radio_individual_date)
 
+        self.date_edit_common.dateChanged.connect(self._on_common_date_changed)
+        self.radio_common_date.toggled.connect(self._on_date_mode_toggled)
+        self.radio_individual_date.toggled.connect(self._on_date_mode_toggled)
+
         h_mode.addWidget(self.radio_common_date)
         h_mode.addWidget(self.date_edit_common)
         h_mode.addSpacing(20)
@@ -1159,6 +1163,7 @@ class Step2DataSourcingWidget(QWidget):
         ])
         h_src = self.sourcing_table.horizontalHeader()
         h_src.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        h_src.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         h_src.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h_src.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         source_layout.addWidget(self.sourcing_table)
@@ -1200,6 +1205,44 @@ class Step2DataSourcingWidget(QWidget):
 
         layout.addLayout(btn_layout)
 
+    def _on_common_date_changed(self, new_date: QDate) -> None:
+        """When common date is updated, synchronize all rows in the sourcing table immediately."""
+        if self.radio_common_date.isChecked():
+            dt_str = new_date.toString("yyyy/MM/dd")
+            active_machines = [m for m in self.state.machines if not m.is_excluded]
+            for r in range(self.sourcing_table.rowCount()):
+                item = self.sourcing_table.item(r, 2)
+                if item:
+                    item.setText(dt_str)
+                w = self.sourcing_table.cellWidget(r, 2)
+                if isinstance(w, QDateEdit):
+                    w.blockSignals(True)
+                    w.setDate(new_date)
+                    w.blockSignals(False)
+                if r < len(active_machines):
+                    active_machines[r].custom_date = dt_str
+
+    def _on_date_mode_toggled(self) -> None:
+        """Switch between common date mode and individual machine date mode."""
+        is_common = self.radio_common_date.isChecked()
+        self.date_edit_common.setEnabled(is_common)
+        for r in range(self.sourcing_table.rowCount()):
+            w = self.sourcing_table.cellWidget(r, 2)
+            if isinstance(w, QDateEdit):
+                w.setEnabled(not is_common)
+        if is_common:
+            self._on_common_date_changed(self.date_edit_common.date())
+
+    def _on_machine_custom_date_changed(self, row: int, new_date: QDate) -> None:
+        """Update individual machine date when modified by user in table."""
+        dt_str = new_date.toString("yyyy/MM/dd")
+        item = self.sourcing_table.item(row, 2)
+        if item:
+            item.setText(dt_str)
+        active_machines = [m for m in self.state.machines if not m.is_excluded]
+        if row < len(active_machines):
+            active_machines[row].custom_date = dt_str
+
     def refresh_sourcing_table(self) -> None:
         """Scan folder directories and update sourcing table rows."""
         self.sourcing_table.setRowCount(0)
@@ -1218,8 +1261,32 @@ class Step2DataSourcingWidget(QWidget):
             self.sourcing_table.setItem(r, 1, QTableWidgetItem(m.machine_code))
             self.sourcing_table.item(r, 1).setFont(QFont("Calibri", 10, QFont.Weight.Bold))
 
-            eff_date = m.custom_date or common_dt
-            self.sourcing_table.setItem(r, 2, QTableWidgetItem(eff_date))
+            if self.radio_common_date.isChecked():
+                eff_date = common_dt
+                m.custom_date = common_dt
+            else:
+                eff_date = m.custom_date or common_dt
+
+            item_dt = QTableWidgetItem(eff_date)
+            item_dt.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.sourcing_table.setItem(r, 2, item_dt)
+
+            date_w = QDateEdit()
+            date_w.setDisplayFormat("yyyy/MM/dd")
+            date_w.setCalendarPopup(True)
+            qdate = QDate.fromString(eff_date, "yyyy/MM/dd")
+            if qdate.isValid():
+                date_w.setDate(qdate)
+            else:
+                date_w.setDate(self.date_edit_common.date())
+            is_common = self.radio_common_date.isChecked()
+            date_w.setEnabled(not is_common)
+            date_w.setStyleSheet(
+                "QDateEdit { font-size: 11px; padding: 2px 4px; border: 1px solid #D0D0D0; border-radius: 3px; }"
+                "QDateEdit:disabled { background-color: #F8F9FA; color: #495057; }"
+            )
+            self.sourcing_table.setCellWidget(r, 2, date_w)
+            date_w.dateChanged.connect(lambda d, row=r: self._on_machine_custom_date_changed(row, d))
 
             # PLM File Check
             plm_status = "⏳ Thiếu file"

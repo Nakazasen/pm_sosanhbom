@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import openpyxl
 import pytest
 from PyQt6.QtCore import QDate
-from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QMessageBox, QTableWidgetItem
+from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDateEdit, QMessageBox, QTableWidgetItem
 
 from src.gui.leader_view import (
     CHECKLIST_18_POINTS,
@@ -265,15 +265,47 @@ class TestLeaderWizardStep2:
     """Tests for Step 2: Data Sourcing, Date Selection & BOM Filtering."""
 
     def test_date_mode_switching(self, qapp: QApplication, tmp_path: Path) -> None:
-        """Verify common date vs individual machine date selection."""
+        """Verify common date vs individual machine date selection with dynamic table sync."""
         view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
         step2 = view.step2_widget
 
-        assert step2.radio_common_date.isChecked()
-        step2.date_edit_common.setDate(QDate(2026, 9, 25))
+        step1.machine_table.setRowCount(0)
+        step1._add_machine_row(code="110C103NL0")
+        step1._add_machine_row(code="110C103NL1")
+        step1.sync_state_from_ui()
 
+        step2.refresh_sourcing_table()
+        assert step2.radio_common_date.isChecked()
+        assert step2.sourcing_table.rowCount() == 2
+
+        # 1. Changing common date immediately updates table column 2 in all rows
+        step2.date_edit_common.setDate(QDate(2026, 9, 18))
+        assert step2.sourcing_table.item(0, 2).text() == "2026/09/18"
+        assert step2.sourcing_table.item(1, 2).text() == "2026/09/18"
+        assert view.state.machines[0].custom_date == "2026/09/18"
+        assert view.state.machines[1].custom_date == "2026/09/18"
+
+        # 2. Switch to individual machine date mode
         step2.radio_individual_date.setChecked(True)
         assert step2.radio_individual_date.isChecked()
+        assert step2.date_edit_common.isEnabled() is False
+
+        # Row 0 date can be customized
+        w0 = step2.sourcing_table.cellWidget(0, 2)
+        assert isinstance(w0, QDateEdit)
+        assert w0.isEnabled() is True
+        w0.setDate(QDate(2026, 9, 20))
+        assert step2.sourcing_table.item(0, 2).text() == "2026/09/20"
+        assert step2.sourcing_table.item(1, 2).text() == "2026/09/18"
+        assert view.state.machines[0].custom_date == "2026/09/20"
+        assert view.state.machines[1].custom_date == "2026/09/18"
+
+        # 3. Switching back to common date resets all rows to common date
+        step2.radio_common_date.setChecked(True)
+        assert step2.date_edit_common.isEnabled() is True
+        assert step2.sourcing_table.item(0, 2).text() == "2026/09/18"
+        assert step2.sourcing_table.item(1, 2).text() == "2026/09/18"
 
     def test_sourcing_table_detects_plm_and_r3(
         self,
