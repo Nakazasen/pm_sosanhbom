@@ -608,3 +608,43 @@ class TestLeaderWizardWorkflowGuards:
         # Step back to Step 2
         view.go_previous_step()
         assert view.step_stack.currentIndex() == 1
+
+    def test_custom_labels_and_subunit_combobox(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+    ) -> None:
+        """Verify updated headers, Step 3 title, and subunit quick-select dropdown."""
+        from src.gui.leader_view import WizardStepHeader, STANDARD_SUB_UNITS
+        assert WizardStepHeader.STEP_NAMES[2] == "3. Theo dõi tổng hợp file của phụ trách"
+
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+
+        # Check Table 1.3 headers
+        headers_1_3 = [
+            step1.staff_table.horizontalHeaderItem(c).text()
+            for c in range(step1.staff_table.columnCount())
+        ]
+        assert headers_1_3 == ["Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Mã máy", "Công Đoạn"]
+
+        # Check Sub-unit QComboBox in row 0
+        combo_sub = step1.staff_table.cellWidget(0, 4)
+        assert isinstance(combo_sub, QComboBox)
+        items = [combo_sub.itemText(i) for i in range(combo_sub.count())]
+        for unit in STANDARD_SUB_UNITS:
+            assert unit in items
+
+        # Select a different sub-unit via combo
+        combo_sub.setCurrentText("FUSER")
+        assert step1.staff_table.item(0, 4).text() == "FUSER"
+        assert view.state.staff_roster[0].sub_unit == "FUSER"
+
+        # Check Step 3 Table headers
+        step3 = view.step3_widget
+        headers_3 = [
+            step3.submission_table.horizontalHeaderItem(c).text()
+            for c in range(step3.submission_table.columnCount())
+        ]
+        assert headers_3[3] == "Phụ trách công đoạn"
+

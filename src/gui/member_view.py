@@ -179,7 +179,7 @@ class MemberWorkspaceView(QWidget):
 
         # Row B: Auto-detected badges & status
         row_b = QHBoxLayout()
-        row_b.addWidget(QLabel("Kỹ sư phụ trách:"))
+        row_b.addWidget(QLabel("Phụ trách công đoạn:"))
         self.lbl_engineer_name = QLabel(self.engineer_name)
         self.lbl_engineer_name.setStyleSheet("font-weight: bold; color: #0d6efd;")
         row_b.addWidget(self.lbl_engineer_name)

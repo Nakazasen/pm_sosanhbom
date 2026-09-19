@@ -398,7 +398,7 @@ class WizardStepHeader(QWidget):
     STEP_NAMES = [
         "1. Lập Dự Án & Phân Công",
         "2. Tải & Xử Lý Nguồn BOM",
-        "3. Theo Dõi & Gom Bài",
+        "3. Theo dõi tổng hợp file của phụ trách",
         "4. So Sánh BOM Tổng & Báo Cáo",
     ]
 
@@ -593,7 +593,7 @@ class Step1ProjectSetupWidget(QWidget):
 
         self.staff_table = QTableWidget(0, 5)
         self.staff_table.setHorizontalHeaderLabels([
-            "Áp dụng", "Kỹ Sư Phụ Trách", "Phòng Ban", "Mã Máy Giao", "Công Đoạn",
+            "Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Mã máy", "Công Đoạn",
         ])
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -672,7 +672,22 @@ class Step1ProjectSetupWidget(QWidget):
             self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
-        # Synchronize dynamic dropdown options for column "Mã Máy Giao"
+            combo_sub = QComboBox()
+            combo_sub.setStyleSheet(
+                "QComboBox { padding: 2px 4px; font-size: 11px; border: 1px solid #D0D0D0; border-radius: 3px; background-color: #FFFFFF; }"
+                "QComboBox:focus { border: 1px solid #0078D4; }"
+            )
+            for u in STANDARD_SUB_UNITS:
+                combo_sub.addItem(u)
+            if assigned_unit in STANDARD_SUB_UNITS:
+                combo_sub.setCurrentText(assigned_unit)
+            else:
+                combo_sub.addItem(assigned_unit)
+                combo_sub.setCurrentText(assigned_unit)
+            self.staff_table.setCellWidget(r, 4, combo_sub)
+            combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
+
+        # Synchronize dynamic dropdown options for column "Mã máy"
         self._sync_staff_machine_options()
 
     def _add_machine_row(self, code: str = "", note: str = "") -> None:
@@ -798,8 +813,17 @@ class Step1ProjectSetupWidget(QWidget):
         if row < len(self.state.staff_roster):
             self.state.staff_roster[row].machine_code = txt
 
+    def _on_staff_subunit_combo_changed(self, row: int, txt: str) -> None:
+        item = self.staff_table.item(row, 4)
+        if item:
+            item.setText(txt)
+        else:
+            self.staff_table.setItem(row, 4, QTableWidgetItem(txt))
+        if row < len(self.state.staff_roster):
+            self.state.staff_roster[row].sub_unit = txt
+
     def _sync_staff_machine_options(self) -> None:
-        """Dynamically sync 'Mã Máy Giao' combo options in staff_table with machine_table."""
+        """Dynamically sync 'Mã máy' combo options in staff_table with machine_table."""
         active_codes = self.get_active_machine_codes()
         options = active_codes if active_codes else ["(Chưa có mã máy)"]
 
@@ -888,7 +912,19 @@ class Step1ProjectSetupWidget(QWidget):
         for r in range(self.staff_table.rowCount()):
             if not self.staff_table.isRowHidden(r):
                 unit = sub_units[visible_idx % len(sub_units)]
-                self.staff_table.setItem(r, 4, QTableWidgetItem(unit))
+                combo_sub = self.staff_table.cellWidget(r, 4)
+                if isinstance(combo_sub, QComboBox):
+                    combo_sub.blockSignals(True)
+                    combo_sub.setCurrentText(unit)
+                    combo_sub.blockSignals(False)
+                item_sub = self.staff_table.item(r, 4)
+                if item_sub:
+                    item_sub.setText(unit)
+                else:
+                    self.staff_table.setItem(r, 4, QTableWidgetItem(unit))
+                if r < len(self.state.staff_roster):
+                    self.state.staff_roster[r].sub_unit = unit
+
                 if active_machines:
                     mach = active_machines[visible_idx % len(active_machines)]
                     combo = self.staff_table.cellWidget(r, 3)
@@ -951,7 +987,18 @@ class Step1ProjectSetupWidget(QWidget):
                         assignment.machine_code = m_code_item.text().strip()
 
                 sub_item = self.staff_table.item(r, 4)
-                if sub_item:
+                combo_sub = self.staff_table.cellWidget(r, 4)
+                if isinstance(combo_sub, QComboBox):
+                    sub_val = combo_sub.currentText().strip()
+                    if sub_item and sub_item.text().strip() and sub_item.text().strip() != sub_val:
+                        sub_val = sub_item.text().strip()
+                        combo_sub.blockSignals(True)
+                        if combo_sub.findText(sub_val) == -1:
+                            combo_sub.addItem(sub_val)
+                        combo_sub.setCurrentText(sub_val)
+                        combo_sub.blockSignals(False)
+                    assignment.sub_unit = sub_val
+                elif sub_item:
                     assignment.sub_unit = sub_item.text().strip()
 
     def create_project_folder_structure(self) -> Path:
@@ -1023,7 +1070,9 @@ class Step1ProjectSetupWidget(QWidget):
         QMessageBox.information(
             self,
             "Thông báo thành công",
-            "Đã tạo xong danh sách BOM và người phụ trách theo cài đặt.",
+            f"Đã tạo xong danh sách BOM và các gói nộp của phụ trách theo cài đặt.\n\n"
+            f"📁 Thư mục lưu trữ: {model_dir}\n"
+            f"Cấu trúc: <Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\<Tên phụ trách>.xlsm",
         )
 
     def _generate_member_package(
@@ -1353,7 +1402,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         # 2. Real-time Status Table
         self.submission_table = QTableWidget(0, 8)
         self.submission_table.setHorizontalHeaderLabels([
-            "STT", "Mã Máy", "Công Đoạn", "Kỹ Sư Phụ Trách", "Trạng Thái Nộp", "Số LK", "MSI", "Thời Gian Nộp",
+            "STT", "Mã Máy", "Công Đoạn", "Phụ trách công đoạn", "Trạng Thái Nộp", "Số LK", "MSI", "Thời Gian Nộp",
         ])
         h_sub = self.submission_table.horizontalHeader()
         h_sub.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -1645,7 +1694,9 @@ class Step3TrackingConsolidationWidget(QWidget):
         QMessageBox.information(
             self,
             "Thông báo cập nhật",
-            "Đã cập nhật xong danh sách linh kiện vào dữ liệu tổng hợp.",
+            f"Đã cập nhật xong danh sách linh kiện vào dữ liệu tổng hợp.\n\n"
+            f"📁 Các file thành viên đã được tổng hợp và lưu trữ tại:\n"
+            f"<Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\phutrach\\",
         )
         return True
 

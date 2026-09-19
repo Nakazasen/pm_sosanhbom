@@ -17,7 +17,7 @@ from unittest.mock import patch
 import openpyxl
 import pandas as pd
 import pytest
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.gui.member_view import CANONICAL_MSI_UNITS, MemberWorkspaceView
 from src.reporting.excel_generator import COLOR_GREEN_FILL_HEX, COLOR_RED_FILL_HEX
@@ -320,3 +320,14 @@ class TestMemberViewR6:
         ws_unlocked = wb_unlocked["CTTT"]
         assert ws_unlocked["Q2"].value is None
         wb_unlocked.close()
+
+    def test_member_view_label_phu_trach_cong_doan(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+    ) -> None:
+        """Verify banner displays 'Phụ trách công đoạn:' instead of old 'Kỹ sư phụ trách:'."""
+        view = MemberWorkspaceView(base_dir=tmp_path)
+        labels = [w.text() for w in view.findChildren(QLabel)]
+        assert "Phụ trách công đoạn:" in labels
+        assert "Kỹ sư phụ trách:" not in labels

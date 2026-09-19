@@ -1,7 +1,7 @@
 {
   "name": "SSBOM_Manager",
   "version": "1.0.0",
-  "created_at": "2026-09-19T12:08:43.319547Z",
+  "created_at": "2026-09-19T12:19:57.437623Z",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "SSBOM_App.py": {
@@ -85,12 +85,12 @@
       "size": 11500
     },
     "src/gui/leader_view.py": {
-      "sha256": "39972791ef3e4cefc10838ca44515613c23c28d55c390b59a2cfdc24426405f1",
-      "size": 103046
+      "sha256": "1311148370b6f133d98903631052d6c2a2e7c3c348e09611c14da74ec870984e",
+      "size": 105770
     },
     "src/gui/member_view.py": {
-      "sha256": "68e3258c7bd01dcf4015696567467987beb61df9ef4b431fdbde9de0e0a82c47",
-      "size": 74603
+      "sha256": "4c415098a334498c718b98be48cc72f5020ec77dbf06ec2e133028653b733f5e",
+      "size": 74608
     },
     "src/gui/plm_download_dialog.py": {
       "sha256": "89b1296c76b5a47e3106dedb4b977ed9bea190c6ada0bac0f15383299e9549a1",
