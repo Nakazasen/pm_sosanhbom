@@ -55,12 +55,29 @@ from src.core.tree_parser import (
     PLMTreeParser,
     parse_plm_excel,
 )
+from src.core.inheritance_engine import (
+    ExplanationRecord,
+    InheritanceEngine,
+    InheritanceSummary,
+    match_index_mix,
+    refresh_workbook_pivots,
+    update_workbook_with_inheritance,
+)
+from src.core.jig_manager import (
+    STANDARD_JIG_SERIES,
+    Assessment4M,
+    Decision4M,
+    JIGManager,
+    Presence4M,
+)
 from src.core.unit_resolver import (
     UnitResolver,
     resolve_units,
 )
 
 __all__ = [
+    "Assessment4M",
+    "Decision4M",
     "DEFAULT_MODEL_RULES",
     "BOMNode",
     "BOMTree",
@@ -68,8 +85,12 @@ __all__ = [
     "ERPProvider",
     "ExcelPLMAdapter",
     "ExcelR3Adapter",
+    "ExplanationRecord",
     "FilterCriteria",
     "FixSerialMaster",
+    "InheritanceEngine",
+    "InheritanceSummary",
+    "JIGManager",
     "MatchMode",
     "ModelPruner",
     "ModelRule",
@@ -77,10 +98,12 @@ __all__ = [
     "MSIEvaluationResult",
     "PLMProvider",
     "PLMTreeParser",
+    "Presence4M",
     "PruneAction",
     "ReconciliationEngine",
     "ReconciliationResult",
     "SAPR3COMAdapter",
+    "STANDARD_JIG_SERIES",
     "TeamcenterSeleniumAdapter",
     "UnitResolver",
     "aggregate_cross_station",
@@ -89,11 +112,14 @@ __all__ = [
     "extract_expiry_date",
     "filter_by_date",
     "is_effectivity_expired",
+    "match_index_mix",
     "migrate_annotations",
     "normalize_model_name",
     "parse_plm_excel",
     "prune_by_model",
     "reconcile_single_row",
     "reconcile_three_way",
+    "refresh_workbook_pivots",
     "resolve_units",
+    "update_workbook_with_inheritance",
 ]

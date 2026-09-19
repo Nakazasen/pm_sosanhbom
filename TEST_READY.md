@@ -1,111 +1,69 @@
-# TEST READY — BOM Comparison Modernization Automated Test Suite
+# TEST READY — BOM Comparison Automation E2E Test Suite
 
 ## Executive Summary
-The comprehensive, 4-tier automated test suite for the **BOM Comparison Modernization Project** (`pm_sosanhbom`) is fully implemented, verified, and passing at 100%.
+The comprehensive, 4-tier E2E automated test suite for **Phần Mềm So Sánh BOM Tự Động (Kyocera BOM Comparison System)** is fully implemented, verified, and passing at 100%.
 
-- **Total Test Cases**: 184
-- **Pass Rate**: 100% (184 passed, 0 failed)
-- **Execution Time**: ~17.6s
-- **Python / Framework**: Python 3.13.5, pytest 9.1.1, openpyxl, pandas, pydantic, selenium
+- **Total E2E Test Cases**: 81
+- **Pass Rate**: 100% (81 passed, 0 failed)
+- **Execution Time**: ~8.75s
+- **Platform**: Python 3.13.14 on Windows, pytest 9.1.1, openpyxl, pandas, PyQt6
 
 ---
 
 ## Quick Start / How to Run
 
-### Run Full 4-Tier Test Suite
+### Run Full 4-Tier E2E Test Suite (81 Tests)
 ```bash
-python -m pytest tests/tier1_features tests/tier2_boundaries tests/tier3_combinations tests/tier4_real_world -v
+py -m pytest tests/e2e/ -v
 ```
 
-### Run by Individual Tier
+### Run by Specific Tier
 ```bash
-# Tier 1: Feature Isolation (F1 to F28)
-python -m pytest tests/tier1_features -v
+# Tier 1: Feature Isolation (40 tests covering R1 to R6)
+py -m pytest tests/e2e/test_tier1_feature_coverage.py -v
 
-# Tier 2: Boundaries & Adversarial Edge Cases
-python -m pytest tests/tier2_boundaries -v
+# Tier 2: Boundaries & Corner Cases (30 tests covering R1 to R6)
+py -m pytest tests/e2e/test_tier2_boundary_corner.py -v
 
-# Tier 3: Multi-Module Integration Pipelines
-python -m pytest tests/tier3_combinations -v
+# Tier 3: Pairwise Combinations (6 integration pipelines)
+py -m pytest tests/e2e/test_tier3_pairwise_combinations.py -v
 
-# Tier 4: Real-World Legacy Ground Truth Parity
-python -m pytest tests/tier4_real_world -v
+# Tier 4: Real-World Production Workflows (5 end-to-end scenarios)
+py -m pytest tests/e2e/test_tier4_production_scenarios.py -v
 ```
 
 ---
 
-## Comprehensive Test Inventory & Coverage Matrix
+## Test Inventory & Coverage Breakdown
 
-### Tier 1: Feature Isolation Suites (140 Tests, 28 Files)
-Every functional requirement from `PROJECT.md` is tested with at least 5 isolated, self-contained test cases:
-
-| Feature | Module / Subject | File | Test Count | Status |
-|---|---|---|---|---|
-| **F01** | PLM 14-Column Excel Parser & Validation | `tests/tier1_features/test_f01_plm_parser.py` | 5 | ✅ PASSED |
-| **F02** | BOM Hierarchy & Multi-Parent Tree Builder | `tests/tier1_features/test_f02_bom_hierarchy.py` | 5 | ✅ PASSED |
-| **F03** | Date Filter Engine (Legacy `locbomfull.bas` Parity) | `tests/tier1_features/test_f03_date_filter.py` | 5 | ✅ PASSED |
-| **F04** | Model Pruner (Option Selection & Branch Exclusion) | `tests/tier1_features/test_f04_model_pruner.py` | 5 | ✅ PASSED |
-| **F05** | Unit Resolver (Level-1 Assembly Assignment) | `tests/tier1_features/test_f05_unit_resolver.py` | 5 | ✅ PASSED |
-| **F06** | Reconciliation Engine (Triple-Source Alignment) | `tests/tier1_features/test_f06_reconciliation.py` | 5 | ✅ PASSED |
-| **F07** | Missing Parts Detection (PLM vs CTTT Discrepancies) | `tests/tier1_features/test_f07_missing_parts.py` | 5 | ✅ PASSED |
-| **F08** | Cross-Station Aggregation & R3 Total Matching | `tests/tier1_features/test_f08_cross_station.py` | 5 | ✅ PASSED |
-| **F09** | Annotation Migration & Sign-off Carryover | `tests/tier1_features/test_f09_annotation_migration.py` | 5 | ✅ PASSED |
-| **F10** | MSI Decision Table & Matrix Rule Parser | `tests/tier1_features/test_f10_msi_decision.py` | 5 | ✅ PASSED |
-| **F11** | TC14 Headless Web Session & Browser Automation | `tests/tier1_features/test_f11_tc14_headless_session.py` | 5 | ✅ PASSED |
-| **F12** | TC14 Authentication & SSO Error Handling | `tests/tier1_features/test_f12_tc14_authentication.py` | 5 | ✅ PASSED |
-| **F13** | TC14 Item Search & Revision Navigation | `tests/tier1_features/test_f13_tc14_search_navigation.py` | 5 | ✅ PASSED |
-| **F14** | TC14 Excel Export Automation Pipeline | `tests/tier1_features/test_f14_tc14_export_pipeline.py` | 5 | ✅ PASSED |
-| **F15** | SAP GUI COM Scripting Engine & RotWrapper | `tests/tier1_features/test_f15_sap_com_automation.py` | 5 | ✅ PASSED |
-| **F16** | SAP Multi-Logon Conflict Detection & Resolution | `tests/tier1_features/test_f16_sap_multilogon.py` | 5 | ✅ PASSED |
-| **F17** | SAP CS12 Transaction Execution & BOM Explosion | `tests/tier1_features/test_f17_sap_cs12_execution.py` | 5 | ✅ PASSED |
-| **F18** | SAP Overwrite Guard & Fail-Closed Protection | `tests/tier1_features/test_f18_sap_fail_closed_guard.py` | 5 | ✅ PASSED |
-| **F19** | SAP Export File Routing & Format Conversion | `tests/tier1_features/test_f19_sap_export_routing.py` | 5 | ✅ PASSED |
-| **F20** | Unified Machine Code Registry & Mapping Table | `tests/tier1_features/test_f20_machine_code_unification.py` | 5 | ✅ PASSED |
-| **F21** | Dynamic R3 Header Discovery & Auto-Correction | `tests/tier1_features/test_f21_dynamic_r3_header.py` | 5 | ✅ PASSED |
-| **F22** | Leader Workspace (Model Registration & Batch Dispatch) | `tests/tier1_features/test_f22_leader_workspace.py` | 5 | ✅ PASSED |
-| **F23** | Member Workspace (Reconciliation & Discrepancy Editing) | `tests/tier1_features/test_f23_member_workspace.py` | 5 | ✅ PASSED |
-| **F24** | Consolidated Report Generator & Multi-Sheet Excel | `tests/tier1_features/test_f24_consolidated_report.py` | 5 | ✅ PASSED |
-| **F25** | Outlook Automated Dispatch & Email Summary | `tests/tier1_features/test_f25_outlook_notification.py` | 5 | ✅ PASSED |
-| **F26** | E2E Regression & End-to-End Comparison Lifecycle | `tests/tier1_features/test_f26_e2e_regression.py` | 5 | ✅ PASSED |
-| **F27** | Adversarial Coverage (Corrupt Inputs & Malformed Data) | `tests/tier1_features/test_f27_adversarial_coverage.py` | 5 | ✅ PASSED |
-| **F28** | Standalone Packaging & Dependency Isolation | `tests/tier1_features/test_f28_standalone_packaging.py` | 5 | ✅ PASSED |
+| Tier | Test File | Test Count | Scope & Covered Requirements | Pass Rate |
+|---|---|:---:|---|:---:|
+| **Tier 1** | `tests/e2e/test_tier1_feature_coverage.py` | 40 | R1 Leader Wizard (7), R2 BOM Filter (8), R3 Inheritance (6), R4 MSI Engine (8), R5 JIG & 4M (5), R6 Member View (6) | 100% (40/40) |
+| **Tier 2** | `tests/e2e/test_tier2_boundary_corner.py` | 30 | Boundary conditions: R1 (5), R2 (5), R3 (5), R4 (5), R5 (5), R6 (5) | 100% (30/30) |
+| **Tier 3** | `tests/e2e/test_tier3_pairwise_combinations.py` | 6 | 6 multi-subsystem pipelines connecting Leader, Member, Filter, MSI, JIG, and Inheritance | 100% (6/6) |
+| **Tier 4** | `tests/e2e/test_tier4_production_scenarios.py` | 5 | DMT Virgo (maT), MP Libra2 (ma1), TC2412 Formula Protection, UnitResolver Benchmark, ECN Lifecycle | 100% (5/5) |
+| **TOTAL** | **Comprehensive E2E Suite** | **81** | **Full Functional & Boundary Coverage of Requirements R1 to R6** | **100% (81/81)** |
 
 ---
 
-### Tier 2: Boundary & Extreme Stress Suites (20 Tests, 4 Files)
-| Scope | File | Test Count | Status |
-|---|---|---|---|
-| **Depth Extremes** (Up to 10-level nested hierarchy, single-child deep chains, wide branching) | `tests/tier2_boundaries/test_depth_extremes.py` | 5 | ✅ PASSED |
-| **Date Edge Cases** (Leap year Feb 29, year boundary Dec 31 -> Jan 1, epoch dates, UP string retention) | `tests/tier2_boundaries/test_date_edge_cases.py` | 5 | ✅ PASSED |
-| **Empty & Degenerate BOMs** (0 rows, root-only, circular loops, all-expired dates) | `tests/tier2_boundaries/test_empty_boms.py` | 5 | ✅ PASSED |
-| **Character Encodings & Unicode** (Vietnamese UTF-8 accents, null bytes, special symbols, whitespace) | `tests/tier2_boundaries/test_character_encoding.py` | 5 | ✅ PASSED |
+## Verified Interface Contracts
+
+1. **TC2412 Excel Formula Protection Bridge**:
+   - `Tongket!C5` & `CTTT!A1`: `=PLM!C2` (Machine code in Col C).
+   - `CTTT!I3`: `=VLOOKUP(C3, PLM!C:L, 10, 0)` (Revision in Col L).
+   - `CTTT!G3`: `=VLOOKUP(C3, PLM!T:U, 2, 0)` (Cols T:U reserved for Pivot Table summary).
+   - `PLM!R2`: `=IF(C2="","",C2)` and `PLM!S2`: `=IF(E2="","",E2)`.
+2. **Kyocera Month Tolerance Invariant**:
+   - In the same calendar year, when $\Delta_{\text{tháng}} \le 1$, the component is retained (not pruned) to allow for manufacturing grace period.
+3. **9-Branch MSI Decision Table**:
+   - Mathematically verified against `FIX_SERIAL_DLTOOL_VER010.xls` for all 9 branches.
+4. **$O(N)$ UnitResolver Performance**:
+   - Verified across 5,000+ nodes in under 100 ms with 100.00% accuracy.
 
 ---
 
-### Tier 3: End-to-End Pipeline Combinations (14 Tests, 3 Files)
-| Pipeline Scope | File | Test Count | Status |
-|---|---|---|---|
-| **Tree Parsing → Date Filtering → Model Pruning → Unit Resolution** | `tests/tier3_combinations/test_pipeline_tree_to_units.py` | 5 | ✅ PASSED |
-| **Unit Output + PLM Tree + R3 CS12 + CTTT Station → Reconciliation** | `tests/tier3_combinations/test_pipeline_reconciliation.py` | 4 | ✅ PASSED |
-| **Reconciliation Result + MSI Matrix Cross-Check & Verification** | `tests/tier3_combinations/test_pipeline_msi_crosscheck.py` | 5 | ✅ PASSED |
+## Implementation Escalations (For Feature Developers)
 
----
-
-### Tier 4: Real-World Legacy Ground Truth Parity (10 Tests, 2 Files)
-Validated against actual factory production workbooks in project root:
-
-| Ground Truth Source | File | Test Count | Parity Focus | Status |
-|---|---|---|---|---|
-| `form_ssbom.xlsm` (132 KB) | `tests/tier4_real_world/test_legacy_form_ssbom.py` | 5 | 7 Production Sheets (`Tongket`, `List JIG`, `MSI_7980_7990`, `CTTT`, `PLM`, `R3`, `CTTT_Total`), VBA Excel Formulas (`IF(G3=E3,"OK","NG")`, `IF(K3=E3,"OK","NG")`, `IF(M3=I3,"OK","NG")`, `IF(OR(G3=0,K3=0,N3="NG"),"NG","OK")`), CTTT dynamic column mappings | ✅ PASSED |
-| `Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx` (626 KB, 5,619 rows) | `tests/tier4_real_world/test_legacy_unit_resolver.py` | 5 | Column AI (`INDEX($F$2:$F... MATCH(1, ...))`) algorithmic parity, 5,000-node scale performance (<0.5s execution), exact unit mapping equivalence | ✅ PASSED |
-
----
-
-## Authoritative Output Derivation Sources
-1. **Legacy VBA Code**: `locbomfull.bas`, `Module1.bas`, `SaveCS12_Click`, `CheckLoginSAP`.
-2. **Production Excel Templates**: `form_ssbom.xlsm`, `Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx`.
-3. **Core Specification Documents**: `PROJECT.md`, `SCOPE.md`, `ORIGINAL_REQUEST.md`.
-
-## Defect Escalation
-- **Identified Implementation Defect**: In `src/core/parsers/r3_parser.py`, `pd.read_html` infers revision numbers (e.g., `01`, `02`) as integers (e.g. `1`, `2`), causing Pydantic type validation on `R3ComponentRow.rev_r3: str` to fail if strings are strictly enforced. The implementation should coerce `str(val)` before instantiating the model or use a Pydantic `BeforeValidator`.
-- **Workaround in Tests**: Synthesized R3 HTML tables supply string-formatted revision tags or pre-coerced values to test logic cleanly without modifying `src/`.
+During test implementation and verification, the following minor GUI implementation enhancements were identified for the implementing agent:
+1. **`MemberWorkspaceView.submit_data`**: Ensure that `ws_cttt["Q2"] = "OK"` is written to the submitted workbook before saving so that external scanner scripts immediately recognize the file as formally submitted.
+2. **`LeaderWorkspaceView.scan_member_submissions`**: Explicitly verify cell `ws_cttt["Q2"].value == "OK"` rather than only checking file existence, ensuring alignment with VBA `kt_trangthai.bas`.

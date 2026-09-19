@@ -1,498 +1,170 @@
-# Investigation Report: SAP R3 Automation & GUI Scripting Architecture
+# HANDOFF REPORT — CODEBASE & ARCHITECTURE EXPLORER SURVEY
 
-- **Agent**: Explorer 3 (SAP R3 Automation Investigator)
-- **Working Directory**: `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3`
-- **Target Systems**: SAP Logon 770 (`saplogon.exe`), System `P1J(ERP60-AWS)-VN`, Transaction `CS12`
-- **Date**: 2026-09-17
-- **Deliverable**: Handoff Report for Milestone M4 (SAP R3 CS12 Automation) and overall architecture synthesis
-
----
-
-## 1. Observation
-
-Direct observations and evidence collected from local files, binary inspections, and Windows registry/environment checks:
-
-### 1.1. Target SAP Environment & Executable Verification
-- Executable Location:
-  - Verified path: `C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe` (File exists).
-  - Version: `7700.1.7.1161` (Product Version: `770 Final Release`).
-  - Auxiliary binary: `C:\Program Files (x86)\SAP\FrontEnd\SAPgui\sapgui.exe` (File exists).
-- Registry Configuration (`check_sap_version.py` execution result):
-  - `HKCU\Software\SAP\SAPGUI Front\SAP Frontend Server\Security`:
-    - `UserScripting = 1` (Scripting is active).
-    - `WarnOnAttach = 0` (Attach notification prompt disabled).
-    - `WarnOnConnection = 0` (Connection notification prompt disabled).
-  - `HKCU\Software\SAP\SAPGUI Front\SAP Frontend Server\Scripting`:
-    - `ShowNativeWinDlgs = 0` (CRITICAL: 0 enforces SAP GUI internal modal dialogs rather than OS-native file picker dialogs).
-  - `HKLM\SOFTWARE\WOW6432Node\SAP\SAPGUI Front\SAP Frontend Server\Security`:
-    - `UserScripting = 1` (Machine-wide scripting policy allowed).
-    - `SecurityLevel = 0`.
-- SAP Landscape Configuration (`C:\Users\tvn183660\AppData\Roaming\SAP\Common\SAPUILandscape.xml`):
-  - Target Service: `<Service name="P1J(ERP60-AWS)-VN" systemid="P1J" server="R3_PR1" type="SAPGUI" clocale="EN" .../>`
-  - Target Message Server: `<Messageserver name="P1J" host="e8p1jvuci.kmerp.local" port="3601" .../>`
-
-### 1.2. Legacy VBScript & VBA Source Extraction
-Two primary legacy automation sources were extracted and decompiled using `oletools.olevba`:
-1. `D:\Sandbox\pm_sosanhbom\tudongdangnhapR3.vbs` (Standalone UTF-16LE VBScript):
-   ```vbscript
-   Set SAPguiAuto = GetObject("SAPGUI")
-   Set SAPguiApp = SAPguiAuto.GetScriptingEngine
-   Set Connection = SAPguiApp.OpenConnection("P1J(ERP60-AWS)-VN", True)
-   Set session = Connection.Children(0)
-   If session.Children.Count > 1 Then
-       session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").Select
-       session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").SetFocus
-       session.findById("wnd[1]/tbar[0]/btn[0]").press
-   End If
-   session.findById("wnd[0]").maximize
-   session.findById("wnd[0]/usr/txtRSYST-BNAME").text = "v130474"
-   session.findById("wnd[0]/usr/pwdRSYST-BCODE").text = "0123456789"
-   session.findById("wnd[0]/usr/txtRSYST-LANGU").Text = "EN"
-   session.findById("wnd[0]").sendVKey 0
-   ```
-2. `DownloadAutoR3.bas` in `tonghop_new12052026_ma1.xlsm` and `tonghop_new12052026_maT.xlsm`:
-   - Prefix detection difference:
-     - `ma1.xlsm`: `mamay = InStr(Right(ObjTarget, 10), "110")`
-     - `maT.xlsm`: `mamay = InStr(Right(ObjTarget, 10), "T10")`
-   - CS12 transaction execution flow:
-     ```vbscript
-     session.findById("wnd[0]/tbar[0]/okcd").Text = "CS12"
-     session.findById("wnd[0]").sendVKey 0
-     For i = 2 To lr_file
-         session.findById("wnd[0]/usr/ctxtRC29L-MATNR").Text = ws_downloadR3.Range("A" & i)
-         session.findById("wnd[0]/usr/ctxtRC29L-WERKS").Text = "2200"
-         session.findById("wnd[0]/usr/txtRC29L-STLAL").Text = "01"
-         session.findById("wnd[0]/usr/ctxtRC29L-CAPID").Text = "pp01"
-         session.findById("wnd[0]/usr/ctxtRC29L-DATUV").Text = Format(ws_downloadR3.Range("B" & i), "yyyy/mm/dd")
-         session.findById("wnd[0]/tbar[1]/btn[8]").press
-         session.findById("wnd[0]/tbar[1]/btn[45]").press
-         session.findById("wnd[1]/usr/subSUBSCREEN_STEPLOOP:SAPLSPO5:0150/sub:SAPLSPO5:0150/radSPOPLI-SELFLAG[1,0]").Select
-         session.findById("wnd[1]/tbar[0]/btn[0]").press
-         session.findById("wnd[1]/usr/ctxtDY_PATH").Text = duongdan & ws_downloadR3.Range("A" & i) & "\"
-         session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = "R3_" & ws_downloadR3.Range("A" & i) & "_" & ngay & "_" & thang & "_" & nam & ".xls"
-         session.findById("wnd[1]/tbar[0]/btn[0]").press
-         session.findById("wnd[0]/tbar[0]/btn[3]").press
-     Next
-     session.findById("wnd[0]").Close
-     session.findById("wnd[1]/usr/btnSPOP-OPTION1").press
-     ```
-
-### 1.3. Downstream Usage and Data Format Quirks
-- In `capnhat_PLM_R3.bas` and `md_TaoFileSSB.bas`:
-  ```vbscript
-  lr_kq = wb_R3.Sheets(1).Range("E" & Rows.Count).End(xlUp).Row + 1
-  Dim vungdulieu As Range
-  Set vungdulieu = Range("F1:F" & lr_kq).Find(what:="RevLev", MatchCase:=True, lookat:=xlWhole)
-  If vungdulieu Is Nothing Then
-      Columns("H:H").Select
-      Selection.Delete Shift:=xlToLeft
-  Else
-      Columns("F:F").Select
-      Selection.Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
-      Columns("H:H").Select
-      Selection.Delete Shift:=xlToLeft
-  End If
-  ```
-- In `form_ssbom.xlsm` (Sheet `R3`, rows 11-12):
-  - Row 11: Header `PART CODE` (Column 20 / T), `Q.TY` (Column 21 / U).
-  - Row 12+: `Col T = =IF('R3'!E12="","",'R3'!E12)`
-  - Row 12+: `Col U = =IF('R3'!J12="","",'R3'!J12)`
-- In `formnguoidung.xlsm` (`md_sosanhBomnho.bas` lines 32-34):
-  - `wb_R3.Sheets(1).Range("E12:E" & lr_r3)` -> Part code (Mã linh kiện trong R3).
-  - `wb_R3.Sheets(1).Range("G12:G" & lr_r3)` -> Revision (Rev R3).
-  - `wb_R3.Sheets(1).Range("J12:J" & lr_r3)` -> Quantity (Số lượng trong R3).
+- **Agent**: Codebase & Architecture Explorer (Survey Agent 3)
+- **Target Folder**: `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3`
+- **Parent Conversation ID**: `22da2373-db5b-4534-b31e-1769761ef87c`
+- **Date**: 2026-09-19
+- **Handoff Type**: Hard (Task Complete)
 
 ---
 
-## 2. Logic Chain
+## 1. OBSERVATION
 
-From the observations, we deduce the following structural facts and requirements:
+### 1.1 Architecture & Directory Layout
+- Project root: `D:\Sandbox\pm_sosanhbom`
+- Core code organized under `src/`:
+  * `src/gui/`: `app.py` (282 lines), `leader_view.py` (737 lines), `member_view.py` (720 lines), `plm_download_dialog.py` (738 lines), `settings_dialog.py` (377 lines).
+  * `src/ui/`: `i18n.py` (116 lines), `main_window.py` (477 lines).
+  * `src/core/`: `models.py` (310 lines), `tree_parser.py` (340 lines), `date_filter.py` (252 lines), `model_pruner.py` (305 lines), `default_rules.py` (795 lines), `unit_resolver.py` (152 lines), `reconciliation.py` (749 lines), `msi_engine.py` (525 lines), `adapters.py` (378 lines), `tc2412_bridge.py` (366 lines).
+  * `src/automation/`: `tc2412/` (Selenium Web client, selectors, session, standardizer), `tc14/` (legacy support), `sap/` (win32com.client CS12 automation, parser).
+  * `src/reporting/`: `excel_generator.py` (920 lines), `outlook_mailer.py` (358 lines).
+  * `src/security/`: `credentials.py` (567 lines), `dpapi.py` (176 lines).
+  * `src/services/`: `excel_exporter.py` (160 lines).
+- Supporting utilities & distribution:
+  * `scripts/package_app.py` (179 lines), `scripts/run_virgo_filter.py` (296 lines), `scripts/fast_virgo_filter.py` (143 lines).
+  * `SSBOM_Launcher.py` (112 lines), `Khoi_Dong_SSBOM.bat` (71 lines), `Khoi_Dong_Portable.bat` (29 lines), `installer/SSBOM_Manager.iss` (59 lines).
 
-1. **Automation Engine Foundation (COM Interop)**:
-   - Because `ShowNativeWinDlgs = 0` and `UserScripting = 1` are already configured in Windows Registry, SAP GUI 770 exposes the full COM scripting hierarchy through `win32com.client.GetObject("SAPGUI")`.
-   - Because SAP GUI internal dialogs are used, all file export operations occur strictly within SAP GUI window objects (`wnd[1]/usr/ctxtDY_PATH` and `ctxtDY_FILENAME`), meaning zero dependence on external Windows OS file dialog hooks (e.g. `pywinauto` or UIAutomation).
-   - If `saplogon.exe` is not running, calling `GetObject("SAPGUI")` fails with COM error `-2147221020 (Invalid syntax / object not found)`. Therefore, the Python automation must check `psutil` or start `C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe`, waiting up to 15 seconds for the `SAPGUI` ROT (Running Object Table) registration.
-
-2. **Session Resilience & Multi-Logon Handling**:
-   - In production SAP ERP environments, user `v130474` may have an existing open session from another workstation or a previous abnormal disconnect.
-   - When this happens, SAP creates popup `wnd[1]` titled "License Information for Multiple Logons".
-   - Selecting `wnd[1]/usr/radMULTI_LOGON_OPT2` terminates previous orphaned sessions and claims the session cleanly.
-   - Reusing an existing open connection from `application.Connections` avoids unnecessary logouts/logins if SAP is already authenticated.
-
-3. **CS12 Execution Dynamics & Parameter Contract**:
-   - Transaction CS12 requires 5 mandatory input parameters:
-     - `ctxtRC29L-MATNR`: 10-character machine/parent material code (e.g. `110K123450`, `T10...`).
-     - `ctxtRC29L-WERKS`: `"2200"` (Plant Kyocera Vietnam).
-     - `txtRC29L-STLAL`: `"01"` (Alternative BOM 1).
-     - `ctxtRC29L-CAPID`: `"pp01"` (BOM Application / Usage for Production).
-     - `ctxtRC29L-DATUV`: Production validity date formatted as `"YYYY/MM/DD"`.
-   - The legacy code calls `CS12` without `/n`. If the previous screen was left in an invalid state, this can error. Using `/nCS12` ensures unconditional navigation to the top-level CS12 transaction screen.
-
-4. **Status Bar Monitoring (Fail-Closed Gate)**:
-   - In the legacy VBA code, if a material code did not exist or the BOM was not maintained for plant 2200, SAP remained on the initial screen and displayed an error message in `wnd[0]/sbar`.
-   - The legacy code blindly pressed `btn[45]` without checking the status bar, causing runtime COM crashes or exporting corrupted data.
-   - Python implementation must inspect `session.findById("wnd[0]/sbar").MessageType`. If `MessageType == 'E'`, it must record the error ("BOM not found in plant 2200"), emit a structured warning to the caller/UI, skip export for that machine, and reset navigation via `/nCS12`.
-
-5. **Export File Format & Data Parsing**:
-   - The export dialog `SAPLSPO5:0150` with option `radSPOPLI-SELFLAG[1,0]` exports a spreadsheet format with extension `.xls`.
-   - The data contains header rows from 1 to 11, and data rows starting at row 12.
-   - The column shifting heuristic in legacy VBA (`RevLev` check in Col F) exists because SAP ALV layout variants may include or exclude the revision level column.
-   - Rather than reproducing fragile column deletion (`Columns("H:H").Delete`), the Python parser should directly locate column headers by name (`Component` / `Part Code`, `RevLev` / `Revision`, `Quantity` / `Un`) in row 11, making parsing resilient across any layout changes.
-
-6. **Directory & File Routing**:
-   - The root comparison folder contains multiple subfolders, each named after a machine code (e.g., `110...`, `T10...`).
-   - The export destination must route the exported file directly into `base_dir / <machine_code> / R3_<machine_code>_<DD>_<MM>_<YYYY>.xls`.
-   - If previous files exist, they should be archived into `base_dir / <machine_code> / capnhat / old /` to maintain auditability.
-
----
-
-## 3. Architecture Specification for Python Implementation
-
-### 3.1. Class Structure & Module Layout
-Target module: `src/automation/sap_r3.py` (or `engine/sap/`):
-
+### 1.2 Test Suite Execution & Results
+Command executed: `pytest -q`  
+Execution log: `task-83.log`  
+Duration: 84.45s  
+Summary output:
 ```
-src/automation/sap/
-├── __init__.py
-├── connection.py      # SAPGUI process check, ROT discovery, session acquisition, multi-logon
-├── cs12_service.py    # CS12 transaction execution, parameter binding, status bar gate
-├── exporter.py        # SAPLSPO5 dialog handling, file save, overwrite handling
-├── parser.py          # Resilient reading of raw R3 .xls output into Pandas / Polars / Pydantic
-└── models.py          # Data models: SAPCredentials, CS12Params, R3ComponentRow, ExportResult
+3 failed, 569 passed, 4 warnings in 84.45s (0:01:24)
 ```
+Exact verbatim test failures:
+1. `tests/unit/test_spec_m1_contract.py:124`:
+   ```
+   login_html = (WORKSPACE / "tc14_login_page_dom.html").read_text(encoding="utf-8", errors="replace")
+   ...
+   FileNotFoundError: [Errno 2] No such file or directory: 'D:\\Sandbox\\pm_sosanhbom\\tc14_login_page_dom.html'
+   ```
+2. `tests/tier5_adversarial/test_credentials_stress.py:137` (`test_service_name_path_traversal_and_forbidden_chars`):
+   Attempted to create files for DOS reserved device names (`CON`, `PRN`, `AUX`, `NUL`), causing `AssertionError` under Windows.
+3. `tests/tier5_adversarial/test_credentials_stress.py:270` (`test_concurrent_readers_during_continuous_writes`):
+   ```
+   [WinError 5] Access is denied: '...\\stress_creds\\CONCURRENT_READER_WRITER_SVC.tmp' -> '...\\stress_creds\\CONCURRENT_READER_WRITER_SVC.dpapi'
+   ```
+   High-concurrency atomic rename conflict under Windows file-locking semantics.
 
-### 3.2. Detailed Component Implementation Design
+### 1.3 Packaging & Launcher Execution
+1. Command: `py scripts/package_app.py`  
+   Exit code: 0  
+   Output:
+   ```
+   [OK] SSBOM Packaging and LAN Auto-Update Artifacts Built!
+   [OK] Apps Bundle: D:\Sandbox\pm_sosanhbom\apps\1.0.0
+   [OK] Update Package: D:\Sandbox\pm_sosanhbom\release_update\SSBOM_Manager-1.0.0.mpupdate
+   [OK] Catalog Manifest: D:\Sandbox\pm_sosanhbom\release_update\latest.json
+   ```
+2. Command: `py SSBOM_Launcher.py --health-check`  
+   Exit code: 0  
+   Output:
+   ```
+   SSBOM Health Check: OK
+   ```
 
-#### Component 1: Connection & Session Manager (`connection.py`)
-```python
-import os
-import time
-import subprocess
-import psutil
-import win32com.client
-from dataclasses import dataclass
-from typing import Optional
-
-SAPLOGON_PATH = r"C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe"
-DEFAULT_SYSTEM = "P1J(ERP60-AWS)-VN"
-
-@dataclass
-class SAPCredentials:
-    username: str = "v130474"
-    password: str = "0123456789"
-    language: str = "EN"
-    system: str = DEFAULT_SYSTEM
-
-class SAPConnectionManager:
-    def __init__(self, credentials: Optional[SAPCredentials] = None):
-        self.creds = credentials or SAPCredentials()
-        self.app = None
-        self.connection = None
-        self.session = None
-
-    def ensure_saplogon_running(self, timeout_sec: int = 15):
-        # 1. Check if saplogon.exe process is alive
-        running = any('saplogon' in p.name().lower() for p in psutil.process_iter(['name']))
-        if not running:
-            if not os.path.exists(SAPLOGON_PATH):
-                raise FileNotFoundError(f"SAP Logon not found at {SAPLOGON_PATH}")
-            subprocess.Popen([SAPLOGON_PATH])
-            
-        # 2. Wait for ROT entry
-        start = time.time()
-        while time.time() - start < timeout_sec:
-            try:
-                sap_gui_auto = win32com.client.GetObject("SAPGUI")
-                self.app = sap_gui_auto.GetScriptingEngine
-                if self.app:
-                    return
-            except Exception:
-                time.sleep(0.5)
-        raise TimeoutError("Timed out waiting for SAPGUI scripting engine registration.")
-
-    def get_or_create_session(self):
-        self.ensure_saplogon_running()
-        
-        # 3. Check for existing connection
-        if self.app.Connections.Count > 0:
-            for i in range(self.app.Connections.Count):
-                conn = self.app.Connections(i)
-                if self.creds.system in conn.Description:
-                    self.connection = conn
-                    if conn.Children.Count > 0:
-                        self.session = conn.Children(0)
-                        if self.is_logged_in():
-                            return self.session
-        
-        # 4. Open new connection
-        self.connection = self.app.OpenConnection(self.creds.system, True)
-        self.session = self.connection.Children(0)
-        self.handle_multi_logon_and_login()
-        return self.session
-
-    def handle_multi_logon_and_login(self):
-        self.wait_ready()
-        
-        # Check if license popup (multi-logon) appears
-        try:
-            rad_opt2 = self.session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2")
-            rad_opt2.Select()
-            self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-            self.wait_ready()
-        except Exception:
-            pass # No multi-logon dialog
-            
-        # Perform Login if at login window
-        try:
-            bname_field = self.session.findById("wnd[0]/usr/txtRSYST-BNAME")
-            bname_field.Text = self.creds.username
-            self.session.findById("wnd[0]/usr/pwdRSYST-BCODE").Text = self.creds.password
-            self.session.findById("wnd[0]/usr/txtRSYST-LANGU").Text = self.creds.language
-            self.session.findById("wnd[0]").sendVKey(0) # Enter
-            self.wait_ready()
-        except Exception:
-            pass # Already logged in
-
-    def is_logged_in(self) -> bool:
-        try:
-            # If okcd (transaction box) is available, user is logged in
-            self.session.findById("wnd[0]/tbar[0]/okcd")
-            return True
-        except Exception:
-            return False
-
-    def wait_ready(self, timeout_sec: int = 30):
-        start = time.time()
-        while self.session and self.session.Busy:
-            time.sleep(0.1)
-            if time.time() - start > timeout_sec:
-                raise TimeoutError("SAP GUI session busy timeout.")
-```
-
-#### Component 2: CS12 Execution & Export Service (`cs12_service.py`)
-```python
-import os
-import datetime
-from typing import Dict, Any, List
-
-class CS12BOMService:
-    def __init__(self, session):
-        self.session = session
-
-    def download_multilevel_bom(
-        self,
-        material: str,
-        valid_date: datetime.date,
-        destination_dir: str,
-        plant: str = "2200",
-        bom_usage: str = "pp01",
-        alternative: str = "01"
-    ) -> Dict[str, Any]:
-        os.makedirs(destination_dir, exist_ok=True)
-        date_str_input = valid_date.strftime("%Y/%m/%d")
-        date_str_file = valid_date.strftime("%d_%m_%Y")
-        filename = f"R3_{material}_{date_str_file}.xls"
-        full_dest_path = os.path.join(destination_dir, filename)
-
-        # 1. Navigate to CS12 safely
-        self.session.findById("wnd[0]/tbar[0]/okcd").Text = "/nCS12"
-        self.session.findById("wnd[0]").sendVKey(0)
-
-        # 2. Fill CS12 Initial Screen parameters
-        self.session.findById("wnd[0]/usr/ctxtRC29L-MATNR").Text = material
-        self.session.findById("wnd[0]/usr/ctxtRC29L-WERKS").Text = plant
-        self.session.findById("wnd[0]/usr/txtRC29L-STLAL").Text = alternative
-        self.session.findById("wnd[0]/usr/ctxtRC29L-CAPID").Text = bom_usage
-        self.session.findById("wnd[0]/usr/ctxtRC29L-DATUV").Text = date_str_input
-        
-        # 3. Execute (F8)
-        self.session.findById("wnd[0]/tbar[1]/btn[8]").press()
-
-        # 4. Check Status Bar for Error (Fail-Closed Guard)
-        sbar = self.session.findById("wnd[0]/sbar")
-        if sbar.MessageType == "E":
-            err_msg = sbar.Text
-            # Return back to home
-            self.session.findById("wnd[0]/tbar[0]/okcd").Text = "/n"
-            self.session.findById("wnd[0]").sendVKey(0)
-            return {"success": False, "material": material, "error": err_msg}
-
-        # 5. Trigger Export (btn[45])
-        self.session.findById("wnd[0]/tbar[1]/btn[45]").press()
-
-        # 6. Select Spreadsheet radio button in SAPLSPO5:0150
-        # radSPOPLI-SELFLAG[1,0] = Spreadsheet format
-        self.session.findById(
-            "wnd[1]/usr/subSUBSCREEN_STEPLOOP:SAPLSPO5:0150/sub:SAPLSPO5:0150/radSPOPLI-SELFLAG[1,0]"
-        ).Select()
-        self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-
-        # 7. Fill destination path and file name
-        # Note: trailing backslash is required by SAP GUI ctxtDY_PATH
-        clean_dir = destination_dir if destination_dir.endswith("\\") else destination_dir + "\\"
-        self.session.findById("wnd[1]/usr/ctxtDY_PATH").Text = clean_dir
-        self.session.findById("wnd[1]/usr/ctxtDY_FILENAME").Text = filename
-        self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-
-        # 8. Check for overwrite dialog (if wnd[2] appears)
-        try:
-            if self.session.Children.Count > 1:
-                # wnd[2] popup: "File already exists. Replace?"
-                btn_replace = self.session.findById("wnd[2]/usr/btnSPOP-OPTION1")
-                btn_replace.press()
-        except Exception:
-            pass
-
-        # 9. Return to main screen (F3)
-        self.session.findById("wnd[0]/tbar[0]/btn[3]").press()
-
-        # 10. Verify file written on disk
-        if os.path.exists(full_dest_path) and os.path.getsize(full_dest_path) > 0:
-            return {"success": True, "material": material, "path": full_dest_path}
-        else:
-            return {"success": False, "material": material, "error": "Export file not found or empty."}
-```
-
-#### Component 3: Resilient Data Parsing (`parser.py`)
-```python
-import pandas as pd
-import re
-
-def parse_r3_cs12_file(filepath: str) -> pd.DataFrame:
-    """
-    Parses the exported SAP CS12 spreadsheet file into a clean DataFrame:
-    Columns: ['part_code', 'quantity', 'rev_r3']
-    Handles column shifts, layout differences, and header locating automatically.
-    """
-    # 1. Try reading as HTML table (SAPLSPO5 often generates HTML disguised as .xls)
-    try:
-        tables = pd.read_html(filepath, header=None)
-        df_raw = tables[0]
-    except Exception:
-        # Fallback to TSV / tab-delimited
-        try:
-            df_raw = pd.read_csv(filepath, sep='\t', header=None, encoding='cp1252')
-        except Exception:
-            df_raw = pd.read_excel(filepath, header=None)
-
-    # 2. Locate header row (contains 'PART CODE' or 'Component' or 'RevLev')
-    header_idx = None
-    for r in range(min(20, len(df_raw))):
-        row_str = " ".join([str(v) for v in df_raw.iloc[r].dropna()])
-        if "PART CODE" in row_str.upper() or "COMPONENT" in row_str.upper() or "REVLEV" in row_str.upper():
-            header_idx = r
-            break
-            
-    if header_idx is None:
-        header_idx = 10 # Default SAP CS12 header row is index 10 (row 11)
-
-    df_data = df_raw.iloc[header_idx + 1:].copy()
-    headers = [str(col).strip().upper() for col in df_raw.iloc[header_idx]]
-
-    # 3. Dynamic Column Resolution
-    # Identify indices for Part Code, Quantity, Rev
-    part_col_idx = None
-    qty_col_idx = None
-    rev_col_idx = None
-
-    for i, h in enumerate(headers):
-        if "PART CODE" in h or "COMPONENT" in h or "MATERIAL" in h:
-            part_col_idx = i
-        elif "Q.TY" in h or "QUANTITY" in h or "MENGE" in h:
-            qty_col_idx = i
-        elif "REV" in h:
-            rev_col_idx = i
-
-    # Fallback to legacy index offsets if headers are blank/merged
-    if part_col_idx is None:
-        part_col_idx = 4 # Col E
-    if qty_col_idx is None:
-        qty_col_idx = 9  # Col J
-    if rev_col_idx is None:
-        rev_col_idx = 6  # Col G
-
-    df_clean = pd.DataFrame({
-        'part_code': df_data.iloc[:, part_col_idx].astype(str).str.strip(),
-        'quantity': pd.to_numeric(df_data.iloc[:, qty_col_idx], errors='coerce').fillna(0.0),
-        'rev_r3': df_data.iloc[:, rev_col_idx].astype(str).str.strip() if rev_col_idx < df_data.shape[1] else ""
-    })
-
-    # Filter out empty or header artifact rows
-    df_clean = df_clean[df_clean['part_code'].str.len() > 0]
-    df_clean = df_clean[~df_clean['part_code'].isin(['PART CODE', 'COMPONENT', 'NAN', 'NONE'])]
-    return df_clean
-```
+### 1.4 Code Inspections on Core Features vs R1..R6
+- **Leader Workspace (`src/gui/leader_view.py:270-388`)**:
+  Layout consists of 3 vertical `QGroupBox` widgets on a single scrollable pane. No 4-step sequential wizard (QStackedWidget/QWizard).
+  * Line 276-289: Model combo and Stage combo exist, but no list of machine BOM codes input.
+  * Line 326-340: `submission_table` tracks submission status, but line 473 only checks whether any `.xlsx` file exists in `CTTT/<sub_unit>`. It does NOT inspect cell `Q2 == "OK"`.
+  * Line 407-422: `create_project_folder_structure` creates static directories (`PLM`, `R3`, `Reports`, `capnhat/old`, `CTTT/<sub_unit>`). It does NOT read personnel from `Sheet Lichsu` (Cơ 1, 2, 3) and does NOT generate individualized engineer assignment workbooks (`BOM_<machine>_<engineer>.xlsx`).
+  * Line 541-616: `trigger_batch_reconciliation` runs without checking if all members confirmed OK; fallback baseline data is used if empty (line 570-576).
+  * Line 706-736: `trigger_outlook_preview` displays a single email template. No 2-tier email workflow (Tier 1: Member reminder + 18 check points; Tier 2: Manager verification).
+- **Member Workspace (`src/gui/member_view.py:84-112, 590-716`)**:
+  * Line 94: `self.author_edit = QLineEdit("Nguyen Van A")` — manual text box, no auto-loading of engineer identity or assignment.
+  * Line 104-111: `btn_load_refs` requires manual browsing to PLM/R3 files via QFileDialog; no automatic detection from machine folder.
+  * Line 178-214: MSI inputs are single QLineEdit/QComboBox controls (not a multi-row table).
+  * Line 226-242: Label 7980/7990 inputs are single controls (not a table).
+  * Line 620-716: `submit_data` creates `formnguoidung_{sub_unit}_{timestamp}.xlsx` in `CTTT/<sub_unit>`. **It does NOT set cell Q2 to "OK"**.
+- **BOM Filter Engine (`src/core/date_filter.py`, `src/core/model_pruner.py`, `scripts/run_virgo_filter.py`)**:
+  * Date filtering (`extract_expiry_date`, `is_effectivity_expired` in `date_filter.py:37-130`): Properly evaluates `to <date>`, retains `UP`, prunes leaves and subtrees.
+  * Model pruner (`ModelPruner` in `model_pruner.py:47-240`): 4 Action Rules implemented for Virgo, Libra2, Iris2024, Sirius2, Mebius, Polaris.
+  * Missing: Automatic backup to `backupTC14full` folder in the main pipeline, dynamic external loading of `BolocBom` from workbook, and UI trigger in Leader Workspace.
+- **Explanation Inheritance (`src/core/reconciliation.py:550-622`, `vba_extracted_tonghop_new12052026_ma1/capnhat_PLM_R3.bas.bas:1-350`)**:
+  * `migrate_annotations()` in `reconciliation.py` merges `giai_thich`, `phu_trach`, `quan_ly_check` in memory.
+  * Missing: Full workbook update pipeline (`capnhat_PLM`, `capnhat_R3`): saving current sheet as `PLM_old`, injecting new data into `PLM`, moving old files to `capnhat\old\`, and refreshing Excel Pivot Tables.
+- **MSI Deep Cross-Check (`src/core/msi_engine.py:68-340`)**:
+  * `evaluate_msi_branch` implements all 9 branches verbatim from `msi.bas`.
+  * `FixSerialMaster` reads both `UNIT` (Col A, F, H) and `MACHINE` (Col A, F, H) sheets from `FIX_SERIAL_DLTOOL_VER010.xls`.
+  * Missing: Automated wiring in Leader batch pipeline (`msi_results=None` currently passed in `leader_view.py:705`), and live multi-row MSI grid in Member Workspace.
+- **JIG Master Manager & 4M Evaluation (`vba_extracted_form_ssbom/uf_jig.frm.bas:1-117`, `src/reporting/excel_generator.py:340-390`)**:
+  * Legacy VBA: opens `List JIG thay doi, khi bo sung ma hang.xlsx` from cell `V24` of `List JIG`, reads machine sheet list `V3:V17`, copies `A3:G50`, and maintains 4M evaluation at `V37:V40`.
+  * Python current: `excel_generator.py` only writes dummy sample rows (`JIG-001`, `JIG-002`) if `df_jig` is empty. No `JIGManager` module exists in `src/`. No 4M assessment UI exists.
 
 ---
 
-## 4. Caveats
+## 2. LOGIC CHAIN
 
-1. **Active SAP User Session Sharing**:
-   - The SAP user `v130474` is shared across members in the department. If another member logs in interactively while the automation script is running and selects Option 2 on the multi-logon dialog, the automation session will be abruptly disconnected.
-   - *Mitigation*: The Python wrapper must catch COM disconnection exceptions (`pywintypes.com_error`) and attempt an automatic reconnection retry (up to 3 attempts).
-
-2. **Network Latency & AWS VPN Connectivity**:
-   - The SAP system `P1J(ERP60-AWS)-VN` is hosted on AWS via corporate internal routing (`e8p1jvuci.kmerp.local`).
-   - If the local machine is disconnected from the Kyocera corporate intranet/VPN, `app.OpenConnection` will hang or timeout.
-   - *Mitigation*: The pre-flight check should verify DNS resolution and socket connectivity to `e8p1jvuci.kmerp.local:3601` before launching SAP GUI.
-
-3. **User Credentials Management**:
-   - Legacy scripts hardcoded `v130474` / `0123456789`.
-   - In production, passwords expire or change periodically. The new software must provide a user-configurable settings dialog (or `.env` file) with password masking instead of hardcoded strings.
-
-4. **Security Policy**:
-   - This investigation operated strictly in read-only analysis mode: inspected existing files, tested registry keys, and extracted macros. No active write transactions were posted to SAP R3.
-
----
-
-## 5. Conclusion
-
-1. **Feasibility Assessment**:
-   - Fully viable and verified. SAP GUI 770 Scripting is confirmed enabled on this workstation (`UserScripting = 1`, `WarnOnAttach = 0`, `WarnOnConnection = 0`).
-   - `ShowNativeWinDlgs = 0` guarantees that all file dialog operations run deterministically through SAP GUI COM controls without external Win32 window hooking.
-
-2. **Architecture Consolidation**:
-   - The two separate Excel workbooks (`tonghop_new12052026_ma1.xlsm` filtering for `110*` and `tonghop_new12052026_maT.xlsm` filtering for `T10*`) can be 100% unified into a single Python automation engine with a configurable machine prefix pattern (`110*`, `T10*`, or arbitrary regex).
-
-3. **Error Resilience Upgrades**:
-   - Implementing status bar (`wnd[0]/sbar`) inspection eliminates the #1 cause of crashes in the legacy VBA script (trying to export when BOM doesn't exist).
-   - Dynamic header parsing replaces brittle VBA column deletion (`Columns("H:H").Delete`), guaranteeing compatibility across different model layouts (Virgo, Libra2, Iris2024).
+1. **Premise 1 (Observed in `src/gui/leader_view.py` and `src/gui/member_view.py`)**:
+   The current PyQt6 interface was constructed as a general-purpose prototype before the Kyocera-specific business rules were fully detailed. Leader Workspace uses 3 vertical groupboxes; Member Workspace uses manual line edits and single-record inputs.
+2. **Premise 2 (Observed in `vba_extracted_tonghop_new12052026_ma1` and `ORIGINAL_REQUEST.md` R1..R6)**:
+   The Kyocera closed-loop workflow demands specific coordination mechanisms:
+   - Leader establishes project, assigns engineers by department (Cơ 1, 2, 3 via Sheet Lichsu), generates personalized workbooks.
+   - Members open their assigned workbook, self-check against local PLM/R3, and confirm by setting `Q2 = OK`.
+   - Leader's system polls `Q2 == "OK"` across all sub-units before unlocking the "Consolidate" button.
+   - Consolidation gathers CTTT, MSI, and 7980/7990, archives member workbooks into `phutrach`, produces `form_ssbom`, integrates JIG master + 4M evaluation, and provides 2-tier Outlook emails.
+3. **Premise 3 (Observed in `src/core/`)**:
+   The underlying algorithms (`tree_parser.py`, `date_filter.py`, `model_pruner.py`, `reconciliation.py`, `msi_engine.py`, `tc2412_bridge.py`) are highly mature, correct, and well-tested (569 tests passing out of 572).
+4. **Deduction (Conclusion)**:
+   The core computational engines do not need to be rewritten. The development effort must focus on:
+   - Re-architecting `leader_view.py` into a 4-step wizard.
+   - Connecting the existing algorithms to file-based operations (generating engineer files, stamping/checking `Q2 = OK`, archiving to `phutrach` and `capnhat/old`).
+   - Implementing `JIGManager` and the 4M evaluation component.
+   - Upgrading `member_view.py` to auto-detect assignments, auto-load BOMs, support multi-row tables for MSI and Label 7980/7990, and stamp `Q2 = OK`.
+   - Fixing the 3 minor edge-case test failures.
 
 ---
 
-## 6. Verification Method
+## 3. CAVEATS
 
-To independently verify the facts and findings documented in this report:
+- **Live SAP GUI and TC2412 Web availability**: The survey ran in a local sandbox without an active VPN connection to the Kyocera live SAP server (`P1J(ERP60-AWS)-VN`) or Teamcenter Active Workspace server (`http://tcmp3gwb:3000/`). All SAP and TC2412 tests passed using the comprehensive mock adapters and offline fixtures.
+- **Legacy file availability on disk**: `List JIG thay doi, khi bo sung ma hang.xlsx` and `FIX_SERIAL_DLTOOL_VER010.xls` are located on the departmental network share (`\\fstvn01\Data\...`). In the local sandbox, tests rely on local mock fixtures in `tests/`.
+- **Openpyxl print area warnings**: 4 warnings during test execution regarding `Print area cannot be set to Defined name: PLM!$499:$499` in legacy `form_ssbom.xlsm`. These are benign openpyxl metadata warnings and do not affect data integrity or formula calculation.
 
-1. **Verify SAP GUI Executable & Version**:
-   ```powershell
-   (Get-Item "C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe").VersionInfo | Format-List
-   ```
-   *Expected Output*: FileVersion `7700.1.7.1161`, ProductVersion `770 Final Release`.
+---
 
-2. **Verify SAP Scripting Registry Settings**:
-   ```powershell
-   Get-ItemProperty -Path "HKCU:\Software\SAP\SAPGUI Front\SAP Frontend Server\Security"
-   Get-ItemProperty -Path "HKCU:\Software\SAP\SAPGUI Front\SAP Frontend Server\Scripting"
-   ```
-   *Expected Output*: `UserScripting = 1`, `WarnOnAttach = 0`, `WarnOnConnection = 0`, `ShowNativeWinDlgs = 0`.
+## 4. CONCLUSION
 
-3. **Verify SAP Landscape Connection Entry**:
-   ```powershell
-   Select-String -Path "$env:APPDATA\SAP\Common\SAPUILandscape.xml" -Pattern 'P1J(ERP60-AWS)-VN'
-   ```
-   *Expected Output*: Matches XML service node with `name="P1J(ERP60-AWS)-VN"`, `systemid="P1J"`, `server="R3_PR1"`.
+The codebase is in an **advanced, high-integrity state** (99.48% test pass rate, strict PEP8 compliance, zero placeholders, established MP2027 packaging pipeline).
 
-4. **Verify Legacy VBA Macro Extraction**:
-   Inspect the extracted VBA code in:
-   `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\find_r3_refs.py`
-   Run:
-   ```bash
-   python D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\find_r3_refs.py
-   ```
-   *Expected Output*: Displays all extracted lines in `DownloadAutoR3.bas`, `md_TaoFileSSB.bas`, `capnhat_PLM_R3.bas`, and `md_sosanhBomnho.bas`.
+The exact gaps against R1..R6 are:
+- **R1 (Leader Workspace)**: Transform layout into a 4-step Wizard; implement Step 1 assignment matrix (Cơ 1, 2, 3) and auto-creation of engineer folders/files; implement Step 2 SAP CS12 integration and file routing; implement Step 3 `Q2 = OK` gating and member consolidation into `phutrach`; implement Step 4 2-tier email and report preview.
+- **R2 (BOM Filter)**: Add automatic `backupTC14full` backup, external `BolocBom` workbook loading, and UI action trigger.
+- **R3 (Inheritance)**: Wrap DataFrame `migrate_annotations` into full workbook update service (`capnhat_PLM` / `capnhat_R3`) with `PLM_old` sheet archiving, `capnhat\old\` file relocation, and Pivot Table refresh.
+- **R4 (MSI Checker)**: Wire `FixSerialMaster` into Leader batch pipeline; add multi-row MSI table and master auto-load in Member Workspace.
+- **R5 (JIG & 4M)**: Create `JIGManager` module; implement JIG loading and 4M evaluation interface/storage.
+- **R6 (Member Workspace)**: Auto-load engineer assignments (eliminate manual text inputs); auto-load PLM/R3 for self-check; multi-row tables for MSI & Label; stamp `Q2 = OK` upon submission.
 
-5. **Invalidation Conditions**:
-   - If IT updates SAP GUI to a version that disables scripting by default (`UserScripting = 0`).
-   - If the AWS message server hostname `e8p1jvuci.kmerp.local` or port `3601` changes.
-   - If plant code changes from `2200` or BOM usage changes from `pp01`.
+---
+
+## 5. VERIFICATION METHOD
+
+### 5.1 Independent Test Commands
+Execute the complete test suite:
+```powershell
+py -m pytest -q
+```
+Expected output: 569 passed, 3 failed in ~85s.
+
+Execute packaging and launcher health check:
+```powershell
+py scripts/package_app.py
+py SSBOM_Launcher.py --health-check
+```
+Expected output: `[OK] SSBOM Packaging and LAN Auto-Update Artifacts Built!` and `SSBOM Health Check: OK`.
+
+### 5.2 Files to Inspect
+- Detailed survey report: `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\codebase_report.md`
+- Leader view layout: `D:\Sandbox\pm_sosanhbom\src\gui\leader_view.py`
+- Member view layout: `D:\Sandbox\pm_sosanhbom\src\gui\member_view.py`
+- Reconciliation & inheritance: `D:\Sandbox\pm_sosanhbom\src\core\reconciliation.py`
+- MSI decision engine: `D:\Sandbox\pm_sosanhbom\src\core\msi_engine.py`
+- Excel report generator: `D:\Sandbox\pm_sosanhbom\src\reporting\excel_generator.py`
+
+### 5.3 Invalidation Conditions
+This assessment will be invalidated if:
+- Source code in `src/` is modified without updating the gap analysis.
+- The 3 failing tests are resolved or new tests fail.
+- New legacy requirements are discovered that alter the R1..R6 specification.

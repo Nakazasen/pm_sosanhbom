@@ -244,10 +244,11 @@ class FixSerialMaster:
         if clean_full in self.subunit_map:
             return self.subunit_map[clean_full]
 
-        # Fuzzy substring scan across registered keys
-        for k, val in self.subunit_map.items():
-            if prefix9 in k or k in clean_full:
-                return val
+        # Fuzzy substring scan across registered keys - require at least 3 characters
+        if len(clean_full) >= 3:
+            for k, val in self.subunit_map.items():
+                if (len(prefix9) >= 3 and prefix9 in k) or (len(k) >= 3 and k in clean_full):
+                    return val
 
         return ("", "")
 
@@ -267,11 +268,13 @@ class FixSerialMaster:
         if clean_full in self.machine_map:
             return self.machine_map[clean_full]
 
-        for k, val in self.machine_map.items():
-            if prefix10 in k or k in clean_full:
-                return val
+        if len(clean_full) >= 3:
+            for k, val in self.machine_map.items():
+                if (len(prefix10) >= 3 and prefix10 in k) or (len(k) >= 3 and k in clean_full):
+                    return val
 
         return ("", "")
+
 
     def load_from_file(self, file_path: str | Path) -> bool:
         """Load lookup tables from FIX_SERIAL_DLTOOL Excel workbook (.xls or .xlsx).
@@ -369,14 +372,15 @@ class MSIEngine:
         clean_unit = _clean_str(unit_code).upper()
 
         # Check if in PLM
-        plm_set = {str(c).strip().upper() for c in plm_part_codes if pd.notna(c)}
+        plm_set = {str(c).strip().upper() for c in plm_part_codes if pd.notna(c) and str(c).strip()}
         # In PLM if exact match or substring in PLM set (matching VBA Criteria1:='*' & code & '*')
         in_plm = False
         if clean_unit:
             if clean_unit in plm_set:
                 in_plm = True
             else:
-                in_plm = any(clean_unit in p or p in clean_unit for p in plm_set)
+                in_plm = any(p and (clean_unit in p or p in clean_unit) for p in plm_set)
+
 
         # Lookup in master
         if is_hontai:

@@ -1,0 +1,582 @@
+TOTAL SLIDES: 29
+
+=== slide1.xml ===
+Áp 
+dụng
+ chương trình tự động so sánh BOM
+Ngày
+ 23  
+tháng
+ 08 
+năm
+ 2024
+Phòng
+ : 
+Kỹ
+ 
+Thuật
+ chế tạo- Cơ khí 3
+Bùi Đức Vinh – TVN183660
+
+=== slide2.xml ===
+Mục lục
+Nắm bắt hiện trạng so sánh BOM hiện tại/ sau khi áp dụng phần mềm(Trang 3
+➞
+4)
+Giao diện chương trình trong file tonghop_new.xlsm (Trang 5
+➞
+8)
+Giao diện chương trình trong file form_ssbom.xlsm (Trang 9)
+Giao diện chương trình trong file form_nguoidung.xlsm (Trang 10)
+Hướng dẫn sử dụng(phía Leader)
+5.1. Hướng dẫn sử dụng (phía Leader)_hướng dẫn đổi mật khẩu file tổng hợp (Trang 11)
+5.2. Hướng dẫn sử dụng (phía Leader) _hướng dẫn cài đặt ban đầu  (Trang 12)
+5.3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.(Trang 13
+➞
+17)
+5.4. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng BOM FULL TC14
+(Trang 18
+➞
+20)
+5.5. Hướng dẫn sử dụng (phía Leader)_Tắt thông báo trong R3(Trang 21)
+5.6. Hướng dẫn sử dụng (phía Leader )_sử dụng chức năng Tự động download R3(Trang 22
+ ➞
+23
+)
+5.7. Hướng dẫn sử dụng (phía Leader )_sử dụng chức năng Tự động gửi mail(Trang 24, 25)
+6. Hướng dẫn sử dụng (phía thành viên_tính năng so sánh BOM phụ trách)
+ (Trang 26)
+7. Bổ sung về cách làm bộ lọc PLM cho Leader (Trang 27)
+8. Bổ sung chức năng Gọi List Jig cần thông tin 3 ký tự cố định trong file so sánh BOM(Trang 28)
+2
+©20
+19
+ KYOCERA Document Solutions Inc.
+
+=== slide3.xml ===
+1
+. NẮM BẮT HIỆN TRẠNG 
+1.1 Hiện trạng so sánh BOM hiện tại
+Download PLM trên TC14(phải bung thủ công từng unit cần sử dụng).
+Download thủ công từng mã hàng R3 trên SAP.
+Copy file Bom cũ vào thư mục so sánh BOM. Xóa dữ liệu CTTT, PLM, R3, Total CTTT, MSI, List JIG, Tổng kết cũ.
+Copy bước 1 và bước 2 vào Sheet PLM, Sheet R3 của form so sánh BOM, refresh Pivot Table của PLM và R3, Total CTTT.
+Gửi thư yêu cầu người phụ trách copy danh sách linh kiện vào file so sánh BOM.
+Người phụ trách vào BOM để copy danh sách linh kiện, lọc và giải thích dữ liệu cần giải thích của Sheet CTTT, PLM, Total CTTT. Leader và quản lý double check lại. Ngoài ra leader còn phải cập nhật mới dữ liệu PLM và R3 và phải backup thủ công dữ liệu sheet PLM cũ có thông tin giải thích của người phụ trách.
+Người phụ trách liên quan đến MSI phải copy dữ liệu MSI cần quản lý vào sheet MSI, người phụ trách công đoạn hoàn thiện đóng gói dựa vào thông tin được cung cấp để double check lại thông tin ( bằng FIX_SERIAL_DLTOOL_VER010, BOM)
+➞
+Nhược điểm: Từ Bước 1
+➞
+4 Leader tốn nhiều thời gian chuẩn bị BOM.
+Bước 6: Người phụ trách tốn nhiều thời gian copy danh sách vào BOM(do phải chờ đợi nhau). Khi so sánh phải thực hiện nhiều thao tác lọc dữ liệu. 
+Bước 7: Người phụ trách công đoạn hoàn thiện đóng gói tốn thời gian double check dữ liệu MSI.
+3
+©20
+19
+ KYOCERA Document Solutions Inc.
+
+=== slide4.xml ===
+1
+. 
+NẮM BẮT HIỆN TRẠNG 
+1.2 Lưu trình sau khi sử dụng phần mềm so sánh BOM tự động
+Download PLM trên TC14(phải bung từng unit cần sử dụng
+➞
+Tìm hiểu quy luật BOM để tạo bộ lọc
+➞
+xử lý dữ liệu excel sau khi bung full BOM tự động
+➞
+mỗi loại máy có 1 bộ lọc riêng(
+đã hoàn thành và đang thử nghiệm lần đầu cho Iris2024, Libra2
+). 
+Có thể lọc BOM và phân chia file sau xử lý lọc BOM về từng thư mục BOM chỉ định.
+Dùng VBA để download all mã hàng R3 trên SAP theo list cung cấp và tự động phân chia file download được về từng thư mục BOM chỉ định. 
+Tạo file nhập danh sách linh kiện cho từng thành viên trong team. Hoặc linh hoạt bổ sung thêm thành viên khi có sự thay đổi nhân sự trong Project.
+Khi thành viên trong team nhập danh sách linh kiện, Leader có thể kiểm tra được trạng thái đã nhập/ chưa nhập danh sách linh kiện của từng thành viên.
+Người phụ trách lưu ý nhập danh sách linh kiện, 
+MSI, label quản lý 7980/7990
+ vào file excel có tên mình, sau khi toàn bộ thành viên hoàn thành bước copy danh sách linh kiện, MSI, leader bấm nút, chương trình tự động copy file mẫu so sánh BOM trong folder gốc(file mẫu này đã được xóa hết dữ liệu cũ của các sheet Tongket/List JIG/MSI/CTTT/PLM/R3/CTTT_Total) về thư mục so sánh BOM chỉ định, copy danh sách linh kiện, 
+MSI, label quản lý 7980/7990
+ , PLM, R3, tạo pivot table, tự động lọc dữ liệu cần so sánh. Ngoài ra còn có chức năng tự động cập nhật PLM(backup tự động dữ liệu sheet PLM cũ), tự động cập nhật R3.
+Phát triển chức năng thành viên tự động so sánh BOM PLM, R3 trong file nhập danh sách linh kiện, có thể Giải thích sai khác của chỉ thị thao tác với PLM và R3. Sau khi người phụ trách tự so sánh OK sẽ bấm xác nhận trạng thái của file đã sẵn sàng để cập nhật vào file BOM tổng.
+Người phụ trách liên quan đến MSI phải copy dữ liệu MSI cần quản lý vào sheet MSI, người phụ trách công đoạn hoàn thiện đóng gói bấm nút chương trình tự động double check thông tin MSI được nhập và phán định OK/NG.
+4
+©20
+19
+ KYOCERA Document Solutions Inc.
+
+=== slide5.xml ===
+2. Giao diện chương trình trong file tonghop_new.xlsm
+Links gốc chương trình:
+\\fstvn01\Data\10_Production Engineering Department(
+製造技術部
+)\02.
+製造技術課
+\PE Dept\15. FORM
+（
+BIEU MAU
+）
+-
+形式
+\Form_VBA\Form_VBA_SS_BOM
+5
+©20
+19
+ KYOCERA Document Solutions Inc.
+Form so sánh BOM gốc(chương trình tự động copy)
+Form cho phụ trách điền danh sách linh kiện(như trên)
+File chương trình(chỉ leader sử dụng) chú ý khi so sánh BOM từ DMT, PMT thì sử dụng file tonghop****maT, từ PP trở đi thì dùng file tonghop****ma1
+
+=== slide6.xml ===
+2. Giao diện chương trình trong file tonghop_new.xlsm
+6
+©20
+19
+ KYOCERA Document Solutions Inc.
+Nhập mật khẩu đăng nhập
+Tính năng Duy trì phiên đăng nhập để leader không cần phải nhập mật khẩu nhiều lần trong suốt quá trình sử dụng chương trình
+
+=== slide7.xml ===
+2. Giao diện chương trình trong file tonghop_new.xlsm
+7
+©20
+19
+ KYOCERA Document Solutions Inc.
+Page1
+: So sánh BOM tự động(9 chức năng)
+Xóa dữ liệu cũ (xóa dữ liệu danh sách linh kiện, MSI cũ, trường hợp leader sử dụng lại file cũ).
+Tạo file danh sách linh kiện cho người phụ trách nhập danh sách linh kiện/
+MSI
+.
+Leader kiểm tra xem người phụ trách đã nhập danh sách linh kiện hay chưa
+Tổng hợp toàn bộ danh sách linh kiện/MSI của người phụ trách nhập vào file tổng hợp
+Tự động tạo file BOM(copy DSLK, PLM, R3) và refresh pivot table để cập nhật công thức.
+Lọc dữ liệu cần so sánh trong sheet CTTT_PLM_Total CTTT
+Cập nhật tự động dữ liệu PLM mới(tự động backup dữ liệu sheet PLM cũ, pivot table)
+Cập nhật tự động dữ liệu R3(tạo và refresh pivot table)
+※Gửi mail cho phụ trách nhập BOM
+.
+       
+※Gửi mail cho quản lý xác nhận.
+
+=== slide8.xml ===
+8
+©20
+19
+ KYOCERA Document Solutions Inc.
+2. Giao diện chương trình trong file tonghop_new.xlsm
+Page2
+: Hoàn thành BOM Full TC14.
+Xử lý tự động dữ liệu BOM PLM FULL thành file BOM PLM cần sử dụng.
+Page3
+: Tự động download BOM R3 trên SAP.
+Tự động download BOM R3 trên SAP về thư mục so sánh BOM.
+
+=== slide9.xml ===
+3. Giao diện chương trình trong file form_ssbom.xlsm
+9
+©20
+19
+ KYOCERA Document Solutions Inc.
+Trong các sheet CTTT, PLM, CTTT_Total đều có chương trình lọc dữ liệu cần so sánh(lọc giá trị còn trống hoặc #N/A)
+Trong sheet MSI có chương trình so sánh dữ liệu MSI người phụ trách đã nhập
+Chương trình sẽ đối chiếu mã unit đã nhập với sheet PLM và 3 ký tự trong file fix_serial tool để phán định OK/NG  
+Có bảng tổng hợp label phải quản lý bằng phần mềm LCP 7980 và 7990 của các công đoạn.
+
+=== slide10.xml ===
+4. Giao diện chương trình trong file form_nguoidung.xlsm
+10
+©20
+19
+ KYOCERA Document Solutions Inc.
+①
+Sheet CTTT
+: Người phụ trách nhập danh sách linh kiện, so sánh BOM lần đầu để tạo file so sánh BOM.
+②
+Sheet MSI
+: Người phụ trách nhập dữ liệu quản lý MSI thuộc công đoạn của mình.
+③
+Sheet Label_7980_7990: Người phụ trách nhập dữ liệu label cần quản lý 7980/7900 thuộc công đoạn mình quản lý
+①
+②
+③
+
+=== slide11.xml ===
+5. 1.Hướng dẫn sử dụng (phía Leader)_hướng dẫn đổi mật khẩu file tổng hợp
+11
+©20
+19
+ KYOCERA Document Solutions Inc.
+Chức năng đổi mật khẩu chương trình:
+Mật khẩu sau khi đổi phải có đủ 
+4 ký tự
+.
+
+=== slide12.xml ===
+5.2. Hướng dẫn sử dụng (phía Leader) _hướng dẫn cài đặt ban đầu
+12
+©20
+19
+ KYOCERA Document Solutions Inc.
+_Trong folder tên hướng xuất, folder phutrach sẽ được tự động tạo khi chạy chức năng 4. folder capnhat sẽ tự động tạo khi chạy chức năng 5.
+※
+Không tự ý thêm folder có tên PLM, R3, BOM
+➞
+Chương trình tạo folder 
+capnhat
+ 
+để lưu trữ file PLM và R3 khi tạo BOM lần đầu và khi cập nhật mới PLM,R3, Folder 
+phutrach
+ để lưu trữ file người phụ trách.
+Với cách so sánh BOM hiện tại, mỗi file excel BOM được tạo ra chung 1 folder tháng năm sản xuất
+So sánh BOM hiện tại
+So sánh BOM tự động
+Với cách so sánh BOM sau cải tiến mỗi một hướng xuất sẽ phải tạo 1 thư mục riêng, mục đích:
+①
+Tự động đặt tên file So sánh BOM tổng sau khi chạy chương trình.
+②
+Tự động chuyển file R3 vào đúng hướng xuất khi chạy chức năng tự động download R3.
+③
+Tự động chuyển file PLM vào đúng hướng xuất khi chạy chức năng hoàn thành BOM FULL TC14
+Để thực hiện được chức năng 
+②
+,
+③ 
+thì hãy để file tonghop_new*** ở bên ngoài các thư mục hướng xuất
+※Chú ý: Không copy 
+form_ssbom.xlsm 
+và 
+formnguoidung.xlsm 
+vào thư mục so sánh BOM vì chương trình sẽ tự động xử lý 2 file này. 
+
+=== slide13.xml ===
+13
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.
+Xóa dữ liệu trong sheet TonghopdulieuCTTT
+Xóa dữ liệu trong sheet TonghopdulieuMSI
+Chức năng 
+②
+sẽ cho tab người dùng nhảy vào sheet Lichsu, chi tiết sử dụng ở trang bên
+➞
+
+=== slide14.xml ===
+14
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.
+Đây là chức năng tạo Bom theo danh sách.
+Bạn hãy nhập tên mã hàng muốn tạo vào đây
+Muốn chọn người phụ trách nào thì tích chọn O
+Muốn không áp dụng BOM nào thì chọn X ở đây
+Ví dụ cài đặt như trên rồi bấm vào nút lệnh trong khoanh tròn đỏ, ta sẽ tạo được 2 folder BOM 110C103NL* trong đó có 2 người phụ trách là Sơn_mecha1 và Duy_mecha1 
+Trường hợp tích X như vậy thì chương trình sẽ chỉ tạo 1 folder 110C103NL1  trong đó có 2 người phụ trách là Sơn_mecha1 và Duy_mecha1
+Ý nghĩa là bạn có tạo thư mục BOM hay không? Để trống là có, X là không
+Bấm vào đây sẽ xóa hết dữ liệu đăng ký cũ.
+Tạo bằng list BOM thì sẽ tự tạo luôn folder hướng xuất+tên người phụ trách+file tổng hợp luôn
+
+=== slide15.xml ===
+15
+©20
+19
+ KYOCERA Document Solutions Inc.
+File điền danh sách linh kiện sau khi tạo, 
+file này sẽ tự động được chuyển vào các Folder hướng xuất
+Leader gửi thư yêu cầu copy danh sách linh kiện
+Chức năng 3 kiểm tra được trạng thái phụ trách đã điền linh kiện hay chưa.
+Chức năng 4 sẽ tổng hợp danh sách linh kiện/
+MSI/7980(7990)
+ của phụ trách vào file tổng hợp+ tự động tạo folder 
+phutrach
+ và chuyển file của người phụ trách vào thư mục 
+phutrach
+.
+5. 3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.
+
+=== slide16.xml ===
+16
+©20
+19
+ KYOCERA Document Solutions Inc.
+Chức năng  5 tự động tạo file BOM cần so sánh. Và tạo folder capnhat/old để cất file PLM và R3 vào
+Muốn sử dụng chức năng 5 copy Bom thì phải chuẩn bị file PLM và R3 đặt cùng thư mục với file tỏng hợp.
+※
+Chú ý đặt tên file PLM có 
+PLM_
+tên hướng xuất
+Đặt tên file R3 có 
+R3_
+tên hướng xuất
+5. 3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.
+Khi download PLM 
+phải
+ sử dụng tài khoản 
+VT_KTCT1
+ và rule 
+KTCT
+Tải Bom về file excel với lựa chọn như dưới
+Cách download BOM TC14 chi tiết tham khảo ở đây
+
+=== slide17.xml ===
+Trường hợp sử dụng tính năng 7_8: cập nhật R3 hoặc PLM mới.
+Trường hợp cập nhật file PLM thì chỉ để file PLM mới nhất cùng thư mục với file tổng hợp, quy tắc đặt tên như slide 15. 
+Chú ý khi cập nhật PLM không được ẩn Sheet trong file BOM, Sheet PLM trong file BOM mới nhất phải nằm ở vị trí sheet thứ 5. Ví dụ cập nhật Sheet RevList vào file BOM thì phải cho xuống cuối cùng.
+Trường hợp cập nhật file R3 thì chỉ để file R3 mới nhất cùng thư mục với file tổng hợp, quy tắc đặt tên như slide 15.
+17
+©20
+19
+ KYOCERA Document Solutions Inc.
+Trường hợp cập nhật PLM mới
+Trường hợp cập nhật R3 mới
+5. 3. Hướng dẫn sử dụng (phía Leader) _hướng dẫn chức năng trong Tính năng so sánh BOM tự động.
+Cách download BOM TC14 chi tiết tham khảo ở đây
+
+=== slide18.xml ===
+18
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.4. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng BOM FULL TC14
+Bấm vào như hình
+※Chú ý file
+ 
+BOM
+ 
+PLM
+ 
+full
+ 
+cần xử lý phải đặt chung thư mục với file tổng hợp. 
+Ngoài ra không để file R3 và những file nhập danh sách linh kiện của người phụ trách vào chung khi sử dụng tính năng này.
+Trường hợp muốn xử lý từng file PLM. (
+Không tự copy vào folder máy
+)
+File sau khi xử lý sẽ tự động tạo folder backupTC14ful để backup file BOM TC14full và file BOM TC14full sau khi xử lý qua bộ lọc BOM sẽ được tự động cho vào từng folder hướng xuất tương ứng.
+Cách nhập tham khảo Slide tiếp theo
+→
+Trường hợp muốn xử lý nhiều file PLM cùng 1 lúc(File sau khi xử lý sẽ được cho vào máy tương ứng).
+
+=== slide19.xml ===
+19
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.4. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng BOM FULL TC14
+Nhập tên máy vào vị trí này.Tên máy trong Sheet “BolocBom” của file tổng hợp
+Nhập đúng tên máy được đặt tên trong sheet BolocBom và bấm chạy chương trình
+Cách tạo Bộ lọc Leader tham khảo trang bên. Hiện tại đã hoàn thành bộ lọc của Virgo, Libra2, Iris2024.
+
+=== slide20.xml ===
+20
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.4. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng BOM FULL TC14
+Có 
+3
+ cột dữ liệu cần quan tâm.
+1. Cột tên máy: Ngoài việc chương trình gọi tên để tìm đến vị trí của bộ lọc. Cột dữ liệu này còn là nơi nhập tên của Unit 
+không muốn bung dữ liệu ra
+.
+2. Cột trạng thái lọc: Có 2 trạng thái tìm kiếm mà chương trình thiết lập. 
+2.1. Full_name: khi bạn nhập lựa chọn này thì chương trình sẽ tìm kiếm đúng toàn bộ tên unit mà bạn nhập ở cột tên máy trong cột K Item Name của file Bom Full PLM.
+Khi nhập: 
+PWB MAIN ASSY WITH SOFTWARE
+ | Full_name
+Kết quả chương trình sẽ tìm là
+2.2 Part_name: khi bạn nhập lựa chọn này chương trình sẽ tìm kiếm 1 phần tên unit trùng với unit ở cột K của file  Bom Full PLM.
+VD: khi bạn nhập
+ 
+PWB MAIN ASSY WITH SOFTWARE |
+ 
+Part_name|
+Thì chương trình sẽ lọc toàn bộ unit có tên 
+PWB MAIN ASSY WITH SOFTWARE
+ 
+trong nó
+ là: 
+3. Cột Mã Unit/Linh kiện: Khi cần chỉ định cụ thể linh kiện không cần bung thì nhập mã của Unit đó vào
+Cột dữ liệu K: Item Name của file Bom PLM
+※
+Ngoài ra tham khảo mục 7. Bổ sung về cách làm bộ lọc PLM cho Leader (slide 27)
+
+=== slide21.xml ===
+21
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.5. Hướng dẫn sử dụng (phía Leader)_Tắt thông báo trong R3
+Lần đầu sử dụng download tự động R3 Leader chú ý tắt phần hiển thị thông báo trong SAP như hướng dẫn dưới(để tránh hiển thị thông báo khi chạy tính năng download R3)
+Bấm vào bánh răng trong khung tròn đỏ
+➞
+Bấm vào Option
+Bỏ chọn 2 phần Notify…
+Rồi OK
+Chọn Accessibility & Scripting\Scripting
+
+=== slide22.xml ===
+22
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.6. Hướng dẫn sử dụng (phía Leader )_sử dụng chức năng Tự động download R3
+Bấm vào như hình
+※Chú ý file
+ 
+tổng hợp đặt bên ngoài thư mục cần so sánh BOM như hình bên. 
+Chương trình sẽ tự động download BOM R3 và phân chia vào từng thư mục máy
+①
+Trường hợp ngày sản xuất của những mã hàng là khác nhau( Khi bổ sung mã hàng mới từ MP)
+Bấm vào chức năng 
+① 
+chương trình sẽ tự động quét tên máy, chính là tên folder đặt cùng thư mục với file tổng hợp
+Nhập ngày sản xuất ở đây.
+※
+Chú ý: Phải tuân thủ cách nhập ngày tháng như sau:(Năm 4 số/tháng 2 số/ngày 2 số) VD: 2024/05/20 
+Sau khi nhập ngày sản xuất thì bấm vào nút này, chương trình sẽ tự động download BOM R3 và phân chia vào từng thư mục máy
+
+=== slide23.xml ===
+23
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.6. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng Tự động download R3
+②
+Trường hợp các hướng xuất chung ngày sản xuất(DMT
+➞
+trở đi)
+Nhập ngày tháng sản xuất đại diện cho tất cả hướng xuất cần so sánh BOM
+Sau khi nhập ngày tháng sản xuất thì bấm nút Tải BOM R3
+※Chú ý file
+ 
+tổng hợp đặt bên ngoài thư mục cần so sánh BOM như hình bên. 
+Chương trình sẽ tự động download BOM R3 và phân chia vào từng thư mục máy
+
+=== slide24.xml ===
+24
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.7. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng tự động gửi Mail
+Khi sử dụng tính năng Gửi mail thì chương trình sẽ lấy Tiêu đề Mail và Nội dung Mail ở trong Sheet”Mail” để gửi.
+1
+2
+Khi sử dụng tính năng 
+① 
+thì chương trình sẽ lấy tiêu đề Mail ở ô A2, Nội dung Mail ở ô A3. Danh sách người gửi ở ô B2, danh sách CC ở ô B3
+Khi sử dụng tính năng 
+② 
+thì chương trình sẽ lấy tiêu đề Mail ở ô C2, Nội dung Mail ở ô C3. Danh sách người gửi ở ô D2, danh sách CC ở ô D3
+Mọi người có thể thay đổi nội dung vị trí dòng chữ đen, nội dung thư sẽ thay đổi. Vị trí chữ đỏ mọi người đừng thay đổi nhé, nó liên quan đến code và định dạng html hiển thị.
+Nếu mọi người, muốn thay đổi nội dung thư, phá cách đi mà không dùng nội dung mặc định. Thì có thể vào links ở cột A7,Sheet”
+Mail
+” chuyển đổi từ dữ liệu văn bản sang dữ liệu HTML để chép vào vị trí nội dung thư.
+Mọi người có thể đọc hướng dẫn ở trang tiếp theo 
+➞
+Khi bấm nút gửi thì chương trình sẽ hiển thị thông báo dưới mọi người bấm vào Allow nhé, nếu gửi thư OK thì sẽ hiện lên thông báo đã gửi mail thành công
+
+=== slide25.xml ===
+25
+©20
+19
+ KYOCERA Document Solutions Inc.
+5.7. Hướng dẫn sử dụng (phía Leader)_sử dụng chức năng tự động gửi Mail
+①
+Khi vào 
+https://tunepit.net/tool/vi/text-to-html
+Văn bản chúng ta nhập vào sẽ tự động chuyển đổi thành mã HTML. 
+②
+Bấm chuyển đổi sang HTML
+③
+Sao chép HTML
+④
+Rồi paste vào Ô A3 hoặc C3 tùy thuộc vào tính năng muốn chọn lựa 
+① 
+hoặc 
+②
+1
+2
+⑤
+Trường hợp muốn nội dung thư gửi đi có font Times New Roman thì copy 
+<html>
+<body style="font-family: 'Times New Roman', Times, serif;"> 
+vào đầu thư và copy 
+</body>
+</html>
+Vào cuồi chân thư. Mọi người cứ xem nội dung ở ô A3 và ô C3 để tham khảo.
+※Chú ý links BOM sẽ là links của chính file tổng hợp bạn đang mở. Giữ nguyên {AttachmentPath} 
+➞
+đây là code gọi đến đường dẫn của File tổng hợp.(vị trí gạch chân chữ đỏ của ảnh dưới)
+
+=== slide26.xml ===
+26
+©20
+19
+ KYOCERA Document Solutions Inc.
+6. Hướng dẫn sử dụng (phía thành viên_tính năng so sánh BOM phụ trách)
+Sheet CTTT: Nhập danh sách linh kiện lần đầu để tạo file so sánh Bom(chi tiết xem them ở dưới
+↓
+)
+Sheet MSI: Nhập cùng thời điểm với Sheet CTTT để copy vào file so sánh BOM chung.
+Sheet Label_7980_7990: Nhập cùng thời điểm với Sheet CTTT để copy vào file so sánh BOM chung.
+Sheet PLM_R3: Sheet tải file PLM và R3 vào để so sánh BOM
+Bấm vào đây để tải dữ liệu PLM và R3 vào Sheet PLM_R3
+Giải thích sai khác Rev PLM và R3 vào đây
+So sánh xong rồi thì phụ trách bấm vào đây để gửi kết quả OK, 
+k
+hi người phụ trách bấm Gửi kết quả OK rồi thì Leader mới có thể copy được danh sách linh kiện
+Xóa kết quả thì bấm vào đây
+Sheet CTTT
+
+=== slide27.xml ===
+27
+©20
+19
+ KYOCERA Document Solutions Inc.
+7. Bổ sung về cách làm bộ lọc PLM cho Leader
+Khi nhập từ khóa cho bộ lọc chúng ta quan tâm đến cột B, D và cột E.
+Cột B có ý nghĩa là level Bom của linh kiện.
+Cột D có ý nghĩa là mã linh kiện/Unit.
+Cột E có ý nghĩa là Có thể mở bom tiếp tục hay không. True: có, False: không.
+Ngoài ra: Level BOM có 6 lớp, 1 là lớp BOM lớn nhất, 6 là lớp BOM nhỏ nhất.
+ Chúng ta sẽ thêm từ khóa cho bộ lọc với 4 điều kiện sau.
+1. Nếu từ khóa có giá trị dòng hiện tại của cột E là True và giá trị dòng hiện tại của cột B = 6 thì chương trình sẽ xóa dòng hiện tại.
+2. Nếu từ khóa có giá trị dòng hiện tại của cột E là True và giá trị dòng hiện tại của cột B< giá trị dòng hiện tại + 1 của cột B, chương trình sẽ xóa dữ liệu bắt đầu từ (dòng hiện tại +1) đến (dòng dữ liệu cần tìm -1). Dòng cần tìm là dòng có giá trị dòng của cột B<= giá trị dòng hiện tại của cột B.
+3. Nếu từ khóa có giá trị dòng hiện tại của cột E  là False thì chương trình sẽ xóa chính dòng đó. 
+4. Nếu từ khóa có giá trị cột E = True và giá trị dòng  hiện tại của cột B>= giá trị dòng hiện tại + 1 của cột B và giá trị dòng hiện tại của cột B <6 thì chương trình sẽ không xử lý gì cả.
+File PLM FULL download từ TC14 về.
+B
+:
+ (Level
+ 
+BOM)
+D (Mã linh kiện/Unit)
+E (Có thể mở BOM tiếp tục hay không - True/False).
+
+=== slide28.xml ===
+28
+©20
+19
+ KYOCERA Document Solutions Inc.
+8. Bổ sung chức năng Gọi List Jig cần thông tin 3 ký tự cố định trong file so sánh BOM
+Khi tạo Bom thì dữ liệu trong Sheet 
+List JIG 
+sẽ trống
+Bấm vào đây để tải Lig Jig đã chọn
+Bấm vào đây để xóa List hiển thị cũ, trường hợp bạn dùng lại BOM cũ hoặc chọn nhầm loại máy
+Bấm vào mũi tên để xem list Jig có trong file Master(
+※
+đường dẫn file master ở đây
+)	
+Sheet List Jig 
+sẽ hiển thị toàn bộ Jig cần bổ sung 3 ký tự cố đinh trong loại máy.
+Ngoài ra có thêm hạng mục xác nhận có cần làm 4M với KTSX hay không?
+Leader bấm vào đây để gọi chương trình
+※Leader và phụ trách nhớ cập nhật nội dung file Master để không bỏ sót thông tin nhé.
+
+=== slide29.xml ===
+THANKS FOR LISTENING!
+

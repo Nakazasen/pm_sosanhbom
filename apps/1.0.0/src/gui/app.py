@@ -113,6 +113,9 @@ class SSBOMMainWindow(QMainWindow):
         self.member_view = MemberWorkspaceView(parent=self, base_dir=self.base_dir)
         self.tabs.addTab(self.member_view, "👷 Thành Viên Công Đoạn (Member Workspace)")
 
+        # Ensure Leader Workspace is active by default
+        self.tabs.setCurrentIndex(0)
+
         main_layout.addWidget(self.tabs)
 
         # Wire cross-view events
@@ -126,7 +129,13 @@ class SSBOMMainWindow(QMainWindow):
         # Menu: Hệ thống (File)
         file_menu = menu_bar.addMenu("Hệ thống")
 
-        action_settings = QAction("⚙️ Cấu hình Hệ thống...", self)
+        # Action: Tải BOM từ Teamcenter PLM / SAP R3
+        action_download_plm = QAction("📥 Tải BOM Tự Động (PLM / SAP R3)...", self)
+        action_download_plm.setShortcut("Ctrl+D")
+        action_download_plm.triggered.connect(self.leader_view._open_plm_download_dialog)
+        file_menu.addAction(action_download_plm)
+
+        action_settings = QAction("⚙ Cấu hình kết nối hệ thống...", self)
         action_settings.setShortcut("Ctrl+,")
         action_settings.triggered.connect(self.open_settings_dialog)
         file_menu.addAction(action_settings)
@@ -162,6 +171,8 @@ class SSBOMMainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
+        toolbar.addAction(action_download_plm)
+        toolbar.addSeparator()
         toolbar.addAction(action_goto_leader)
         toolbar.addAction(action_goto_member)
         toolbar.addSeparator()
@@ -176,7 +187,7 @@ class SSBOMMainWindow(QMainWindow):
         self.status_bar.addWidget(self.lbl_status_msg, 1)
 
         # Connection indicators
-        self.lbl_tc_indicator = QLabel("● TC14: Kết nối Web")
+        self.lbl_tc_indicator = QLabel("● TC24: Kết nối Web")
         self.lbl_tc_indicator.setStyleSheet("color: #10B981; font-weight: bold; margin-right: 10px;")
         self.status_bar.addPermanentWidget(self.lbl_tc_indicator)
 
@@ -250,7 +261,7 @@ class SSBOMMainWindow(QMainWindow):
             "<p>Hiện đại hóa toàn diện quy trình so sánh BOM CTTT vs PLM vs R3.</p>"
             "<ul>"
             "<li><strong>Phát triển bởi:</strong> Kyocera Document Solutions Vietnam (Bộ phận PE-3)</li>"
-            "<li><strong>Công nghệ:</strong> Python 3.13, PyQt6, OpenXML, Selenium TC14, SAP GUI Scripting</li>"
+            "<li><strong>Công nghệ:</strong> Python 3.13, PyQt6, OpenXML, Selenium TC24, SAP GUI Scripting</li>"
             "<li><strong>Kiến trúc:</strong> Modular Adapter Pattern, Multi-level BOM Tree O(N) Resolver</li>"
             "</ul>"
             "<p>Bản quyền © 2026 Kyocera Document Solutions Vietnam Co., Ltd.</p>",

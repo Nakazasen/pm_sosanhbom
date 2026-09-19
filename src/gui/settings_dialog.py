@@ -88,10 +88,10 @@ class SettingsDialog(QDialog):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
 
-        # Tab 1: Teamcenter TC14
+        # Tab 1: Teamcenter TC24
         tc_widget = QWidget()
         tc_layout = QVBoxLayout(tc_widget)
-        tc_group = QGroupBox("Cổng Web Siemens Teamcenter Active Workspace (TC14)")
+        tc_group = QGroupBox("Cổng Web Siemens Teamcenter Active Workspace (TC24)")
         tc_form = QFormLayout(tc_group)
 
         self.tc_url_edit = QLineEdit()
@@ -110,7 +110,7 @@ class SettingsDialog(QDialog):
         self.tc_timeout_spin.setValue(30)
         self.tc_timeout_spin.setSuffix(" giây")
 
-        tc_form.addRow("URL Cổng TC14:", self.tc_url_edit)
+        tc_form.addRow("URL Cổng TC24:", self.tc_url_edit)
         tc_form.addRow("Tài khoản (Username):", self.tc_user_edit)
         tc_form.addRow("Mật khẩu (Password):", self.tc_pass_edit)
         tc_form.addRow("Trình duyệt (Browser):", self.tc_browser_combo)
@@ -118,7 +118,7 @@ class SettingsDialog(QDialog):
         tc_form.addRow("Thời gian chờ (Timeout):", self.tc_timeout_spin)
 
         tc_btn_layout = QHBoxLayout()
-        self.btn_test_tc = QPushButton("Kiểm tra kết nối TC14")
+        self.btn_test_tc = QPushButton("Kiểm tra kết nối TC24")
         self.btn_test_tc.clicked.connect(self._test_tc_connection)
         tc_btn_layout.addWidget(self.btn_test_tc)
         tc_btn_layout.addStretch()
@@ -126,12 +126,12 @@ class SettingsDialog(QDialog):
         tc_layout.addWidget(tc_group)
         tc_layout.addLayout(tc_btn_layout)
         tc_layout.addStretch()
-        self.tab_widget.addTab(tc_widget, "Teamcenter TC14")
+        self.tab_widget.addTab(tc_widget, "Teamcenter TC24")
 
-        # Tab 2: SAP R3 ERP
+        # Tab 2: SAP R3
         sap_widget = QWidget()
         sap_layout = QVBoxLayout(sap_widget)
-        sap_group = QGroupBox("Thông số kết nối SAP R3 ERP (CS12 Multilevel BOM)")
+        sap_group = QGroupBox("Thông số kết nối SAP R3 (CS12 Multilevel BOM)")
         sap_form = QFormLayout(sap_group)
 
         self.sap_system_edit = QLineEdit()
@@ -163,7 +163,7 @@ class SettingsDialog(QDialog):
         sap_layout.addWidget(sap_group)
         sap_layout.addLayout(sap_btn_layout)
         sap_layout.addStretch()
-        self.tab_widget.addTab(sap_widget, "SAP R3 ERP")
+        self.tab_widget.addTab(sap_widget, "SAP R3")
 
         # Tab 3: Directories and Paths
         path_widget = QWidget()
@@ -355,11 +355,11 @@ class SettingsDialog(QDialog):
             with urllib.request.urlopen(req, timeout=5) as response:
                 status_code = response.getcode()
             if status_code in (200, 301, 302):
-                QMessageBox.information(self, "Kết nối TC14", f"Kết nối thành công tới cổng TC14!\nMã phản hồi HTTP: {status_code}")
+                QMessageBox.information(self, "Kết nối TC24", f"Kết nối thành công tới cổng TC24!\nMã phản hồi HTTP: {status_code}")
             else:
-                QMessageBox.warning(self, "Kết nối TC14", f"Cổng TC14 phản hồi với mã: {status_code}")
+                QMessageBox.warning(self, "Kết nối TC24", f"Cổng TC24 phản hồi với mã: {status_code}")
         except Exception as exc:
-            QMessageBox.critical(self, "Kết nối TC14 Thất bại", f"Không thể kết nối tới {url}:\n{exc}")
+            QMessageBox.critical(self, "Kết nối TC24 Thất bại", f"Không thể kết nối tới {url}:\n{exc}")
 
     def _test_sap_connection(self) -> None:
         """Check SAP logon executable existence or COM scripting status."""

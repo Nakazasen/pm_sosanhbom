@@ -205,6 +205,70 @@ YÊU CẦU THIẾT KẾ BẮT BUỘC CHO MILESTONE M3 & M4 (TC2412 CANONICAL NOR
 3. Không làm gãy bất kỳ công thức VLOOKUP hay liên kết nào của các thành viên trong các sheet Tongket, CTTT!
 Yêu cầu Orchestrator và Worker đưa cơ chế Bridge này vào Spec-Kit và mã nguồn ngay lập tức.
 
+## 2026-09-19T09:43:14Z
 
+Nâng cấp và hoàn thiện 100% hệ thống Phần mềm So Sánh BOM Tự Động (Kyocera Desktop App) bằng Python/PyQt6, tái cấu trúc toàn diện UX/UI theo luồng nghiệp vụ chuẩn từng bước và phục hồi đầy đủ tất cả các tính năng từ mã nguồn VBA gốc (tonghop_new, formnguoidung, form_ssbom) và tài liệu hướng dẫn chuẩn Chương trình so sánh BOM tự động.pptx.
 
+Working directory: D:\Sandbox\pm_sosanhbom
+Integrity mode: development
 
+## 1. Context & Business Domain (Quy trình chuẩn Kyocera)
+Hệ thống vận hành theo chu trình khép kín giữa Trưởng nhóm (Leader) và Kỹ sư phụ trách (Member):
+- Leader Workflow:
+  - Giai đoạn: maT (cho DMT / PMT) và ma1 (từ PP trở đi).
+  - Quản lý nhân sự theo phòng ban (tenphong_pt): Cơ 1, Cơ 2, Cơ 3.
+  - Lập dự án & Phân công mã máy/hướng xuất cho từng kỹ sư (Sheet Lichsu). Tự sinh thư mục máy và sinh file riêng mang tên kỹ sư.
+  - Tải tự động BOM R3 trên SAP (hỗ trợ nhập 1 ngày chung hoặc ngày riêng cho từng mã).
+  - Lọc BOM Full PLM Teamcenter TC24 theo bộ lọc cấp bậc Level 1..6 và cấu hình BolocBom (xử lý ngày hiệu lực from...to..., loại bỏ cụm không bung).
+  - Quét trạng thái nộp bài (kiểm tra ô Q2 = OK).
+  - Tổng hợp dữ liệu thành viên (CTTT, MSI, Label 7980/7990), tạo thư mục lưu trữ phutrach.
+  - Tạo file So sánh BOM tổng (form_ssbom), Refresh Pivot Table, lọc dòng sai khác.
+  - Kế thừa nội dung giải trình (PLM_old sang PLM mới qua ham_match_index_mix).
+  - Quản lý Master List JIG (file 'List JIG thay doi, khi bo sung ma hang.xlsx') & Đánh giá xác nhận 4M với KTSX.
+  - Gửi Mail tự động qua Outlook 2 luồng riêng biệt: Luồng 1 (nhắc thành viên nộp bài + 18 điểm kiểm tra trước sản xuất), Luồng 2 (gửi Quản lý kiểm tra xác nhận).
+- Member Workflow:
+  - Tự động nhận diện đúng tên kỹ sư và mã máy được Leader phân công.
+  - Nhập 3 danh mục: CTTT, MSI, Nhãn 7980/7990.
+  - Đối chiếu MSI với Master FIX_SERIAL_DLTOOL_VER010.xls (Sheet UNIT, MACHINE).
+  - Tự nạp BOM PLM & R3 để đối soát sơ bộ tại chỗ (Self-check) và giải trình sai khác.
+  - Bấm xác nhận nộp bài (Đóng dấu Q2 = OK).
+
+## 2. Requirements (Speckit Functional Breakdown)
+### R1. Tái cấu trúc giao diện Leader Workspace thành Luồng Wizard 4 bước tuần tự
+- Bước 1 (Lập Dự Án & Phân Công): Chọn Model, Giai đoạn (maT/ma1). Nhập danh sách mã BOM. Bảng phân công nhân sự theo phòng ban Cơ 1, Cơ 2, Cơ 3 (tương đương Sheet Lichsu). Nút bấm tự động tạo thư mục mã hàng và khởi tạo file/gói nộp mang tên từng kỹ sư.
+- Bước 2 (Tải & Xử Lý Nguồn Dữ Liệu): Tích hợp hộp thoại tải BOM PLM TC24 & SAP R3 (hỗ trợ ngày chung / ngày riêng). Tự động phân chia file về từng thư mục mã máy.
+- Bước 3 (Theo Dõi & Tổng Hợp): Bảng quét trạng thái nộp bài theo thời gian thực (Đã nộp OK / Chưa nộp). Chỉ cho phép bấm nút Tổng Hợp Dữ Liệu khi toàn bộ thành viên đã xác nhận OK. Tự động gom CTTT, MSI, 7980/7990 và cất file thành viên vào thư mục phutrach.
+- Bước 4 (So Sánh BOM Tổng & Gửi Báo Cáo): Tạo file form_ssbom, cập nhật Pivot Table. Quản lý Master JIG & đánh giá 4M. Xem trước và gửi Email Outlook 2 tầng (Gửi thành viên & Gửi quản lý).
+
+### R2. Bộ lọc Cấu trúc BOM PLM TC24 Full (BOM Filter Engine Level 1..6)
+- Xử lý tệp BOM PLM Full xuất từ Teamcenter: Quét cột hiệu lực I (from ... to ...), tự động loại bỏ linh kiện đã hết hạn so với thời điểm hiện tại và xóa sạch toàn bộ các tầng con bên dưới (Level BOM 1 đến 6).
+- Áp dụng cấu hình bộ lọc theo từng model máy (BolocBom): Hỗ trợ khớp chính xác Full_name, khớp tương đối Part_name, và danh sách mã cụ thể không bung.
+- Xóa đệ quy toàn bộ linh kiện con khi linh kiện cha bị chặn.
+- Tự động tạo thư mục sao lưu backupTC14full.
+
+### R3. Cơ chế Kế thừa Giải trình khi Cập nhật BOM Mới (PLM_old sang PLM mới)
+- Khi cập nhật dữ liệu PLM hoặc R3 mới: Tự động lưu trữ Sheet hiện tại thành PLM_old, nạp dữ liệu mới vào Sheet PLM, tự động tra cứu và bảo lưu toàn bộ nội dung Giải thích, Phụ trách, Quản lý check từ PLM_old sang PLM mới cho các linh kiện không đổi, tự động chuyển file cũ vào thư mục capnhat\old\ và refresh Pivot Table.
+
+### R4. Module Đối soát MSI Chuyên sâu với Master FIX_SERIAL_DLTOOL
+- Tra cứu đối soát tự động với file Master FIX_SERIAL_DLTOOL_VER010.xls: Sheet UNIT (3 ký tự cố định MSI và LABEL_COMMENT SERVICE), Sheet MACHINE (3 ký tự cố định cho HONTAI), đối chiếu với Sheet PLM và phán định OK / NG, tô màu tương phản trực quan.
+
+### R5. Module Quản lý Danh mục List JIG Master & Đánh giá 4M
+- Liên kết với file Master 'List JIG thay doi, khi bo sung ma hang.xlsx', tự động lọc và nạp danh sách JIG tương ứng theo loại máy vào Sheet List JIG, giữ nguyên định dạng và công thức, tích hợp ô tích chọn / xác nhận đánh giá hạng mục 4M với bộ phận Kỹ thuật Sản xuất (KTSX).
+
+### R6. Hoàn thiện Member Workspace theo chuẩn Form Người Dùng
+- Giao diện thành viên tự động tải thông tin phân công (Tên kỹ sư, mã máy, phòng ban), loại bỏ ô text tự gõ mẫu.
+- Cho phép nhập và kiểm tra 3 bảng: CTTT, MSI, Label 7980/7990.
+- Tự động nạp BOM PLM & R3 trong thư mục máy để kỹ sư tự đối soát sơ bộ (Self-check).
+- Nút Xác nhận Nộp (Đóng dấu Q2 = OK) để báo cho Leader biết bài nộp đã hoàn tất.
+
+## 3. Acceptance Criteria
+- Màn hình Leader hiển thị rõ ràng 4 tab/bước theo đúng quy trình từ trái sang phải.
+- Bảng danh sách nhân sự Cơ 1, Cơ 2, Cơ 3 chuẩn và bảng phân công ma trận (Sheet Lichsu), bấm 1 nút là tự sinh thư mục máy + file phân công.
+- Quét trạng thái nộp bài chính xác theo cờ Q2 = OK, hiển thị rõ ai chưa nộp.
+- Tổng hợp đủ cả 3 phần: CTTT, MSI, Label 7980/7990 vào file tổng.
+- Lọc chính xác các dòng hết hiệu lực và xóa đúng các cấp con (Level 1..6) theo thuật toán VBA gốc.
+- Khi cập nhật PLM mới, toàn bộ giải thích cũ của các linh kiện không đổi được giữ nguyên vẹn 100%.
+- Đối soát MSI khớp chính xác 3 ký tự cố định từ FIX_SERIAL_DLTOOL_VER010.xls.
+- Nạp đúng bảng JIG và có trường xác nhận đánh giá 4M.
+- Toàn bộ test suite tự động (Pytest) đạt 100% PASS.
+- Chạy lệnh package_app.py thành công, các file .bat khởi chạy ứng dụng mượt mà không lỗi.

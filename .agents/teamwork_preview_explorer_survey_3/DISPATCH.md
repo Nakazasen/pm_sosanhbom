@@ -1,46 +1,34 @@
-# Task Assignment: SAP R3 Automation & GUI Scripting Investigation
+# DISPATCH: Codebase & Architecture Explorer (Survey Agent 3)
 
-## Identity
-- Archetype: teamwork_preview_explorer
-- Role: SAP R3 Automation & GUI Scripting Investigator
-- Working Directory: D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3
-- Parent Conversation ID: 8a26cf43-3f4f-42ea-ac18-3875de8c9a43
+## Mission
+Survey the existing Python/PyQt6 codebase, tests, scripts, and packaging utilities in `D:\Sandbox\pm_sosanhbom` to evaluate current architectural status, feature coverage against R1..R6, and identify all gaps.
 
-## Objective
-Thoroughly investigate and document the requirements and architecture for SAP R3 Multilevel BOM (CS12) Automation:
-1. Target SAP environment: `saplogon.exe 770`, system ID / connection string `P1J(ERP60-AWS)-VN`.
-2. Scripting interface: `win32com.client` COM automation vs legacy VBScript (`tudongdangnhapR3.vbs`).
-3. Transaction flow CS12:
-   - Input fields: Material/BOM number, Plant (2200), BOM Usage (pp01), Alternative (01), Required/Valid date.
-   - Execution & Layout: Multilevel BOM view, layout variants, export to spreadsheet / local file (.xls/.xlsx).
-4. Automation safety & error handling:
-   - SAP GUI window state detection, session busy wait, modal dialogs, error messages in status bar (SBAR).
-   - Graceful connection recovery, saplogon process checking / spawning if not running.
-5. Export file destination: directory routing by export target / production line.
+## Inputs
+- `D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md` (MUST READ FIRST)
+- Workspace directory: `D:\Sandbox\pm_sosanhbom`
 
-## Inputs & Context
-- Read `D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md`
-- Inspect `tudongdangnhapR3.vbs` and any related scripts in `D:\Sandbox\pm_sosanhbom`.
+## Working Directory
+- `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3`
 
-## Deliverables
-- Write comprehensive report to `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\handoff.md`
-- Report back to parent orchestrator with a summary of findings.
+## Specific Areas to Investigate
+1. Repository architecture: directory structure, modules (`gui/`, `core/`, `services/`, `models/`, `utils/`, etc.).
+2. Leader Workspace: current UI layout vs required 4-step wizard. What exists and what is missing?
+3. Member Workspace: current UI vs required formnguoidung spec (auto-loading, 3 tables, self-check, Q2=OK stamp).
+4. Core engines: BOM filter engine (recursive Level 1..6, BolocBom), comparison engine, explanation inheritance (`ham_match_index_mix`), MSI deep cross-check (`FIX_SERIAL_DLTOOL_VER010.xls`), JIG master manager & 4M assessment, Outlook email service.
+5. Existing test suite: inspect tests in `tests/`, test fixtures, test runner, run existing tests if needed to report current pass/fail status.
+6. Packaging & Deployment: `package_app.py`, batch scripts (`.bat`), executable build readiness.
+7. Detailed gap matrix: for each requirement R1..R6, what is fully done, what is partially done, what is missing or broken.
 
-## 2026-09-17T02:49:45Z
-User prompt invocation:
-You are Explorer 3 (SAP R3 Automation Investigator).
-Your working directory is: D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3
-Original User Request is at: D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md
-Your task dispatch file is at: D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\DISPATCH.md
+## Output Requirement
+Write comprehensive codebase assessment to `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\codebase_report.md` and deliver `handoff.md`. Send completion message to parent.
 
-You must:
-1. Read D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md first.
-2. Read your DISPATCH.md.
-3. Investigate SAP R3 automation requirements and existing scripts in D:\Sandbox\pm_sosanhbom (especially tudongdangnhapR3.vbs, VBA DownloadAutoR3, and any SAP GUI scripting references).
-4. Deeply analyze and document:
-   - SAP GUI connection via Python win32com.client (saplogon.exe 770, system P1J(ERP60-AWS)-VN).
-   - CS12 transaction execution flow: Plant 2200, BOM Usage pp01, Alternative 01, validity date, multilevel tree view.
-   - Export mechanism: grid export to spreadsheet / local file (.xls/.xlsx) and destination path routing by production line / export target.
-   - Error handling & safety: window state checks, session busy wait, status bar error capture (SBAR), saplogon process lifecycle.
-5. Write your comprehensive investigation report to D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\handoff.md.
-6. When complete, send a message to your parent with a concise summary and confirmation of handoff.md path.
+## 2026-09-19T09:47:07Z
+You are the Codebase & Architecture Explorer for the project 'Chương trình so sánh BOM tự động'.
+Your working directory is D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3.
+Read D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md first!
+Then read your dispatch file at D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\DISPATCH.md.
+Explore the existing Python/PyQt6 codebase, tests, and packaging tools in D:\Sandbox\pm_sosanhbom.
+Inspect the Leader Workspace, Member Workspace, Core Engines (BOM filter, comparison, inheritance, MSI checker, JIG manager, email service), test suite, and package_app.py.
+Evaluate the exact gaps against R1..R6.
+Write your findings to D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\codebase_report.md and deliver a complete handoff.md in your working directory. Send a message to your parent when complete.
+

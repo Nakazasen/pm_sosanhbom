@@ -1,6 +1,5 @@
 {
-  "app_title": "自動BOM照合システム (Siemens TC14 & SAP R3)",
-  "app_subtitle": "製造技術エンジニア向け CTTT・PLM・R3 BOM自動照合ツール",
+  "app_title": "自動BOM照合システム (Siemens TC24 & SAP R3)",
   "lang_name": "日本語",
   "role_member": "メンバーモード",
   "role_leader": "リーダーモード",
@@ -12,9 +11,8 @@
   "output_dir_label": "出力フォルダ:",
   "btn_browse": "参照...",
   "step2_title": "2. 照合実行",
-  "step2_desc": "Teamcenter TC14の展開BOMおよびSAP R3のCS12を自動取得・照合します",
+  "step2_desc": "Teamcenter TC24の展開BOMおよびSAP R3のCS12を自動取得・照合します",
   "btn_start": "▶ 自動BOM照合を開始",
-  "btn_stop": "⏹ 停止",
   "status_idle": "待機中 (準備完了)。",
   "status_running": "自動照合処理中... しばらくお待ちください。",
   "status_success": "照合が正常に完了しました (100% 成功)！",
@@ -29,9 +27,8 @@
   "btn_open_excel": "📊 Excelレポートを開く",
   "btn_open_folder": "📁 出力フォルダを開く",
   "btn_send_email": "✉ Outlookメール送信",
-  "tc14_status": "Teamcenter TC14: 接続準備完了",
+  "tc14_status": "Teamcenter TC24: 接続準備完了",
   "sap_status": "SAP R3 (P1J): 接続準備完了",
   "msg_confirm_run": "機種 {model} のBOM自動照合を実行しますか？",
-  "msg_completed": "Excelレポートが正常に生成されました:\n{path}",
   "msg_error_model": "有効な機種コードを入力または選択してください！"
 }

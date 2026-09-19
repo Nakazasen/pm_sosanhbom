@@ -11,8 +11,10 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
+import openpyxl
 import pytest
 from PyQt6.QtWidgets import QApplication, QMessageBox
+
 
 from src.gui.leader_view import BatchReconciliationWorker, LeaderWorkspaceView
 from src.reporting.excel_generator import STANDARD_SUB_UNITS
@@ -64,7 +66,10 @@ class TestF22LeaderWorkspace:
 
         # Place submission file in LSU
         lsu_file = model_dir / "CTTT" / "LSU" / "cttt_lsu.xlsx"
-        lsu_file.write_text("DUMMY")
+        wb = openpyxl.Workbook()
+        wb.save(lsu_file)
+        wb.close()
+
 
         view.scan_member_submissions()
         assert view.submission_table.rowCount() == len(STANDARD_SUB_UNITS)

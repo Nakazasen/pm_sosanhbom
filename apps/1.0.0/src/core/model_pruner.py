@@ -21,6 +21,7 @@ The 4 Action Rules on Matched Nodes:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from src.core.default_rules import DEFAULT_MODEL_RULES
 from src.core.models import BOMNode, BOMTree, ModelRule, PruneAction
@@ -220,6 +221,77 @@ class ModelPruner:
                     idx += 1
 
         return current_nodes
+
+    def prune_excel_file(
+        self,
+        input_path: str | Path,
+        output_path: str | Path,
+        model_name: str | None = None,
+        rules: list[ModelRule] | None = None,
+        sheet_name: str | int | None = None,
+    ) -> Path:
+        """Prune an Excel PLM file while preserving 100% of formatting, headers, and column structure.
+
+        Faithfully mirrors legacy VBA behavior: opens the workbook, identifies rows to delete,
+        and removes them directly from the worksheet so all cell formatting, fonts, colors,
+        column dimensions, and header names are completely retained.
+        """
+        import openpyxl
+        from src.core.tree_parser import PLMTreeParser
+
+        in_p = Path(input_path)
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        parser = PLMTreeParser()
+        raw_tree = parser.parse_file(in_p, sheet_name=sheet_name)
+        pruned_tree = self.prune_tree(raw_tree, model_name=model_name, rules=rules)
+
+        retained_nodes = pruned_tree.flatten()
+        retained_row_indices = {n.row_index for n in retained_nodes if n.row_index is not None}
+
+        wb = openpyxl.load_workbook(str(in_p))
+        try:
+            if sheet_name is not None:
+                ws = wb[sheet_name] if isinstance(sheet_name, str) else wb.worksheets[sheet_name]
+            else:
+                ws = wb.active
+
+            max_r = ws.max_row
+            # Collect rows to delete in descending order
+            rows_to_delete = sorted(
+                [r for r in range(2, max_r + 1) if r not in retained_row_indices],
+                reverse=True,
+            )
+
+            # Group into contiguous blocks to maximize delete performance
+            blocks: list[tuple[int, int]] = []
+            if rows_to_delete:
+                curr_end = rows_to_delete[0]
+                curr_start = rows_to_delete[0]
+                for r in rows_to_delete[1:]:
+                    if r == curr_start - 1:
+                        curr_start = r
+                    else:
+                        blocks.append((curr_start, curr_end - curr_start + 1))
+                        curr_start = r
+                        curr_end = r
+                blocks.append((curr_start, curr_end - curr_start + 1))
+
+            for start_row, count in blocks:
+                ws.delete_rows(start_row, count)
+
+            # Clean up openpyxl dangling/hyperlink cells beyond surviving rows
+            expected_max_row = max_r - len(rows_to_delete)
+            excess_coords = [coord for coord in ws._cells if coord[0] > expected_max_row]
+            for coord in excess_coords:
+                del ws._cells[coord]
+
+            wb.save(str(out_p))
+        finally:
+            wb.close()
+
+        return out_p
 
 
 def prune_by_model(

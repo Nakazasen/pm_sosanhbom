@@ -1,19 +1,19 @@
 # TEST_INFRA.md — E2E Testing Infrastructure & Philosophy
 
-## 1. Testing Philosophy
+## 1. Testing Philosophy & Invariants
 
-The test infrastructure for the **BOM Comparison Automation Modernization** project adheres to strict industrial software quality assurance standards, ensuring that the modernization of legacy Excel VBA/VBScript workflows into high-performance Python produces bit-accurate, resilient, and enterprise-grade results.
+The test infrastructure for the **Phần Mềm So Sánh BOM Tự Động (Kyocera BOM Comparison System)** project adheres to strict industrial software quality assurance standards. It guarantees that modernizing legacy Excel VBA/VBScript workflows into high-performance Python produces bit-accurate, resilient, and enterprise-grade results.
 
 ### 1.1 Core Principles
 1. **Fail-Closed & Authenticity (Anti-Cheating Guard)**:
    - Tests MUST NOT use facade mocks that always return True or dummy assertions.
-   - Every assertion is derived from the authoritative specifications in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and reverse-engineered legacy VBA ground truth (`form_ssbom.xlsm`, `Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx`, `tonghop_new12052026_ma1.xlsm`).
+   - Every assertion is derived from authoritative specifications in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and reverse-engineered legacy VBA ground truth (`form_ssbom.xlsm`, `Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx`, `tonghop_new12052026_ma1.xlsm`, `FIX_SERIAL_DLTOOL_VER010.xls`).
 2. **Deterministic Output Verification**:
    - Numerical quantities, engineering revisions, part codes, and decision states are checked for exact equivalence.
-   - Non-deterministic values (such as file modification timestamps and execution duration) are tested with strict bounds and regex patterns.
+   - Non-deterministic values (such as timestamps and execution durations) are tested with strict bounds and regex patterns.
 3. **Progressive Testability & Adapter Isolation**:
    - Domain logic (`src/core`) is 100% decoupled from external I/O protocols.
-   - Adapters for external dependencies (Siemens Teamcenter Active Workspace TC14 via Selenium, SAP Logon 770 via COM interop, Microsoft Outlook via MAPI COM) provide clean interface contracts and high-fidelity test mocks when live servers are offline.
+   - Adapters for external dependencies (Siemens Teamcenter Active Workspace TC24/TC14, SAP Logon 770 CS12 via COM interop, Microsoft Outlook via MAPI COM) provide clean interface contracts and high-fidelity test mocks when live servers are offline.
 4. **Pyramid & Multi-Tier Stratification**:
    - Testing is structured into 4 formal test tiers, ensuring high coverage from unit features to end-to-end real-world production data.
 
@@ -21,129 +21,122 @@ The test infrastructure for the **BOM Comparison Automation Modernization** proj
 
 ## 2. Multi-Tier Architecture & Directory Layout
 
-The automated test suite is organized into modular directories under `tests/`:
+The automated E2E test suite is organized under `tests/e2e/`:
 
 ```
-tests/
-├── conftest.py                   # Shared pytest fixtures, data generators, and mocks
-├── tier1_features/               # Feature-by-feature tests in isolation (F1 .. F28)
-│   ├── test_f01_plm_parser.py
-│   ├── test_f02_bom_hierarchy.py
-│   ├── test_f03_date_filter.py
-│   ├── test_f04_model_pruner.py
-│   ├── test_f05_unit_resolver.py
-│   ├── test_f06_reconciliation.py
-│   ├── test_f07_missing_parts.py
-│   ├── test_f08_cross_station.py
-│   ├── test_f09_annotation_migration.py
-│   ├── test_f10_msi_decision.py
-│   ├── test_f11_tc14_headless_session.py
-│   ├── test_f12_tc14_authentication.py
-│   ├── test_f13_tc14_search_navigation.py
-│   ├── test_f14_tc14_export_pipeline.py
-│   ├── test_f15_sap_com_automation.py
-│   ├── test_f16_sap_multilogon.py
-│   ├── test_f17_sap_cs12_execution.py
-│   ├── test_f18_sap_fail_closed_guard.py
-│   ├── test_f19_sap_export_routing.py
-│   ├── test_f20_machine_code_unification.py
-│   ├── test_f21_dynamic_r3_header.py
-│   ├── test_f22_leader_workspace.py
-│   ├── test_f23_member_workspace.py
-│   ├── test_f24_consolidated_report.py
-│   ├── test_f25_outlook_notification.py
-│   ├── test_f26_e2e_regression.py
-│   ├── test_f27_adversarial_coverage.py
-│   └── test_f28_standalone_packaging.py
-├── tier2_boundaries/             # Boundary conditions and extreme edge cases
-│   ├── test_empty_boms.py
-│   ├── test_depth_extremes.py
-│   ├── test_date_edge_cases.py
-│   └── test_character_encoding.py
-├── tier3_combinations/           # Combinatorial interactions across pipeline
-│   ├── test_pipeline_tree_to_units.py
-│   ├── test_pipeline_reconciliation.py
-│   └── test_pipeline_msi_crosscheck.py
-└── tier4_real_world/             # Ground truth verification with legacy workbooks
-    ├── test_legacy_unit_resolver.py
-    └── test_legacy_form_ssbom.py
+tests/e2e/
+├── __init__.py
+├── test_tier1_feature_coverage.py       # Tier 1: Feature Isolation (40 tests, R1..R6)
+├── test_tier2_boundary_corner.py        # Tier 2: Boundaries & Corner Cases (30 tests, R1..R6)
+├── test_tier3_pairwise_combinations.py  # Tier 3: Pairwise Combinations (6 pipelines)
+└── test_tier4_production_scenarios.py   # Tier 4: Real-World Production Workflows (5 scenarios)
 ```
-
-### 2.1 Tier Breakdown Details
-- **Tier 1 (Isolated Features F1..F28)**:
-  - Minimum 5 distinct test cases per feature.
-  - Verifies contract compliance, input parsing, state transitions, return values, and failure handling in isolation.
-- **Tier 2 (Boundaries & Edge Cases)**:
-  - Empty files (0 bytes, 0 rows).
-  - Single-row BOMs (root assembly without children).
-  - Maximum depth (up to 6 levels per specification) and invalid deep trees (>6 levels).
-  - Date transitions: Leap years (e.g. Feb 29), month-end boundaries, same year with difference > 1 month vs <= 1 month, and "UP" preservation.
-  - Non-ASCII, Japanese (Kanji/Katakana), Vietnamese diacritics, and symbols in Part Codes and Item Descriptions.
-- **Tier 3 (Combinatorial Interactions)**:
-  - Multi-stage pipelines: 14-column PLM parsing $\to$ Dual-pass date validity filtering $\to$ 6-machine model decomposition $\to$ $O(N)$ Unit resolution.
-  - End-to-end 3-way reconciliation: Member CTTT + PLM BOM + SAP R3 BOM $\to$ line-by-line comparison $\to$ Grand Total aggregation $\to$ Missing parts detection.
-  - Combined 3-way check + MSI 9-branch decision engine evaluation.
-- **Tier 4 (Real-World Legacy Workbooks)**:
-  - Validates output directly against legacy workbooks: `form_ssbom.xlsm` and `Hamtimlinhkienthuoc_UNIT_naotren_BOM.xlsx`.
-  - Proves 100% bit-accurate matching between the new Python engine and the legacy Excel VBA outputs.
 
 ---
 
-## 3. Shared Fixtures & Test Data Generation (`tests/conftest.py`)
+## 3. Test Tier Breakdown & Scope
 
-All tests share reusable, stateless fixtures managed in `tests/conftest.py`:
-
-| Fixture Name | Type | Description |
-|--------------|------|-------------|
-| `temp_workspace` | `Path` | Isolated temporary directory automatically cleaned up after test run |
-| `sample_14col_plm_df` | `pd.DataFrame` | Valid 14-column DataFrame matching Teamcenter TC14 export schema |
-| `sample_plm_excel_file` | `Path` | Valid `.xlsx` workbook on disk containing multi-level BOM hierarchy |
-| `sample_cs12_html_file` | `Path` | Valid HTML-disguised `.xls` workbook generated by SAP CS12 export |
-| `sample_cttt_df` | `pd.DataFrame` | Member work instruction table (`CTTT`) with quantities and part codes |
-| `sample_msi_df` | `pd.DataFrame` | Sub-unit barcode, 3-char MSI code, and service comment test records |
-| `mock_tc14_driver` | `MagicMock` | Simulated Selenium WebDriver with TC14 DOM elements and session methods |
-| `mock_sap_session` | `MagicMock` | Simulated SAP GUI Scripting COM session (`wnd[0]`, `sbar`, `tbar[1]/btn[8]`) |
-| `sample_bolocbom_rules` | `Dict` | Rules for the 6 machine models (Virgo, Libra2, Iris2024, Sirius2, Mebius, Polaris) |
+### Tier 1: Feature Coverage (`test_tier1_feature_coverage.py` — 40 Tests)
+Covers all primary functional requirements (R1 to R6) in isolation:
+- **R1: Leader Workspace Wizard (7 tests)**:
+  - `TC-T1-R1-01`: Model folder & stage initialization (`Virgo`, `Iris2024`, `maT`, `ma1`).
+  - `TC-T1-R1-02`: Member assignment & distribution via staffing matrix (`Lichsu`).
+  - `TC-T1-R1-03`: Exclusion of machines flagged with Column F = `"X"`.
+  - `TC-T1-R1-04`: Inbound routing of PLM & SAP R3 BOM files into machine directories.
+  - `TC-T1-R1-05`: Real-time scan of member submission packages via cell `CTTT!Q2 = "OK"`.
+  - `TC-T1-R1-06`: Fail-closed gate blocking consolidation when any member is pending.
+  - `TC-T1-R1-07`: Archival of submitted member files into `phutrach/` subfolder.
+- **R2: BOM Filter Engine Level 1..6 (8 tests)**:
+  - `TC-T1-R2-01`: Unconditional retention of effectivity containing `"UP"`.
+  - `TC-T1-R2-02`: Expiration and filtering of `"to <date>"` effectivities.
+  - `TC-T1-R2-03`: Recursive pruning of all descendant child nodes when parent expires.
+  - `TC-T1-R2-04`: Pruning of empty effectivity leaves (`has_children = False`).
+  - `TC-T1-R2-05`: Pruning of empty effectivity subtrees (`has_children = True`).
+  - `TC-T1-R2-06`: BolocBom rule with `Full_name` exact match pruning.
+  - `TC-T1-R2-07`: BolocBom rule with `Part_name` substring match pruning.
+  - `TC-T1-R2-08`: Automatic backup of raw TC export into `backupTC14full/`.
+- **R3: Annotation Inheritance Engine (6 tests)**:
+  - `TC-T1-R3-01`: Multi-version sheet backup (`PLM_old`).
+  - `TC-T1-R3-02`: Cleaning of old data ranges (`A2:M` and `O2:Q`).
+  - `TC-T1-R3-03`: Carryover of Explanations (Col O) for unchanged parts.
+  - `TC-T1-R3-04`: Carryover of Responsible Person (Col P) and Manager Check (Col Q).
+  - `TC-T1-R3-05`: Clean blank strings for newly introduced parts.
+  - `TC-T1-R3-06`: Archiving superseded source files into `capnhat\old\`.
+- **R4: MSI Deep Reconciliation Engine (8 tests)**:
+  - `TC-T1-R4-01`: Branch 1: Unit not in PLM -> NG, highlight B, K red.
+  - `TC-T1-R4-02`: Branch 2: Normalization of blank service comment to `"-"`.
+  - `TC-T1-R4-03`: Branch 4: In PLM, missing from master Fix Serial -> NG, B, K red.
+  - `TC-T1-R4-04`: Branch 5: Both code and service match -> OK, B, D, E, K green.
+  - `TC-T1-R4-05`: Branch 7: Service note required warning -> OK with warning, E red.
+  - `TC-T1-R4-06`: Branch 8: 3-character code mismatch -> NG, D, K red.
+  - `TC-T1-R4-07`: Branch 9: Service comment mismatch -> NG, E, K red.
+  - `TC-T1-R4-08`: Row 36 Hontai machine code fallback to `PLM!C2`.
+- **R5: List JIG Master & 4M Evaluation (5 tests)**:
+  - `TC-T1-R5-01`: Loading 15 machine model series from JIG master.
+  - `TC-T1-R5-02`: Copying JIG table into Sheet `List JIG`.
+  - `TC-T1-R5-03`: Preserving formatting and column widths.
+  - `TC-T1-R5-04`: Clearing JIG table on reset/model switch.
+  - `TC-T1-R5-05`: Recording 4M evaluation with Production Engineering (KTSX).
+- **R6: Member Workspace & Self-Check (6 tests)**:
+  - `TC-T1-R6-01`: Auto-loading member assignment (engineer, sub-unit, model).
+  - `TC-T1-R6-02`: CTTT table operations (add, clear, export records).
+  - `TC-T1-R6-03`: Preliminary self-check against local PLM and R3 with instant OK/NG feedback.
+  - `TC-T1-R6-04`: Blocking submission when unaddressed NG items exist without explanation.
+  - `TC-T1-R6-05`: Exporting submission package containing 3 sheets (`CTTT`, `MSI`, `Label_7980_7990`).
+  - `TC-T1-R6-06`: Verifying submission carries `CTTT!Q2 = "OK"` seal.
 
 ---
 
-## 4. Test Execution Commands
+### Tier 2: Boundary & Corner Cases (`test_tier2_boundary_corner.py` — 30 Tests)
+Stress-tests extreme edge cases and failure modes:
+- **R1 Boundaries**: Empty machine list, single unsubmitted member in 10-person team, Unicode paths with Japanese Kanji and spaces, 0-byte corrupted workbooks, offline Outlook COM handling.
+- **R2 Boundaries**: Kyocera grace period (same year month difference <= 1 retained), leap year Feb 29 boundary, 6-level deep tree recursion without stack overflow, unknown model name handling, 0-row empty PLM files.
+- **R3 Boundaries**: Consecutive multi-version updates (`PLM_old_1` .. `PLM_old_4`), scrambled row orders, 0% part overlap, multiline explanations with Japanese quotes, recovery from missing `PLM_old`.
+- **R4 Boundaries**: Short barcodes (< 9 chars), empty Row 36 and `PLM!C2`, case-insensitive 3-char matching (`1hn` vs `1HN`), whitespace stripping on service notes, missing Sheet `UNIT` in master file.
+- **R5 Boundaries**: Unsupported model in JIG master, read-only file locks, merged cells handling, zero-JIG models, rejected 4M assessments.
+- **R6 Boundaries**: Empty CTTT submissions, fractional quantities (`0.5`, `1.25`), non-numeric quantity strings (`"2 pcs"` coerced to 0.0), self-check without reference data, repeated submissions.
 
-### 4.1 Run All Automated Tests
-```powershell
-# Run the complete test suite
-python -m pytest tests/ -v
+---
 
-# Run with concise summary and short traceback
-python -m pytest tests/ -q --tb=short
+### Tier 3: Pairwise Combinations (`test_tier3_pairwise_combinations.py` — 6 Tests)
+Validates interactions between functional subsystems in sequential pipelines:
+1. `TC-T3-01`: Wizard Steps 1 & 2 <===> TC24 BOM Filtering (prunes expired items, creates clean PLM, backs up raw).
+2. `TC-T3-02`: Member Submissions <===> Leader Tracking & Consolidation (detects `Q2="OK"` across all units, moves files to `phutrach/`).
+3. `TC-T3-03`: Consolidated Data <===> MSI Deep Reconciliation (evaluates 9 branches across all units and Hontai).
+4. `TC-T3-04`: Master Comparison Workbook <===> List JIG & 4M Confirmation (builds `form_ssbom` with `List JIG`).
+5. `TC-T3-05`: BOM Filtering <===> Annotation Inheritance (filters Rev 2 tree and migrates Rev 1 annotations).
+6. `TC-T3-06`: Annotation Inheritance <===> Member Workspace Re-Check (member opens updated BOM with inherited notes).
+
+---
+
+### Tier 4: Real-World Production Scenarios (`test_tier4_production_scenarios.py` — 5 Tests)
+End-to-end execution matching factory workflows:
+1. `TC-T4-01`: DMT/PMT Phase Workflow for Model `Virgo` (`maT`) with common date `2024/08/25`.
+2. `TC-T4-02`: Mass Production MP Phase Workflow for Model `Libra2` (`ma1`) with individual dates.
+3. `TC-T4-03`: TC2412 24-column Excel formula protection benchmark (`Tongket!C5`, `CTTT!A1`, `CTTT!I3`, `CTTT!G3`, `PLM!R2`, `PLM!S2`).
+4. `TC-T4-04`: Rapid $O(N)$ UnitResolver algorithm benchmark (5,000+ nodes, 100% parity, < 100 ms).
+5. `TC-T4-05`: Real-world ECN annotation migration lifecycle (500 parts, 120 notes, 20 added, 10 deleted).
+
+---
+
+## 4. Execution Commands
+
+### Run Full E2E Test Suite (81 Tests)
+```bash
+py -m pytest tests/e2e/ -v
 ```
 
-### 4.2 Run by Tier
-```powershell
-# Run Tier 1: Feature Isolation Tests (F1..F28)
-python -m pytest tests/tier1_features/ -v
+### Run by Specific Tier
+```bash
+# Tier 1: Feature Isolation (40 tests)
+py -m pytest tests/e2e/test_tier1_feature_coverage.py -v
 
-# Run Tier 2: Boundary and Edge Cases
-python -m pytest tests/tier2_boundaries/ -v
+# Tier 2: Boundaries & Corner Cases (30 tests)
+py -m pytest tests/e2e/test_tier2_boundary_corner.py -v
 
-# Run Tier 3: Combinatorial Pipelines
-python -m pytest tests/tier3_combinations/ -v
+# Tier 3: Pairwise Combinations (6 tests)
+py -m pytest tests/e2e/test_tier3_pairwise_combinations.py -v
 
-# Run Tier 4: Real-World Legacy Ground Truth Validation
-python -m pytest tests/tier4_real_world/ -v
-```
-
-### 4.3 Run by Specific Feature (Examples)
-```powershell
-# Test F1 (14-Column PLM Parser)
-python -m pytest tests/tier1_features/test_f01_plm_parser.py -v
-
-# Test F5 (O(N) Unit Resolver)
-python -m pytest tests/tier1_features/test_f05_unit_resolver.py -v
-
-# Test F10 (MSI Decision Engine)
-python -m pytest tests/tier1_features/test_f10_msi_decision.py -v
-
-# Test F17 (SAP CS12 Execution)
-python -m pytest tests/tier1_features/test_f17_sap_cs12_execution.py -v
+# Tier 4: Production Workflows (5 tests)
+py -m pytest tests/e2e/test_tier4_production_scenarios.py -v
 ```
