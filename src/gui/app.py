@@ -107,11 +107,11 @@ class SSBOMMainWindow(QMainWindow):
 
         # View 1: Leader Workspace
         self.leader_view = LeaderWorkspaceView(parent=self, base_dir=self.base_dir)
-        self.tabs.addTab(self.leader_view, "👔 Trưởng Nhóm (Leader Workspace)")
+        self.tabs.addTab(self.leader_view, "👔 Trưởng Nhóm")
 
         # View 2: Member Workspace
         self.member_view = MemberWorkspaceView(parent=self, base_dir=self.base_dir)
-        self.tabs.addTab(self.member_view, "👷 Thành Viên Công Đoạn (Member Workspace)")
+        self.tabs.addTab(self.member_view, "👷 Thành Viên Công Đoạn")
 
         # Ensure Leader Workspace is active by default
         self.tabs.setCurrentIndex(0)
@@ -141,22 +141,18 @@ class SSBOMMainWindow(QMainWindow):
         file_menu.addAction(action_settings)
 
         file_menu.addSeparator()
-
-        action_exit = QAction("❌ Thoát ứng dụng", self)
-        action_exit.setShortcut("Ctrl+Q")
+        action_exit = QAction("Đóng ứng dụng", self)
+        action_exit.setShortcut("Alt+F4")
         action_exit.triggered.connect(self.close)
         file_menu.addAction(action_exit)
 
-        # Menu: Chế độ làm việc (Workspaces)
+        # Menu: Không gian làm việc (Workspaces)
         mode_menu = menu_bar.addMenu("Không gian làm việc")
-
         action_goto_leader = QAction("Chuyển sang Quản lý Trưởng nhóm", self)
-        action_goto_leader.setShortcut("Ctrl+1")
         action_goto_leader.triggered.connect(lambda: self.switch_view(0))
         mode_menu.addAction(action_goto_leader)
 
         action_goto_member = QAction("Chuyển sang Nhập liệu Thành viên", self)
-        action_goto_member.setShortcut("Ctrl+2")
         action_goto_member.triggered.connect(lambda: self.switch_view(1))
         mode_menu.addAction(action_goto_member)
 
@@ -179,12 +175,17 @@ class SSBOMMainWindow(QMainWindow):
         toolbar.addAction(action_settings)
 
     def _setup_status_bar(self) -> None:
-        """Create informative status bar with connection pills."""
+        """Create informative status bar with author credit and connection pills."""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
         self.lbl_status_msg = QLabel("Sẵn sàng làm việc")
         self.status_bar.addWidget(self.lbl_status_msg, 1)
+
+        # Author Credit
+        self.lbl_author = QLabel("Người viết: Bùi Đức Vinh - Phòng PTHT Chế Tạo")
+        self.lbl_author.setStyleSheet("color: #0078D4; font-weight: bold; margin-right: 16px;")
+        self.status_bar.addPermanentWidget(self.lbl_author)
 
         # Connection indicators
         self.lbl_tc_indicator = QLabel("● TC24: Kết nối Web")
@@ -195,13 +196,13 @@ class SSBOMMainWindow(QMainWindow):
         self.lbl_sap_indicator.setStyleSheet("color: #10B981; font-weight: bold; margin-right: 10px;")
         self.status_bar.addPermanentWidget(self.lbl_sap_indicator)
 
-        self.lbl_version = QLabel("v2.0 (Modernized Python)")
+        self.lbl_version = QLabel("v2.0")
         self.lbl_version.setStyleSheet("color: #6c757d; margin-right: 8px;")
         self.status_bar.addPermanentWidget(self.lbl_version)
 
     def _setup_logging_dock(self) -> None:
         """Setup dockable real-time logging console at bottom."""
-        self.log_dock = QDockWidget("Nhật ký hoạt động (System Log Console)", self)
+        self.log_dock = QDockWidget("Nhật ký hoạt động", self)
         self.log_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea)
 
         dock_content = QWidget()
@@ -260,7 +261,8 @@ class SSBOMMainWindow(QMainWindow):
             "<h3>Hệ Thống Đối Soát BOM Tự Động (SSBOM v2.0)</h3>"
             "<p>Hiện đại hóa toàn diện quy trình so sánh BOM CTTT vs PLM vs R3.</p>"
             "<ul>"
-            "<li><strong>Phát triển bởi:</strong> Kyocera Document Solutions Vietnam (Bộ phận PE-3)</li>"
+            "<li><strong>Người viết:</strong> Bùi Đức Vinh - Phòng PTHT Chế Tạo</li>"
+            "<li><strong>Đơn vị:</strong> Kyocera Document Solutions Vietnam</li>"
             "<li><strong>Công nghệ:</strong> Python 3.13, PyQt6, OpenXML, Selenium TC24, SAP GUI Scripting</li>"
             "<li><strong>Kiến trúc:</strong> Modular Adapter Pattern, Multi-level BOM Tree O(N) Resolver</li>"
             "</ul>"

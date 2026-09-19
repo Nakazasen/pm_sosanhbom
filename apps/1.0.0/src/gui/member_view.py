@@ -147,7 +147,7 @@ class MemberWorkspaceView(QWidget):
         # ---------------------------------------------------------------------
         # Zone 1: Auto-loading Banner & Assignment Information
         # ---------------------------------------------------------------------
-        banner_group = QGroupBox("1. Thông tin Phân công Kỹ sư & Tự động Nhận diện (Assignment Auto-Loading)")
+        banner_group = QGroupBox("1. Thông tin Phân công")
         banner_layout = QVBoxLayout(banner_group)
         banner_layout.setSpacing(8)
 
@@ -214,9 +214,9 @@ class MemberWorkspaceView(QWidget):
         self.sub_unit_combo.currentTextChanged.connect(self._on_sub_unit_changed)
         row_c.addWidget(self.sub_unit_combo)
 
-        row_c.addWidget(QLabel("Người phụ trách (Sync):"))
+        row_c.addWidget(QLabel("Người phụ trách:"))
         self.author_edit = QLineEdit()
-        self.author_edit.setPlaceholderText("Gõ tên kỹ sư (VD: Son_mecha1, Duy_mecha1...)")
+        self.author_edit.setPlaceholderText("Gõ tên người phụ trách (VD: Son_mecha1, Duy_mecha1...)")
         completer = QCompleter(ROSTER_MECHA_1 + ROSTER_MECHA_2 + ROSTER_MECHA_3, self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.author_edit.setCompleter(completer)
@@ -461,8 +461,6 @@ class MemberWorkspaceView(QWidget):
         self.label_check_combo = QComboBox()
         self.label_check_combo.addItems([
             "Dán phẳng, không bọt khí, đúng chiều mũi tên",
-            "Kiểm tra mã vạch quét đọc được",
-            "Không bong tróc",
         ])
         l_col2.addWidget(self.label_check_combo)
         lbl_quick_layout.addLayout(l_col2)

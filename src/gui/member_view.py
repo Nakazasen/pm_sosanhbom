@@ -147,7 +147,7 @@ class MemberWorkspaceView(QWidget):
         # ---------------------------------------------------------------------
         # Zone 1: Auto-loading Banner & Assignment Information
         # ---------------------------------------------------------------------
-        banner_group = QGroupBox("1. Thông tin Phân công Kỹ sư & Tự động Nhận diện (Assignment Auto-Loading)")
+        banner_group = QGroupBox("1. Thông tin Phân công")
         banner_layout = QVBoxLayout(banner_group)
         banner_layout.setSpacing(8)
 
@@ -214,9 +214,9 @@ class MemberWorkspaceView(QWidget):
         self.sub_unit_combo.currentTextChanged.connect(self._on_sub_unit_changed)
         row_c.addWidget(self.sub_unit_combo)
 
-        row_c.addWidget(QLabel("Người phụ trách (Sync):"))
+        row_c.addWidget(QLabel("Người phụ trách:"))
         self.author_edit = QLineEdit()
-        self.author_edit.setPlaceholderText("Gõ tên kỹ sư (VD: Son_mecha1, Duy_mecha1...)")
+        self.author_edit.setPlaceholderText("Gõ tên người phụ trách (VD: Son_mecha1, Duy_mecha1...)")
         completer = QCompleter(ROSTER_MECHA_1 + ROSTER_MECHA_2 + ROSTER_MECHA_3, self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.author_edit.setCompleter(completer)
@@ -341,21 +341,31 @@ class MemberWorkspaceView(QWidget):
         col1_layout = QVBoxLayout()
         col1_layout.addWidget(QLabel("Mã LK Barcode:"))
         self.msi_barcode_edit = QLineEdit()
+        self.msi_barcode_edit.setPlaceholderText("VD: 302FP93010")
+        col1_layout.addWidget(self.msi_barcode_edit)
         col1_layout.addWidget(QLabel("Mã UNIT / Bản mạch:"))
         self.msi_unit_code_edit = QLineEdit()
         self.msi_unit_code_edit.setPlaceholderText("VD: 302FP93010")
+        col1_layout.addWidget(self.msi_unit_code_edit)
+        col1_layout.addWidget(QLabel("Tên UNIT:"))
         self.msi_unit_name_edit = QLineEdit()
         self.msi_unit_name_edit.setPlaceholderText("VD: LSU UNIT")
         col1_layout.addWidget(self.msi_unit_name_edit)
+        msi_edit_layout.addLayout(col1_layout)
+
         col2_layout = QVBoxLayout()
         col2_layout.addWidget(QLabel("3 ký tự cố định MSI:"))
         self.msi_code_edit = QLineEdit()
         self.msi_code_edit.setPlaceholderText("VD: 1HN")
         col2_layout.addWidget(self.msi_code_edit)
         col2_layout.addWidget(QLabel("SEVICE Comment (nếu có):"))
+        self.msi_service_edit = QLineEdit()
+        self.msi_service_edit.setPlaceholderText("VD: -")
         col2_layout.addWidget(self.msi_service_edit)
         col2_layout.addWidget(QLabel("ABS (Phán định chất lượng):"))
         self.msi_abs_combo = QComboBox()
+        self.msi_abs_combo.addItems(["OK", "NG", "N/A", "-"])
+        col2_layout.addWidget(self.msi_abs_combo)
         msi_edit_layout.addLayout(col2_layout)
 
         col3_layout = QVBoxLayout()
@@ -443,6 +453,8 @@ class MemberWorkspaceView(QWidget):
         lbl_quick_layout.addLayout(l_col1)
 
         l_col2 = QVBoxLayout()
+        l_col2.addWidget(QLabel("Vị trí dán trên CTTT:"))
+        self.label_pos_edit = QLineEdit()
         self.label_pos_edit.setPlaceholderText("VD: Mặt trên vỏ khung LSU - Trang 03")
         l_col2.addWidget(self.label_pos_edit)
         l_col2.addWidget(QLabel("Quy cách kiểm tra:"))

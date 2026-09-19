@@ -4,9 +4,9 @@
   "policy": "HASH_ONLY_LAN",
   "version": "1.0.0",
   "package_name": "SSBOM_Manager-1.0.0.mpupdate",
-  "package_sha256": "6fd3119ee37bd8c327e0396e3c8040297c2fe43ff1be1a608592f22eb5d632a9",
-  "package_size": 201483,
-  "published_at": "2026-09-19T11:05:01.185771Z",
+  "package_sha256": "0bdc9a96aff0f68dd318274030d2ac4313fc840bc2aeb6d9d55111758c696891",
+  "package_size": 201471,
+  "published_at": "2026-09-19T12:08:43.359000Z",
   "min_launcher_version": "1.0.0",
   "release_notes": "B\u1ea3n ph\u00e1t h\u00e0nh ch\u00ednh th\u1ee9c h\u1ec7 th\u1ed1ng So S\u00e1nh BOM t\u1ef1 \u0111\u1ed9ng (TC14 & SAP R3)."
 }
