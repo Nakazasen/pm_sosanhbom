@@ -1464,7 +1464,6 @@ class Step2DataSourcingWidget(QWidget):
         QMessageBox.information(
             self,
             "Hoàn tất lọc BOM",
-            f"Đã hoàn thành lọc BOM Level 1..6 và sao lưu {filtered_count} tệp vào backupTC14full/.",
             f"Đã hoàn thành lọc BOM Level 1..6 và sao lưu {filtered_count} tệp vào backupTC14full/.\n\n"
             f"📁 Tệp BOM đã lọc được lưu trữ tại thư mục từng mã máy:\n"
             f"<Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\",

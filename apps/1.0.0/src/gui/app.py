@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -35,6 +35,9 @@ from PyQt6.QtWidgets import (
 from src.gui.leader_view import LeaderWorkspaceView
 from src.gui.member_view import MemberWorkspaceView
 from src.gui.settings_dialog import SettingsDialog
+from src.gui.update_dialog import UpdateDialog
+from src.services.app_updates import AppUpdateManager
+from src.services.update_delivery import UpdateDeliveryService
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,8 @@ class SSBOMMainWindow(QMainWindow):
         self._init_ui()
         self._setup_menus_and_toolbars()
         self._setup_status_bar()
+        # Schedule background update check if enabled in sources config
+        QTimer.singleShot(2500, self._check_updates_silent)
 
         logger.info("SSBOM Desktop Application initialized.")
 
@@ -158,6 +163,10 @@ class SSBOMMainWindow(QMainWindow):
 
         # Menu: Trợ giúp (Help)
         help_menu = menu_bar.addMenu("Trợ giúp")
+        action_check_updates = QAction("🔄 Kiểm tra cập nhật phần mềm...", self)
+        action_check_updates.triggered.connect(lambda: self.check_for_updates(interactive=True))
+        help_menu.addAction(action_check_updates)
+        help_menu.addSeparator()
         action_about = QAction("Về chương trình...", self)
         action_about.triggered.connect(self._show_about_dialog)
         help_menu.addAction(action_about)
@@ -196,8 +205,13 @@ class SSBOMMainWindow(QMainWindow):
         self.lbl_sap_indicator.setStyleSheet("color: #10B981; font-weight: bold; margin-right: 10px;")
         self.status_bar.addPermanentWidget(self.lbl_sap_indicator)
 
-        self.lbl_version = QLabel("v2.0")
-        self.lbl_version.setStyleSheet("color: #6c757d; margin-right: 8px;")
+        try:
+            active_ver = AppUpdateManager(self.base_dir).get_active_version()
+        except Exception:
+            active_ver = "1.0.0"
+
+        self.lbl_version = QLabel(f"v{active_ver}")
+        self.lbl_version.setStyleSheet("color: #6c757d; margin-right: 8px; font-weight: bold;")
         self.status_bar.addPermanentWidget(self.lbl_version)
 
     def _setup_logging_dock(self) -> None:
@@ -252,6 +266,50 @@ class SSBOMMainWindow(QMainWindow):
     def _on_batch_finished(self, result: Any) -> None:
         """Handle event when leader finishes batch reconciliation."""
         self.lbl_status_msg.setText(f"Đối soát hàng loạt hoàn thành! Trạng thái: {result.overall_status}")
+
+    def check_for_updates(self, interactive: bool = True) -> None:
+        """Check for updates from LAN sources and present dialog if available."""
+        try:
+            update_mgr = AppUpdateManager(install_root=self.base_dir)
+            current_ver = update_mgr.get_active_version()
+            delivery = UpdateDeliveryService(base_dir=self.base_dir, current_version=current_ver)
+            candidate = delivery.check_for_updates()
+
+            if candidate:
+                dlg = UpdateDialog(
+                    parent=self,
+                    candidate=candidate,
+                    current_version=current_ver,
+                    delivery_service=delivery,
+                    update_manager=update_mgr,
+                )
+                dlg.exec()
+            elif interactive:
+                QMessageBox.information(
+                    self,
+                    "Cập nhật phần mềm",
+                    f"Phiên bản hiện tại v{current_ver} đã là phiên bản mới nhất trên hệ thống mạng!",
+                )
+        except Exception as exc:
+            logger.error("Error during update check: %s", exc)
+            if interactive:
+                QMessageBox.warning(
+                    self,
+                    "Kiểm tra cập nhật",
+                    f"Không thể kiểm tra bản cập nhật từ mạng LAN:\n{exc}",
+                )
+
+    def _check_updates_silent(self) -> None:
+        """Silent update check triggered on application startup if enabled in config."""
+        try:
+            delivery = UpdateDeliveryService(base_dir=self.base_dir)
+            cfg = delivery.load_sources_configuration()
+            if not cfg.get("startup_check", True):
+                return
+
+            self.check_for_updates(interactive=False)
+        except Exception as exc:
+            logger.debug("Silent startup update check failed: %s", exc)
 
     def _show_about_dialog(self) -> None:
         """Show about software information."""

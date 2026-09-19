@@ -12,6 +12,12 @@ htmlcov/
 # Build artifacts & compiled binaries
 build/
 dist/
+release_artifacts/
+*.exe
+*.spec
+.staging/
+.updates/
+backups/
 *.egg-info/
 *.egg
 

@@ -3,10 +3,15 @@
   "channel": "stable",
   "policy": "HASH_ONLY_LAN",
   "version": "1.0.0",
+  "package": "SSBOM_Manager-1.0.0.mpupdate",
   "package_name": "SSBOM_Manager-1.0.0.mpupdate",
-  "package_sha256": "f1f84ff761a83d4e72e632e05cc799ede948ae1093801a7df8516d3cf8105a41",
-  "package_size": 203098,
-  "published_at": "2026-09-19T12:35:44.462357Z",
+  "sha256": "be480b326895e2afe36fc0a15ddabc6a6136d8db6fbd57adad09b93a72df4043",
+  "package_sha256": "be480b326895e2afe36fc0a15ddabc6a6136d8db6fbd57adad09b93a72df4043",
+  "size": 218012,
+  "package_size": 218012,
+  "published_at": "2026-09-19T12:52:30.356480+00:00Z",
+  "min_app_version": "1.0.0",
   "min_launcher_version": "1.0.0",
+  "notes": "B\u1ea3n ph\u00e1t h\u00e0nh ch\u00ednh th\u1ee9c h\u1ec7 th\u1ed1ng So S\u00e1nh BOM t\u1ef1 \u0111\u1ed9ng (TC14 & SAP R3).",
   "release_notes": "B\u1ea3n ph\u00e1t h\u00e0nh ch\u00ednh th\u1ee9c h\u1ec7 th\u1ed1ng So S\u00e1nh BOM t\u1ef1 \u0111\u1ed9ng (TC14 & SAP R3)."
 }

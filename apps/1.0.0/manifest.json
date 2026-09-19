@@ -1,12 +1,17 @@
 {
-  "name": "SSBOM_Manager",
+  "schema": 1,
+  "kind": "application",
+  "id": "SSBOM_Manager",
   "version": "1.0.0",
-  "created_at": "2026-09-19T12:35:44.427453Z",
+  "min_app_version": "1.0.0",
+  "database_schema": 1,
+  "health_check": "--health-check",
+  "created_at": "2026-09-19T12:52:30.308649+00:00Z",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "SSBOM_App.py": {
-      "sha256": "ccd0f89900f9c2022547630dd1653f3e163f8d099692d39b57f818da98c5b68e",
-      "size": 206
+      "sha256": "4fe30559aa6006785653d2bd09a892ff75cd81bf6139bda79e95cbad69c3764a",
+      "size": 436
     },
     "locales/ja.json": {
       "sha256": "a75e7d63a7fd1eb1aedf4d721ff3aa7ddc09fb1a31c0ad99c2817130ab6bb6d7",
@@ -81,8 +86,8 @@
       "size": 3039
     },
     "src/gui/app.py": {
-      "sha256": "75c2477088723c3919263a30edd649d6b07f4b4e26a2eba80fe0140c93c2aeac",
-      "size": 11500
+      "sha256": "040cb8490da3b8bfb09b57b99e8cd3dfe43d52d830acc7c022e8523a52e0f8f9",
+      "size": 14223
     },
     "src/gui/leader_view.py": {
       "sha256": "12db532b030b5e7b2059974340f29cd9d8f98a2984c37bf193b97fb5ff7f4908",
@@ -99,6 +104,10 @@
     "src/gui/settings_dialog.py": {
       "sha256": "9cfa440d90a9de47177ec50b5bb23f2479719f7d8179f0ae6f55beeb43fc7943",
       "size": 16292
+    },
+    "src/gui/update_dialog.py": {
+      "sha256": "5078e742a85a266464366d68d531b91e882ad2cb5598d3b639d1398d8d9c64d7",
+      "size": 9219
     },
     "src/gui/__init__.py": {
       "sha256": "1667daf119b28454a32982f53cf456078ad880de2b767037b8b6efb3a6a2ac0d",
@@ -128,9 +137,21 @@
       "sha256": "0a3e2c5979e70c9c3eae10925bed4bae8154c77c27371e535f3620f83bae6256",
       "size": 1253
     },
+    "src/services/app_updates.py": {
+      "sha256": "2fa4dbf0dff06681377f5e157d97ffb8c7f91fb368bb651ffe76366f5ed44c94",
+      "size": 14058
+    },
     "src/services/excel_exporter.py": {
       "sha256": "b66f97c90b28ef17e297f2ec448255868e2e37074fd28f9396da3af6a1949a33",
       "size": 6392
+    },
+    "src/services/update_delivery.py": {
+      "sha256": "7aac0867e1d558d7b5b82f346e1c44f28bfe4c609806445a1255f581892baaf4",
+      "size": 12638
+    },
+    "src/services/update_security.py": {
+      "sha256": "680ac4e7c25d8cda63c8f8ef26180afd5892bf4bbb5e62990e7aeac9428211e1",
+      "size": 10687
     },
     "src/ui/i18n.py": {
       "sha256": "5fae4376fe8d4dab5bb5cb95322f21bb94dff73330461eba650fd2ce9d1dd844",

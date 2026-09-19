@@ -1,6 +1,6 @@
 {
   "active_version": "1.0.0",
   "entrypoint": "apps/1.0.0/SSBOM_App.py",
-  "manifest_sha256": "7415a9e4aa5dbe8fac4ad795c84f85c63b8f8ed1e877043cf5a710ae01713823",
-  "updated_at": "2026-09-19T12:35:44.428087Z"
+  "manifest_sha256": "e069a0cb9092976965e8d11976160012971d74703c258473f07a325cbed5e555",
+  "updated_at": "2026-09-19T12:52:30.309329+00:00Z"
 }
