@@ -1243,8 +1243,52 @@ class Step2DataSourcingWidget(QWidget):
         if row < len(active_machines):
             active_machines[row].custom_date = dt_str
 
+    def _auto_route_model_files_to_machine_dirs(self) -> None:
+        """Automatically route any BOM files found in model root or sub-folders into machine-specific folders."""
+        model_dir = self.state.base_dir / self.state.model_name
+        if not model_dir.exists():
+            return
+
+        active_machines = [m for m in self.state.machines if not m.is_excluded]
+        if not active_machines:
+            return
+
+        # Check model_dir root, PLM subfolder, R3 subfolder for any files matching machine codes
+        search_dirs = [model_dir, model_dir / "PLM", model_dir / "R3"]
+        for s_dir in search_dirs:
+            if not s_dir.exists():
+                continue
+            candidates = (
+                list(s_dir.glob("PLM_*.xlsx"))
+                + list(s_dir.glob("PLM_*.xlsm"))
+                + list(s_dir.glob("R3_*.xls*"))
+            )
+            for p in candidates:
+                if not p.is_file():
+                    continue
+                fname = p.name.upper()
+                for m in active_machines:
+                    if m.machine_code.upper() in fname:
+                        target_dir = m.folder_path or (model_dir / m.machine_code)
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        dest = target_dir / p.name
+                        if p.resolve() != dest.resolve():
+                            shutil.copyfile(str(p), str(dest))
+                            if "PLM" in fname:
+                                m.plm_file = dest
+                            elif "R3" in fname:
+                                m.r3_file = dest
+                            # If downloaded to root model_dir, remove so it doesn't leave duplicates
+                            if s_dir == model_dir:
+                                try:
+                                    p.unlink()
+                                except Exception:
+                                    pass
+                        break
+
     def refresh_sourcing_table(self) -> None:
         """Scan folder directories and update sourcing table rows."""
+        self._auto_route_model_files_to_machine_dirs()
         self.sourcing_table.setRowCount(0)
         active_machines = [m for m in self.state.machines if not m.is_excluded]
 
@@ -1347,6 +1391,7 @@ class Step2DataSourcingWidget(QWidget):
         target_dir = self.state.base_dir / self.state.model_name
         dlg = PLMDownloadDialog(parent=self, default_dir=target_dir)
         if dlg.exec():
+            self._auto_route_model_files_to_machine_dirs()
             self.refresh_sourcing_table()
 
     def _import_local_bom_files(self) -> None:
@@ -1385,6 +1430,7 @@ class Step2DataSourcingWidget(QWidget):
 
     def execute_bom_filtering(self) -> None:
         """Run DateFilter and ModelPruner on active PLM files with backup to backupTC14full/."""
+        self._auto_route_model_files_to_machine_dirs()
         active_machines = [m for m in self.state.machines if not m.is_excluded]
         backup_dir = self.state.base_dir / "backupTC14full"
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -1419,6 +1465,9 @@ class Step2DataSourcingWidget(QWidget):
             self,
             "Hoàn tất lọc BOM",
             f"Đã hoàn thành lọc BOM Level 1..6 và sao lưu {filtered_count} tệp vào backupTC14full/.",
+            f"Đã hoàn thành lọc BOM Level 1..6 và sao lưu {filtered_count} tệp vào backupTC14full/.\n\n"
+            f"📁 Tệp BOM đã lọc được lưu trữ tại thư mục từng mã máy:\n"
+            f"<Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\",
         )
 
 

@@ -375,6 +375,40 @@ class TestLeaderWizardStep2:
         assert len(backups) >= 1
         assert view.state.machines[0].is_filtered is True
 
+    def test_auto_route_downloaded_files_to_machine_folder(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+    ) -> None:
+        """Verify files downloaded to model directory are automatically routed into machine folder."""
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+        step2 = view.step2_widget
+
+        step1.model_combo.setCurrentText("Virgo")
+        step1.machine_table.setRowCount(0)
+        step1._add_machine_row(code="110C103NL0")
+        step1.sync_state_from_ui()
+
+        model_dir = tmp_path / "Virgo"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        mach_dir = model_dir / "110C103NL0"
+        mach_dir.mkdir(parents=True, exist_ok=True)
+
+        # Place raw download in model root (as if downloaded by PLM/SAP tool)
+        raw_plm = model_dir / "PLM_110C103NL0.xlsx"
+        raw_r3 = model_dir / "R3_110C103NL0.xls"
+        raw_plm.write_text("DOWNLOADED_PLM")
+        raw_r3.write_text("DOWNLOADED_R3")
+
+        step2.refresh_sourcing_table()
+
+        # Files must be moved/copied directly into machine directory
+        assert (mach_dir / "PLM_110C103NL0.xlsx").exists()
+        assert (mach_dir / "R3_110C103NL0.xls").exists()
+        assert "✓ Sẵn sàng" in step2.sourcing_table.item(0, 3).text()
+        assert "✓ Sẵn sàng" in step2.sourcing_table.item(0, 4).text()
+
 
 # =============================================================================
 # Step 3 Tests

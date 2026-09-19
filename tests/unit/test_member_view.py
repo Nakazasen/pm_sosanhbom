@@ -17,7 +17,7 @@ from unittest.mock import patch
 import openpyxl
 import pandas as pd
 import pytest
-from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
+from PyQt6.QtWidgets import QApplication, QLabel, QMessageBox
 
 from src.gui.member_view import CANONICAL_MSI_UNITS, MemberWorkspaceView
 from src.reporting.excel_generator import COLOR_GREEN_FILL_HEX, COLOR_RED_FILL_HEX
