@@ -155,6 +155,13 @@ class SSBOMMainWindow(QMainWindow):
         self.action_settings.triggered.connect(self.open_settings_dialog)
         file_menu.addAction(self.action_settings)
 
+        self.action_bom_filter = QAction(" Quản lý Bộ lọc BOM PLM", self)
+        self.action_bom_filter.setIcon(self.theme_mgr.get_styled_icon("filter"))
+        self.action_bom_filter.setShortcut("Ctrl+B")
+        self.action_bom_filter.setToolTip("Quản lý và cấu hình các quy tắc lọc BOM PLM (Sheet BolocBom) [Ctrl+B]")
+        self.action_bom_filter.triggered.connect(self.open_bom_filter_dialog)
+        file_menu.addAction(self.action_bom_filter)
+
         self.action_theme = QAction(" Đổi Giao Diện Sáng/Tối", self)
         self.action_theme.setShortcut("Ctrl+T")
         self.action_theme.triggered.connect(self._toggle_theme)
@@ -208,6 +215,7 @@ class SSBOMMainWindow(QMainWindow):
         self.addToolBar(self.toolbar)
 
         self.toolbar.addAction(self.action_download_plm)
+        self.toolbar.addAction(self.action_bom_filter)
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.action_goto_leader)
         self.toolbar.addAction(self.action_goto_member)
@@ -310,10 +318,21 @@ class SSBOMMainWindow(QMainWindow):
         dlg = SettingsDialog(parent=self, config_path=self.config_path)
         dlg.exec()
 
+    def open_bom_filter_dialog(self) -> None:
+        """Display BOM filter rules configuration dialog."""
+        from src.gui.bom_filter_dialog import BOMFilterConfigDialog
+        current_model = None
+        if hasattr(self, "leader_view") and hasattr(self.leader_view, "state"):
+            current_model = getattr(self.leader_view.state, "model_name", None)
+        dlg = BOMFilterConfigDialog(initial_model=current_model, parent=self)
+        dlg.exec()
+
     def _refresh_theme_icons(self) -> None:
         """Re-apply dynamic styled SVG icons across all actions, tabs, and window."""
         if hasattr(self, "action_download_plm"):
             self.action_download_plm.setIcon(self.theme_mgr.get_styled_icon("download"))
+        if hasattr(self, "action_bom_filter"):
+            self.action_bom_filter.setIcon(self.theme_mgr.get_styled_icon("filter"))
         if hasattr(self, "action_goto_leader"):
             self.action_goto_leader.setIcon(self.theme_mgr.get_styled_icon("users"))
         if hasattr(self, "action_goto_member"):

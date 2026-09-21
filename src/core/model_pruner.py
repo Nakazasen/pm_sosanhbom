@@ -51,9 +51,14 @@ class ModelPruner:
         self,
         custom_rules: dict[str, list[ModelRule]] | None = None,
         strict: bool = False,
+        filter_manager: Any | None = None,
+        use_db: bool = True,
     ) -> None:
         self.rules_registry: dict[str, list[ModelRule]] = {}
         self.strict = strict
+        self._has_custom_rules = bool(custom_rules)
+        self.filter_manager = filter_manager
+        self.use_db = use_db
 
         # Populate with default rules from BolocBom
         for model, rule_dicts in DEFAULT_MODEL_RULES.items():
@@ -73,6 +78,26 @@ class ModelPruner:
 
     def get_rules_for_model(self, model_name: str) -> list[ModelRule]:
         """Retrieve the list of decomposition rules for a given machine model."""
+        if not model_name:
+            return []
+
+        # If custom rules were explicitly passed to __init__, respect them first
+        if self._has_custom_rules and model_name in self.rules_registry:
+            return self.rules_registry[model_name]
+
+        # 1. Query dynamic rules from shared SQLite DB
+        if self.use_db:
+            try:
+                if self.filter_manager is None:
+                    from src.core.bom_filter_manager import BOMFilterManager
+                    self.filter_manager = BOMFilterManager()
+                db_rules = self.filter_manager.get_model_rules_for_pruner(model_name)
+                if db_rules:
+                    return db_rules
+            except Exception as ex:
+                logger.warning("Could not load rules from DB for model %s: %s", model_name, ex)
+
+        # 2. Check registry / fallback default rules
         if model_name in self.rules_registry:
             return self.rules_registry[model_name]
 

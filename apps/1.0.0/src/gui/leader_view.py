@@ -1515,6 +1515,20 @@ class Step2DataSourcingWidget(QWidget):
         )
         self.btn_filter_bom.clicked.connect(self.execute_bom_filtering)
 
+        self.btn_config_bom_filter = QPushButton("⚙️ Cấu Hình Bộ Lọc BOM")
+        self.btn_config_bom_filter.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_config_bom_filter.setStyleSheet(
+            "background-color: #4B5563; color: white; padding: 8px 14px; border-radius: 4px;"
+        )
+        self.btn_config_bom_filter.clicked.connect(self.open_bom_filter_dialog)
+
+        self.btn_visual_filter = QPushButton("🌳 Tạo Lọc Trực Quan")
+        self.btn_visual_filter.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_visual_filter.setStyleSheet(
+            "background-color: #059669; color: white; padding: 8px 14px; border-radius: 4px;"
+        )
+        self.btn_visual_filter.clicked.connect(self.open_visual_bom_builder_dialog)
+
         self.btn_refresh_sourcing = QPushButton("Làm mới trạng thái")
         self.btn_refresh_sourcing.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_refresh_sourcing.clicked.connect(self.refresh_sourcing_table)
@@ -1523,6 +1537,8 @@ class Step2DataSourcingWidget(QWidget):
         btn_layout.addWidget(self.btn_download_plm)
         btn_layout.addWidget(self.btn_import_files)
         btn_layout.addWidget(self.btn_filter_bom)
+        btn_layout.addWidget(self.btn_config_bom_filter)
+        btn_layout.addWidget(self.btn_visual_filter)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_refresh_sourcing)
 
@@ -1776,6 +1792,15 @@ class Step2DataSourcingWidget(QWidget):
                     tree = parser.parse_file(m.plm_file)
                     filtered_tree = date_filter.filter_tree(tree)
                     pruned_tree = model_pruner.prune_tree(filtered_tree, model_name=self.state.model_name)
+                    # Also prune rows directly in Excel workbook
+                    try:
+                        model_pruner.prune_excel_file(
+                            input_path=m.plm_file,
+                            output_path=m.plm_file,
+                            model_name=self.state.model_name,
+                        )
+                    except Exception as p_ex:
+                        logger.warning("Could not prune rows directly in %s: %s", m.plm_file, p_ex)
                     m.is_filtered = True
                     filtered_count += 1
                 except Exception as ex:
@@ -1791,6 +1816,27 @@ class Step2DataSourcingWidget(QWidget):
             f"📁 Tệp BOM đã lọc được lưu trữ tại thư mục từng mã máy:\n"
             f"<Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\",
         )
+
+    def open_bom_filter_dialog(self) -> None:
+        """Open the BOM filter configuration dialog with the current model selected."""
+        from src.gui.bom_filter_dialog import BOMFilterConfigDialog
+        dlg = BOMFilterConfigDialog(initial_model=self.state.model_name, parent=self)
+        dlg.exec()
+
+    def open_visual_bom_builder_dialog(self) -> None:
+        """Open visual tree simulation dialog, auto-selecting PLM file of first active machine if present."""
+        from src.gui.bom_visual_builder_dialog import BOMVisualRuleBuilderDialog
+        initial_file = None
+        for m in self.state.machines:
+            if not m.is_excluded and m.plm_file and m.plm_file.exists():
+                initial_file = m.plm_file
+                break
+        dlg = BOMVisualRuleBuilderDialog(
+            initial_model=self.state.model_name,
+            initial_file=initial_file,
+            parent=self,
+        )
+        dlg.exec()
 
 
 # =============================================================================

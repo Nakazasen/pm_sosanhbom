@@ -122,8 +122,8 @@
       "size": 24814
     },
     "src/core/model_pruner.py": {
-      "sha256": "309dcc04ed7980c810bb411f6a1794d9dae5188eee80c52ab7354729b3df5529",
-      "size": 11723
+      "sha256": "4ba0a2e231d551d45bd2c636d2923a4e49c3851a28f3a2fe2e22cf6747d87eee",
+      "size": 12821
     },
     "src/core/models.py": {
       "sha256": "7b1276d3c762a7fa0ae25c06a5eee7a6108611792bee2d8161dbbf4d2fa5affe",
@@ -154,8 +154,8 @@
       "size": 923
     },
     "src/gui/app.py": {
-      "sha256": "240c2f1b9c41d7394992734470a33a3d3a494bb4daba1a6b7dbb5348e94d509d",
-      "size": 21107
+      "sha256": "243fc90490d6f7050b69151a9d6ea9323b9e36fd6b0c1c8ec506d83fdaca5962",
+      "size": 22248
     },
     "src/gui/assets/icons/alert-triangle.svg": {
       "sha256": "615d5fa85e13b8313b950b6f9bb00238ea616b0d966656be1c6f29103cd8c873",
@@ -246,8 +246,8 @@
       "size": 271
     },
     "src/gui/leader_view.py": {
-      "sha256": "f5e23d72294d80947d59fedff9b0cbd9a49770a0b1e847f6c517756a1aecba90",
-      "size": 146649
+      "sha256": "10feb8af9f285cdb057ec274a7ca6e139f539e49dc35d33ea9bec598d6563fd7",
+      "size": 149025
     },
     "src/gui/member_roster_dialog.py": {
       "sha256": "05db0fe800c3d4ad274e8a11b29b0ca66d2ae92d2c8c82abcbf2c05f7e0f4369",
@@ -356,6 +356,18 @@
     "SSBOM_App.py": {
       "sha256": "4fe30559aa6006785653d2bd09a892ff75cd81bf6139bda79e95cbad69c3764a",
       "size": 436
+    },
+    "src/core/bom_filter_manager.py": {
+      "sha256": "0296652195a7d3b2dfac4be0bdd327f64350568f4dbe817c07633df96aee444d",
+      "size": 22756
+    },
+    "src/gui/bom_filter_dialog.py": {
+      "sha256": "1fbb4c808197a80d1376d1ce9f0fdf9ca1db8ac731084a8e8746210c1e61ee5f",
+      "size": 31792
+    },
+    "src/gui/bom_visual_builder_dialog.py": {
+      "sha256": "90b007521c7e1e2972e5862caa8667c915528200e9a678b92863ff58ebbf2566",
+      "size": 29849
     }
   }
 }
