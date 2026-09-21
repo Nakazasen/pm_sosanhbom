@@ -274,12 +274,12 @@
       "size": 5346
     },
     "src/gui/styles/dark_theme.qss": {
-      "sha256": "59e633f7ecf900b5b620bcf1bc4e5b740089553e3d41bb892b5cc3811d080844",
-      "size": 9713
+      "sha256": "20b32d6db055e406e3db53fd6289ca90d643eab502ead70752bdfca99e223719",
+      "size": 9875
     },
     "src/gui/styles/light_theme.qss": {
-      "sha256": "c086c7fc46f5f0340f72a4dadf955164898931233a185b2c3f01e5fddfd60e4a",
-      "size": 9710
+      "sha256": "c1aeef4c982d3811ad4297446860204175d8f4503c3614b902ced11bb1bee81c",
+      "size": 9872
     },
     "src/gui/styles/theme_manager.py": {
       "sha256": "610b473987e33f9a50a285750e731ac84fb54e135b92808622b943023a48974f",
@@ -362,12 +362,12 @@
       "size": 22756
     },
     "src/gui/bom_filter_dialog.py": {
-      "sha256": "1fbb4c808197a80d1376d1ce9f0fdf9ca1db8ac731084a8e8746210c1e61ee5f",
-      "size": 31792
+      "sha256": "e5aeda3b60328c034696c72f21d4db7bfb44dd73d5ca86a73261e03ab7cc4c8b",
+      "size": 37805
     },
     "src/gui/bom_visual_builder_dialog.py": {
-      "sha256": "90b007521c7e1e2972e5862caa8667c915528200e9a678b92863ff58ebbf2566",
-      "size": 29849
+      "sha256": "0f3ee316e2660520634ba5157b55cacaf35521d14863c193a45a3a3eb246ebc6",
+      "size": 35354
     }
   }
 }

@@ -22,10 +22,12 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -63,8 +65,21 @@ class BOMVisualRuleBuilderDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("🌳 Trình Tạo Bộ Lọc BOM Trực Quan Từ Cây BOM Thực Tế")
-        self.resize(1180, 740)
-        self.setMinimumSize(960, 560)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
+
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            avail_w = avail.width()
+            avail_h = avail.height()
+        else:
+            avail_w, avail_h = 1280, 720
+
+        target_w = min(1120, max(820, int(avail_w * 0.90)))
+        target_h = min(560, max(380, int(avail_h * 0.82)))
+        self.resize(target_w, target_h)
+        self.setMinimumSize(780, 380)
 
         self.filter_manager = filter_manager or BOMFilterManager()
         self.current_model: str = initial_model or ""
@@ -84,38 +99,40 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
-        # 1. Header Banner
-        header_widget = QWidget()
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 4)
+        # 1. Header Banner Card
+        self.header_frame = QFrame()
+        self.header_frame.setObjectName("dialog_header_frame")
+        header_layout = QHBoxLayout(self.header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(10)
 
         icon_lbl = QLabel()
-        icon_lbl.setPixmap(get_theme_manager().get_styled_icon("layers").pixmap(28, 28))
+        icon_lbl.setPixmap(get_theme_manager().get_styled_icon("layers").pixmap(26, 26))
         header_layout.addWidget(icon_lbl)
 
         title_vbox = QVBoxLayout()
-        title_lbl = QLabel("Trình Tạo Bộ Lọc BOM Trực Quan Dựa Trên Cây BOM Mô Phỏng")
-        title_lbl.setFont(QFont("Calibri", 13, QFont.Weight.Bold))
-        title_vbox.addWidget(title_lbl)
+        title_vbox.setSpacing(2)
+        self.title_lbl = QLabel("Trình Tạo Bộ Lọc BOM Trực Quan Dựa Trên Cây BOM Mô Phỏng")
+        self.title_lbl.setFont(QFont("Calibri", 12, QFont.Weight.Bold))
+        title_vbox.addWidget(self.title_lbl)
 
-        sub_lbl = QLabel(
+        self.sub_lbl = QLabel(
             "Nạp file BOM PLM Full lớn nhất của dòng máy. Đóng/mở các cấp Level và tick chọn trực tiếp các cụm "
             "Phantom / Cụm lắp ráp cần loại bỏ linh kiện con. Xem trước kết quả cắt tỉa theo thời gian thực."
         )
-        sub_lbl.setFont(QFont("Calibri", 9))
-        sub_lbl.setStyleSheet("color: #64748B;")
-        title_vbox.addWidget(sub_lbl)
+        self.sub_lbl.setFont(QFont("Calibri", 9))
+        title_vbox.addWidget(self.sub_lbl)
         header_layout.addLayout(title_vbox)
         header_layout.addStretch()
 
         # Model selector in header
         model_box = QHBoxLayout()
-        model_lbl = QLabel("Dòng máy (Model):")
-        model_lbl.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
-        model_box.addWidget(model_lbl)
+        self.model_lbl = QLabel("Dòng máy (Model):")
+        self.model_lbl.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        model_box.addWidget(self.model_lbl)
 
         self.combo_model = QComboBox()
         self.combo_model.setEditable(True)
@@ -125,7 +142,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         model_box.addWidget(self.combo_model)
         header_layout.addLayout(model_box)
 
-        main_layout.addWidget(header_widget)
+        main_layout.addWidget(self.header_frame, 0)
 
         # 2. Control Toolbar
         toolbar_group = QGroupBox("1. Thao Tác Nạp Tệp & Điều Khiển Cây BOM")
@@ -169,7 +186,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.txt_search.textChanged.connect(self._on_search_tree)
         tb_layout.addWidget(self.txt_search)
 
-        main_layout.addWidget(toolbar_group)
+        main_layout.addWidget(toolbar_group, 0)
 
         # 3. Main Tree View
         tree_group = QGroupBox("2. Mô Phỏng Cấu Trúc Cây BOM & Thiết Lập Quy Tắc Cắt Tỉa")
@@ -199,10 +216,14 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.tree_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
         tree_layout.addWidget(self.tree_widget)
-        main_layout.addWidget(tree_group)
+        main_layout.addWidget(tree_group, 1)
 
-        # 4. Simulation Stats & Action Bar
-        bottom_box = QHBoxLayout()
+        # 4. Simulation Stats & Action Bar Card
+        self.bottom_frame = QFrame()
+        self.bottom_frame.setObjectName("dialog_bottom_frame")
+        bottom_box = QHBoxLayout(self.bottom_frame)
+        bottom_box.setContentsMargins(10, 6, 10, 6)
+        bottom_box.setSpacing(10)
 
         # Stats KPIs
         self.lbl_stats_total = QLabel("Tổng linh kiện: 0")
@@ -248,36 +269,185 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.btn_close.clicked.connect(self.reject)
         bottom_box.addWidget(self.btn_close)
 
-        main_layout.addLayout(bottom_box)
+        main_layout.addWidget(self.bottom_frame, 0)
 
     def _apply_theme(self) -> None:
         """Apply dark/light styling consistent with Kyocera enterprise theme."""
-        tm = get_theme_manager()
-        cur_theme = getattr(tm.current_theme, "value", tm.current_theme)
-        is_dark = str(cur_theme).lower() == "dark"
+        is_dark = get_theme_manager().is_dark()
+
+        palette = self.palette()
+        bg_col = QColor("#0B0F17" if is_dark else "#F8FAFC")
+        fg_col = QColor("#F1F5F9" if is_dark else "#0F172A")
+        palette.setColor(self.backgroundRole(), bg_col)
+        palette.setColor(self.foregroundRole(), fg_col)
+        self.setPalette(palette)
 
         if is_dark:
+            self.title_lbl.setStyleSheet("color: #F1F5F9;")
+            self.sub_lbl.setStyleSheet("color: #94A3B8;")
+            self.model_lbl.setStyleSheet("color: #F1F5F9;")
             self.setStyleSheet(
                 """
-                QDialog { background-color: #1E293B; color: #F8FAFC; }
-                QGroupBox { font-weight: bold; border: 1px solid #334155; border-radius: 6px; margin-top: 6px; padding-top: 10px; color: #E2E8F0; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #38BDF8; }
-                QLineEdit, QComboBox { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; border-radius: 4px; padding: 5px 8px; }
-                QTreeWidget { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; }
-                QTreeWidget::item:selected { background-color: #1E3A8A; color: #FFFFFF; font-weight: bold; }
-                QHeaderView::section { background-color: #1E293B; color: #94A3B8; font-weight: bold; border: 1px solid #334155; padding: 5px; }
+                BOMVisualRuleBuilderDialog, QDialog { background-color: #0B0F17; color: #F1F5F9; }
+                QFrame#dialog_header_frame {
+                    background-color: #151D2A;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                }
+                QFrame#dialog_bottom_frame {
+                    background-color: #151D2A;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                }
+                QGroupBox {
+                    font-weight: bold;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                    margin-top: 6px;
+                    padding-top: 10px;
+                    color: #E2E8F0;
+                    background-color: #111722;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    color: #38BDF8;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #151D2A;
+                    color: #F1F5F9;
+                    border: 1px solid #2A374A;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus {
+                    border: 1px solid #3B82F6;
+                }
+                QTreeWidget {
+                    background-color: #151D2A;
+                    alternate-background-color: #1A2436;
+                    color: #F1F5F9;
+                    border: 1px solid #2A374A;
+                    border-radius: 4px;
+                }
+                QTreeWidget::item {
+                    color: #F1F5F9;
+                    padding: 3px 0px;
+                }
+                QTreeWidget::item:selected {
+                    background-color: #1E3A5F;
+                    color: #FFFFFF;
+                    font-weight: bold;
+                }
+                QTreeWidget::item:hover {
+                    background-color: #1E293B;
+                }
+                QHeaderView::section {
+                    background-color: #1A2436;
+                    color: #94A3B8;
+                    font-weight: 600;
+                    border: 1px solid #2A374A;
+                    padding: 4px 6px;
+                }
+                QPushButton {
+                    background-color: #1E293B;
+                    color: #F1F5F9;
+                    border: 1px solid #334155;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #293548;
+                    border-color: #475569;
+                }
+                QCheckBox {
+                    color: #F1F5F9;
+                }
                 """
             )
         else:
+            self.title_lbl.setStyleSheet("color: #0F172A;")
+            self.sub_lbl.setStyleSheet("color: #64748B;")
+            self.model_lbl.setStyleSheet("color: #0F172A;")
             self.setStyleSheet(
                 """
-                QDialog { background-color: #F8FAFC; color: #0F172A; }
-                QGroupBox { font-weight: bold; border: 1px solid #CBD5E1; border-radius: 6px; margin-top: 6px; padding-top: 10px; color: #1E293B; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #0284C7; }
-                QLineEdit, QComboBox { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px 8px; }
-                QTreeWidget { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; }
-                QTreeWidget::item:selected { background-color: #DBEAFE; color: #1E40AF; font-weight: bold; }
-                QHeaderView::section { background-color: #F1F5F9; color: #475569; font-weight: bold; border: 1px solid #CBD5E1; padding: 5px; }
+                BOMVisualRuleBuilderDialog, QDialog { background-color: #F8FAFC; color: #0F172A; }
+                QFrame#dialog_header_frame {
+                    background-color: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                }
+                QFrame#dialog_bottom_frame {
+                    background-color: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                }
+                QGroupBox {
+                    font-weight: bold;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                    margin-top: 6px;
+                    padding-top: 10px;
+                    color: #1E293B;
+                    background-color: #FFFFFF;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    color: #0284C7;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #FFFFFF;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus {
+                    border: 1px solid #2563EB;
+                }
+                QTreeWidget {
+                    background-color: #FFFFFF;
+                    alternate-background-color: #F8FAFC;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                }
+                QTreeWidget::item {
+                    color: #0F172A;
+                    padding: 3px 0px;
+                }
+                QTreeWidget::item:selected {
+                    background-color: #DBEAFE;
+                    color: #1E40AF;
+                    font-weight: bold;
+                }
+                QTreeWidget::item:hover {
+                    background-color: #F1F5F9;
+                }
+                QHeaderView::section {
+                    background-color: #F1F5F9;
+                    color: #475569;
+                    font-weight: 600;
+                    border: 1px solid #CBD5E1;
+                    padding: 4px 6px;
+                }
+                QPushButton {
+                    background-color: #F1F5F9;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #E2E8F0;
+                    border-color: #94A3B8;
+                }
+                QCheckBox {
+                    color: #0F172A;
+                }
                 """
             )
 
@@ -543,39 +713,43 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
     def _reset_item_visuals(self, item: QTreeWidgetItem) -> None:
         """Reset font and background colors to normal."""
+        is_dark = get_theme_manager().is_dark()
         font = item.font(0)
         font.setStrikeOut(False)
         for col in range(6):
             item.setFont(col, font)
             item.setBackground(col, QColor(0, 0, 0, 0))
-            item.setForeground(col, QColor("#0F172A" if get_theme_manager().current_theme == "light" else "#F8FAFC"))
+            item.setForeground(col, QColor("#F1F5F9" if is_dark else "#0F172A"))
 
     def _set_item_dimmed(self, item: QTreeWidgetItem) -> None:
         """Dim node and strikethrough font to show it is eliminated in the output."""
+        is_dark = get_theme_manager().is_dark()
         font = item.font(0)
         font.setStrikeOut(True)
         for col in range(6):
             item.setFont(col, font)
             item.setBackground(col, QColor(0, 0, 0, 0))
-            item.setForeground(col, QColor("#94A3B8"))
+            item.setForeground(col, QColor("#64748B" if is_dark else "#94A3B8"))
 
     def _set_item_rule2_highlight(self, item: QTreeWidgetItem) -> None:
         """Highlight Rule 2 assembly (kept, but its children pruned)."""
+        is_dark = get_theme_manager().is_dark()
         font = item.font(0)
         font.setStrikeOut(False)
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor("#FEF3C7" if get_theme_manager().current_theme == "light" else "#451A03"))
-            item.setForeground(col, QColor("#D97706" if get_theme_manager().current_theme == "light" else "#FBBF24"))
+            item.setBackground(col, QColor("#451A03" if is_dark else "#FEF3C7"))
+            item.setForeground(col, QColor("#FBBF24" if is_dark else "#D97706"))
 
     def _set_item_rule1_highlight(self, item: QTreeWidgetItem) -> None:
         """Highlight Rule 1/4 assembly (node and children completely deleted)."""
+        is_dark = get_theme_manager().is_dark()
         font = item.font(0)
         font.setStrikeOut(True)
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor("#FEE2E2" if get_theme_manager().current_theme == "light" else "#450A0A"))
-            item.setForeground(col, QColor("#EF4444" if get_theme_manager().current_theme == "light" else "#F87171"))
+            item.setBackground(col, QColor("#450A0A" if is_dark else "#FEE2E2"))
+            item.setForeground(col, QColor("#F87171" if is_dark else "#EF4444"))
 
     def _expand_to_level_2(self) -> None:
         """Expand tree nodes up to level 2, collapsing deeper nodes."""

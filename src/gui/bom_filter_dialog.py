@@ -19,11 +19,13 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QCompleter,
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -60,8 +62,21 @@ class BOMFilterConfigDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("⚙️ Quản Lý & Cấu Hình Bộ Lọc BOM PLM (BolocBom)")
-        self.resize(1020, 680)
-        self.setMinimumSize(880, 540)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
+
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            avail_w = avail.width()
+            avail_h = avail.height()
+        else:
+            avail_w, avail_h = 1280, 720
+
+        target_w = min(1040, max(820, int(avail_w * 0.88)))
+        target_h = min(560, max(400, int(avail_h * 0.82)))
+        self.resize(target_w, target_h)
+        self.setMinimumSize(780, 380)
 
         self.filter_manager = filter_manager or BOMFilterManager()
         self.current_model: str = initial_model or ""
@@ -74,30 +89,32 @@ class BOMFilterConfigDialog(QDialog):
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
-        # 1. Header Banner
-        header_widget = QWidget()
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 4)
+        # 1. Header Banner Card
+        self.header_frame = QFrame()
+        self.header_frame.setObjectName("dialog_header_frame")
+        header_layout = QHBoxLayout(self.header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(10)
 
         icon_label = QLabel()
-        icon_label.setPixmap(get_theme_manager().get_styled_icon("filter").pixmap(28, 28))
+        icon_label.setPixmap(get_theme_manager().get_styled_icon("filter").pixmap(26, 26))
         header_layout.addWidget(icon_label)
 
         title_vbox = QVBoxLayout()
-        title_lbl = QLabel("Cấu Hình Bộ Lọc BOM PLM (Sheet BolocBom)")
-        title_lbl.setFont(QFont("Calibri", 13, QFont.Weight.Bold))
-        title_vbox.addWidget(title_lbl)
+        title_vbox.setSpacing(2)
+        self.title_lbl = QLabel("Cấu Hình Bộ Lọc BOM PLM (Sheet BolocBom)")
+        self.title_lbl.setFont(QFont("Calibri", 12, QFont.Weight.Bold))
+        title_vbox.addWidget(self.title_lbl)
 
-        sub_lbl = QLabel(
+        self.sub_lbl = QLabel(
             "Định nghĩa các cụm/linh kiện con cần loại bỏ khi phân rã BOM PLM cho từng dòng máy. "
             "Dữ liệu được lưu trữ tập trung trên CSDL dùng chung LAN."
         )
-        sub_lbl.setFont(QFont("Calibri", 9))
-        sub_lbl.setStyleSheet("color: #64748B;")
-        title_vbox.addWidget(sub_lbl)
+        self.sub_lbl.setFont(QFont("Calibri", 9))
+        title_vbox.addWidget(self.sub_lbl)
         header_layout.addLayout(title_vbox)
         header_layout.addStretch()
 
@@ -112,7 +129,7 @@ class BOMFilterConfigDialog(QDialog):
             f"border: 1px solid {status_color}; border-radius: 4px; padding: 4px 10px;"
         )
         header_layout.addWidget(self.status_badge)
-        main_layout.addWidget(header_widget)
+        main_layout.addWidget(self.header_frame, 0)
 
         # 2. Main Body Splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -253,10 +270,15 @@ class BOMFilterConfigDialog(QDialog):
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 3)
         splitter.setSizes([260, 740])
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)
 
-        # 3. Bottom Action Bar
-        bottom_bar = QHBoxLayout()
+        # 3. Bottom Action Bar Card
+        self.bottom_frame = QFrame()
+        self.bottom_frame.setObjectName("dialog_bottom_frame")
+        bottom_bar = QHBoxLayout(self.bottom_frame)
+        bottom_bar.setContentsMargins(8, 6, 8, 6)
+        bottom_bar.setSpacing(8)
+
         self.btn_visual_builder = QPushButton("🌳 Tạo Lọc Trực Quan Từ Cây BOM...")
         self.btn_visual_builder.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
         self.btn_visual_builder.setStyleSheet(
@@ -289,40 +311,201 @@ class BOMFilterConfigDialog(QDialog):
         self.btn_close.clicked.connect(self.accept)
         bottom_bar.addWidget(self.btn_close)
 
-        main_layout.addLayout(bottom_bar)
+        main_layout.addWidget(self.bottom_frame, 0)
 
     def _apply_theme(self) -> None:
         """Apply theme styling consistent with Kyocera Dark/Light standard."""
-        tm = get_theme_manager()
-        cur_theme = getattr(tm.current_theme, "value", tm.current_theme)
-        is_dark = str(cur_theme).lower() == "dark"
+        is_dark = get_theme_manager().is_dark()
+
+        palette = self.palette()
+        bg_col = QColor("#0B0F17" if is_dark else "#F8FAFC")
+        fg_col = QColor("#F1F5F9" if is_dark else "#0F172A")
+        palette.setColor(self.backgroundRole(), bg_col)
+        palette.setColor(self.foregroundRole(), fg_col)
+        self.setPalette(palette)
 
         if is_dark:
+            self.title_lbl.setStyleSheet("color: #F1F5F9;")
+            self.sub_lbl.setStyleSheet("color: #94A3B8;")
             self.setStyleSheet(
                 """
-                QDialog { background-color: #1E293B; color: #F8FAFC; }
-                QGroupBox { font-weight: bold; border: 1px solid #334155; border-radius: 6px; margin-top: 6px; padding-top: 10px; color: #E2E8F0; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #38BDF8; }
-                QLineEdit, QComboBox { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; border-radius: 4px; padding: 5px 8px; }
-                QListWidget { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; border-radius: 4px; }
-                QListWidget::item:selected { background-color: #1E3A8A; color: #FFFFFF; font-weight: bold; }
-                QTableWidget { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; gridline-color: #1E293B; }
-                QTableWidget::item:selected { background-color: #1E3A8A; color: #FFFFFF; }
-                QHeaderView::section { background-color: #1E293B; color: #94A3B8; font-weight: bold; border: 1px solid #334155; padding: 4px; }
+                BOMFilterConfigDialog, QDialog { background-color: #0B0F17; color: #F1F5F9; }
+                QFrame#dialog_header_frame {
+                    background-color: #151D2A;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                }
+                QFrame#dialog_bottom_frame {
+                    background-color: #151D2A;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                }
+                QGroupBox {
+                    font-weight: bold;
+                    border: 1px solid #2A374A;
+                    border-radius: 6px;
+                    margin-top: 6px;
+                    padding-top: 10px;
+                    color: #E2E8F0;
+                    background-color: #111722;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    color: #38BDF8;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #151D2A;
+                    color: #F1F5F9;
+                    border: 1px solid #2A374A;
+                    border-radius: 4px;
+                    padding: 5px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus {
+                    border: 1px solid #3B82F6;
+                }
+                QListWidget {
+                    background-color: #151D2A;
+                    color: #F1F5F9;
+                    border: 1px solid #2A374A;
+                    border-radius: 4px;
+                }
+                QListWidget::item {
+                    color: #F1F5F9;
+                    padding: 4px 6px;
+                }
+                QListWidget::item:selected {
+                    background-color: #1E3A5F;
+                    color: #FFFFFF;
+                    font-weight: bold;
+                }
+                QTableWidget {
+                    background-color: #151D2A;
+                    alternate-background-color: #1A2436;
+                    color: #F1F5F9;
+                    border: 1px solid #2A374A;
+                    gridline-color: #2A374A;
+                    border-radius: 4px;
+                }
+                QTableWidget::item {
+                    color: #F1F5F9;
+                    padding: 3px 6px;
+                }
+                QTableWidget::item:selected {
+                    background-color: #1E3A5F;
+                    color: #FFFFFF;
+                }
+                QHeaderView::section {
+                    background-color: #1A2436;
+                    color: #94A3B8;
+                    font-weight: bold;
+                    border: 1px solid #2A374A;
+                    padding: 4px;
+                }
+                QPushButton {
+                    background-color: #1E293B;
+                    color: #F1F5F9;
+                    border: 1px solid #334155;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #293548;
+                    border-color: #475569;
+                }
                 """
             )
         else:
+            self.title_lbl.setStyleSheet("color: #0F172A;")
+            self.sub_lbl.setStyleSheet("color: #64748B;")
             self.setStyleSheet(
                 """
-                QDialog { background-color: #F8FAFC; color: #0F172A; }
-                QGroupBox { font-weight: bold; border: 1px solid #CBD5E1; border-radius: 6px; margin-top: 6px; padding-top: 10px; color: #1E293B; }
-                QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #0284C7; }
-                QLineEdit, QComboBox { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px 8px; }
-                QListWidget { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; }
-                QListWidget::item:selected { background-color: #DBEAFE; color: #1E40AF; font-weight: bold; }
-                QTableWidget { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; gridline-color: #F1F5F9; }
-                QTableWidget::item:selected { background-color: #DBEAFE; color: #1E40AF; }
-                QHeaderView::section { background-color: #F1F5F9; color: #475569; font-weight: bold; border: 1px solid #CBD5E1; padding: 4px; }
+                BOMFilterConfigDialog, QDialog { background-color: #F8FAFC; color: #0F172A; }
+                QFrame#dialog_header_frame {
+                    background-color: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                }
+                QFrame#dialog_bottom_frame {
+                    background-color: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                }
+                QGroupBox {
+                    font-weight: bold;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 6px;
+                    margin-top: 6px;
+                    padding-top: 10px;
+                    color: #1E293B;
+                    background-color: #FFFFFF;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    color: #0284C7;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #FFFFFF;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                    padding: 5px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus {
+                    border: 1px solid #2563EB;
+                }
+                QListWidget {
+                    background-color: #FFFFFF;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                }
+                QListWidget::item {
+                    color: #0F172A;
+                    padding: 4px 6px;
+                }
+                QListWidget::item:selected {
+                    background-color: #DBEAFE;
+                    color: #1E40AF;
+                    font-weight: bold;
+                }
+                QTableWidget {
+                    background-color: #FFFFFF;
+                    alternate-background-color: #F8FAFC;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    gridline-color: #F1F5F9;
+                    border-radius: 4px;
+                }
+                QTableWidget::item {
+                    color: #0F172A;
+                    padding: 3px 6px;
+                }
+                QTableWidget::item:selected {
+                    background-color: #DBEAFE;
+                    color: #1E40AF;
+                }
+                QHeaderView::section {
+                    background-color: #F1F5F9;
+                    color: #475569;
+                    font-weight: bold;
+                    border: 1px solid #CBD5E1;
+                    padding: 4px;
+                }
+                QPushButton {
+                    background-color: #F1F5F9;
+                    color: #0F172A;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #E2E8F0;
+                    border-color: #94A3B8;
+                }
                 """
             )
 
@@ -387,33 +570,42 @@ class BOMFilterConfigDialog(QDialog):
         self.rules_table.setRowCount(len(filtered))
         self.rule_count_lbl.setText(f"Hiển thị: {len(filtered)} / {len(self.current_rules)} quy tắc")
 
+        is_dark = get_theme_manager().is_dark()
+        text_color = QColor("#F1F5F9" if is_dark else "#0F172A")
+        dim_color = QColor("#94A3B8" if is_dark else "#64748B")
+
         for row_idx, rule in enumerate(filtered):
             # 0: STT
             stt_item = QTableWidgetItem(str(row_idx + 1))
             stt_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             stt_item.setData(Qt.ItemDataRole.UserRole, rule.id)
+            stt_item.setForeground(text_color)
             self.rules_table.setItem(row_idx, 0, stt_item)
 
             # 1: Item Name
             item_name_item = QTableWidgetItem(rule.item_name or "(Bất kỳ)")
-            if not rule.item_name:
-                item_name_item.setForeground(QColor("#94A3B8"))
+            item_name_item.setForeground(text_color if rule.item_name else dim_color)
             self.rules_table.setItem(row_idx, 1, item_name_item)
 
             # 2: Match Mode
             mode_desc = "Chính xác (Full)" if rule.match_mode == "Full_name" else "Chứa từ (Part)"
             mode_item = QTableWidgetItem(mode_desc)
             mode_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            mode_item.setForeground(QColor("#2563EB" if rule.match_mode == "Full_name" else "#D97706"))
+            if rule.match_mode == "Full_name":
+                mode_item.setForeground(QColor("#60A5FA" if is_dark else "#2563EB"))
+            else:
+                mode_item.setForeground(QColor("#FBBF24" if is_dark else "#D97706"))
             self.rules_table.setItem(row_idx, 2, mode_item)
 
             # 3: Part Code
             part_item = QTableWidgetItem(rule.part_code or "-")
             part_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            part_item.setForeground(text_color if rule.part_code else dim_color)
             self.rules_table.setItem(row_idx, 3, part_item)
 
             # 4: Notes
             notes_item = QTableWidgetItem(rule.notes or "")
+            notes_item.setForeground(text_color)
             self.rules_table.setItem(row_idx, 4, notes_item)
 
             # 5: Actions

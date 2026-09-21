@@ -143,7 +143,7 @@ QTabBar::tab:selected {
 }
 
 /* Data-Dense Table View & Table Widget */
-QTableView, QTableWidget {
+QTableView, QTableWidget, QTreeView, QTreeWidget {
     gridline-color: #CBD5E1;
     border: 1px solid #CBD5E1;
     background-color: #FFFFFF;
@@ -155,17 +155,17 @@ QTableView, QTableWidget {
     border-radius: 4px;
 }
 
-QTableView::item, QTableWidget::item {
+QTableView::item, QTableWidget::item, QTreeView::item, QTreeWidget::item {
     padding: 4px 8px;
     min-height: 28px;
     border-bottom: 1px solid #F1F5F9;
 }
 
-QTableView::item:hover, QTableWidget::item:hover {
+QTableView::item:hover, QTableWidget::item:hover, QTreeView::item:hover, QTreeWidget::item:hover {
     background-color: #F1F5F9;
 }
 
-QTableView::item:selected, QTableWidget::item:selected {
+QTableView::item:selected, QTableWidget::item:selected, QTreeView::item:selected, QTreeWidget::item:selected {
     background-color: #E0E7FF;
     color: #0F172A;
 }
