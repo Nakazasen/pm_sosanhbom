@@ -378,8 +378,23 @@ class OutlookMailer:
 
         att_path_str = str(attachment_path).replace("\\", "/")
 
-        html_body = f"""<html>
-<body style="font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; color: #222;">
+        html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body {{
+        background-color: #ffffff;
+        color: #1e293b;
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 15px;
+        line-height: 1.6;
+        padding: 16px;
+    }}
+    a {{ color: #0078d4; text-decoration: underline; }}
+</style>
+</head>
+<body style="background-color: #ffffff; color: #1e293b; font-family: 'Times New Roman', Times, serif; font-size: 15px; line-height: 1.6; padding: 16px;">
 {test_banner}
 <p>Dear all,</p>
 
@@ -391,14 +406,14 @@ class OutlookMailer:
 
     <li><strong>Chuẩn bị so sánh BOM</strong><br>
     Mọi người copy danh sách linh kiện và MSI mới nhất vào link dưới<br>
-    Hạn hoàn thành copy danh sách linh kiện và MSI : <span style="background-color: yellow;">trong ngày "{deadline_copy}"</span><br>
-    Hạn hoàn thành xác nhận sai khác : <span style="background-color: yellow;">trong ngày "{deadline_verify}"</span></li>
+    Hạn hoàn thành copy danh sách linh kiện và MSI : <span style="background-color: #fff176; color: #000000; font-weight: bold; padding: 1px 4px;">trong ngày "{deadline_copy}"</span><br>
+    Hạn hoàn thành xác nhận sai khác : <span style="background-color: #fff176; color: #000000; font-weight: bold; padding: 1px 4px;">trong ngày "{deadline_verify}"</span></li>
 </ol>
 
-<p><span style="background-color: yellow;">Ưu tiên hoàn thành so sánh BOM hiện tại để đảm bảo sản xuất tốt xác nhân hiệu quả so sánh BOM tự động.</span><br>
+<p><span style="background-color: #fff176; color: #000000; font-weight: bold; padding: 2px 4px;">Ưu tiên hoàn thành so sánh BOM hiện tại để đảm bảo sản xuất tốt xác nhân hiệu quả so sánh BOM tự động.</span><br>
 </p>
 
-<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}">"{attachment_path}"</a></p>
+<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}" style="color: #0078d4; font-weight: bold;">"{attachment_path}"</a></p>
 
 </body>
 </html>"""
@@ -463,17 +478,32 @@ class OutlookMailer:
 
         att_path_str = str(attachment_path).replace("\\", "/")
 
-        html_body = f"""<html>
-<body style="font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; color: #222;">
+        html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body {{
+        background-color: #ffffff;
+        color: #1e293b;
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 15px;
+        line-height: 1.6;
+        padding: 16px;
+    }}
+    a {{ color: #0078d4; text-decoration: underline; }}
+</style>
+</head>
+<body style="background-color: #ffffff; color: #1e293b; font-family: 'Times New Roman', Times, serif; font-size: 15px; line-height: 1.6; padding: 16px;">
 {test_banner}
 <p>Dear các anh quản lý,</p>
 
 <p>Mọi người đã hoàn thành so sánh BOM mã hàng mới "{machine_type}" bên dưới.<br>
 Các anh kiểm tra lại giúp em với.</p>
 
-<p>Ngày sản xuất dự kiến: <span style="background-color: yellow;">trong ngày "{production_date}"</span><br> </p> 
+<p>Ngày sản xuất dự kiến: <span style="background-color: #fff176; color: #000000; font-weight: bold; padding: 1px 4px;">trong ngày "{production_date}"</span><br> </p> 
 
-<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}">"{attachment_path}"</a></p>
+<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}" style="color: #0078d4; font-weight: bold;">"{attachment_path}"</a></p>
 </body>
 </html>"""
 

@@ -168,6 +168,19 @@ class MachineDictService:
             self.load()
         return dict(self._email_groups)
 
+    def get_model_names(self) -> list[str]:
+        """Return sorted list of all unique machine/model names from Excel dictionary.
+
+        Includes all machine models from Column A in file_loaimay_nhommail.xlsx,
+        plus baseline models for complete backward compatibility.
+        """
+        if not self._is_loaded:
+            self.load()
+        names = {m.machine_name.strip() for m in self._machines if m.machine_name and m.machine_name.strip()}
+        legacy_defaults = ["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"]
+        names.update(legacy_defaults)
+        return sorted(names)
+
     def add_or_update_machine_code(
         self,
         machine_name: str,

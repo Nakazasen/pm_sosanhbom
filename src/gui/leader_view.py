@@ -67,6 +67,7 @@ from src.reporting.excel_generator import (
     ExcelReportGenerator,
 )
 from src.reporting.outlook_mailer import EmailPreview, OutlookMailer
+from src.services.machine_dict_service import MachineDictService
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +346,16 @@ class EmailPreviewDialog(QDialog):
         layout.addWidget(lbl_body)
 
         self.browser = QTextBrowser()
+        self.browser.setStyleSheet("""
+            QTextBrowser {
+                background-color: #FFFFFF;
+                color: #1E293B;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+        """)
         self.browser.setHtml(self.preview.html_body)
         layout.addWidget(self.browser)
 
@@ -514,6 +525,7 @@ class Step1ProjectSetupWidget(QWidget):
         super().__init__(parent)
         self.state = state
         self.mailer = mailer or OutlookMailer()
+        self.dict_service = MachineDictService()
         self._is_updating_machine_table: bool = False
         self._init_ui()
         self._populate_defaults()
@@ -534,7 +546,15 @@ class Step1ProjectSetupWidget(QWidget):
         row1_layout.setSpacing(8)
         row1_layout.addWidget(QLabel("Model máy:"))
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"])
+        self.model_combo.setEditable(True)
+        self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        models = self.dict_service.get_model_names()
+        self.model_combo.addItems(models)
+        idx = self.model_combo.findText("Virgo")
+        if idx >= 0:
+            self.model_combo.setCurrentIndex(idx)
+        elif models:
+            self.model_combo.setCurrentIndex(0)
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
         row1_layout.addWidget(self.model_combo)
 
@@ -2330,6 +2350,16 @@ class Step4ComparisonReportingWidget(QWidget):
         t1_layout.addLayout(t1_sub)
 
         self.t1_browser = QTextBrowser()
+        self.t1_browser.setStyleSheet("""
+            QTextBrowser {
+                background-color: #FFFFFF;
+                color: #1E293B;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+        """)
         t1_layout.addWidget(self.t1_browser)
 
         t1_btns = QHBoxLayout()
@@ -2367,6 +2397,16 @@ class Step4ComparisonReportingWidget(QWidget):
         t2_layout.addLayout(t2_sub)
 
         self.t2_browser = QTextBrowser()
+        self.t2_browser.setStyleSheet("""
+            QTextBrowser {
+                background-color: #FFFFFF;
+                color: #1E293B;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+        """)
         t2_layout.addWidget(self.t2_browser)
 
         t2_btns = QHBoxLayout()

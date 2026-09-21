@@ -280,7 +280,6 @@ class SettingsDialog(QDialog):
         path_form.addRow("Thư mục xuất Báo cáo:", rep_layout)
         path_form.addRow("CSDL Nhân sự chung (SQLite):", shared_db_layout)
         path_form.addRow("Thư mục cập nhật LAN (.ssbupdate):", update_dir_layout)
-        path_form.addRow("Model máy mặc định:", self.default_model_combo)
 
         path_layout.addWidget(path_group)
         path_layout.addStretch()

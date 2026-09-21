@@ -56,6 +56,7 @@ from src.core.reconciliation import (
 )
 from src.gui.leader_view import ROSTER_MECHA_1, ROSTER_MECHA_2, ROSTER_MECHA_3
 from src.gui.styles import get_theme_manager, tokens
+from src.services.machine_dict_service import MachineDictService
 from src.gui.styles.tokens import (
     COLOR_DARK_STATUS_DIFF_BG,
     COLOR_DARK_STATUS_DIFF_TEXT,
@@ -381,8 +382,17 @@ class MemberWorkspaceView(QWidget):
         row_c.addWidget(self.author_edit)
 
         row_c.addWidget(QLabel("Mã Model:"))
+        self.dict_service = MachineDictService()
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"])
+        self.model_combo.setEditable(True)
+        self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        models = self.dict_service.get_model_names()
+        self.model_combo.addItems(models)
+        idx = self.model_combo.findText("Virgo")
+        if idx >= 0:
+            self.model_combo.setCurrentIndex(idx)
+        elif models:
+            self.model_combo.setCurrentIndex(0)
         row_c.addWidget(self.model_combo)
         row_c.addStretch()
         banner_layout.addLayout(row_c)

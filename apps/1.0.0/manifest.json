@@ -6,7 +6,7 @@
   "min_app_version": "1.0.0",
   "database_schema": 1,
   "health_check": "--health-check",
-  "created_at": "2026-09-21T12:08:29.679572+00:00",
+  "created_at": "2026-09-21T12:18:24.504548+00:00",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "config/settings.json": {
@@ -246,16 +246,16 @@
       "size": 271
     },
     "src/gui/leader_view.py": {
-      "sha256": "f990afc343f6a336cb2b5d412cf22a06373aaa7c91f56790fb2fca35e8d75739",
-      "size": 145173
+      "sha256": "f5e23d72294d80947d59fedff9b0cbd9a49770a0b1e847f6c517756a1aecba90",
+      "size": 146649
     },
     "src/gui/member_roster_dialog.py": {
       "sha256": "21a47c0d092a4b0e6fa0618fb04c21cc76320fe64c39d37610dc4091fa88c5d6",
       "size": 20772
     },
     "src/gui/member_view.py": {
-      "sha256": "84b8919ced177bcc6a021e742cd013ea12f7815b7881c044c656ca5cecfec7be",
-      "size": 88137
+      "sha256": "f75fb6d40afc11a4649b70a257283bdd4b5096baa0512de466e061ab73f4c148",
+      "size": 88563
     },
     "src/gui/pcd_plan_dialog.py": {
       "sha256": "adf3d881dfa6c0383f60773ec3a9def05b09cac932f719dc199e7d34ac72784d",
@@ -266,8 +266,8 @@
       "size": 36290
     },
     "src/gui/settings_dialog.py": {
-      "sha256": "1f286812aa245aa9f263a84652f49e58c870eee9de42afb1e9f9f07536d904de",
-      "size": 27101
+      "sha256": "e4929d2cc18444b760973f4fc834aa03245d92a439576b0d6ed230f8ef7b89a0",
+      "size": 27020
     },
     "src/gui/styles/__init__.py": {
       "sha256": "a1f06df4ea1d6ee5c0acaacc02264b430c9a89dd3bf7235f6dc70388fee81e27",
@@ -302,8 +302,8 @@
       "size": 41587
     },
     "src/reporting/outlook_mailer.py": {
-      "sha256": "4bf2ba15f7a3897aa181398401ce9f83f05bef2da0f0cde9837d56f801d5d3ca",
-      "size": 23398
+      "sha256": "7c2bc4639b1a291dca9eea77ca5bc40e194e9d4dcf7df4d2e7ea577ad2b73256",
+      "size": 24456
     },
     "src/security/__init__.py": {
       "sha256": "eb8228eabe159739970f34ce95b1814b2fc9b358d1c4cff648e268f57759724c",
@@ -326,8 +326,8 @@
       "size": 6247
     },
     "src/services/machine_dict_service.py": {
-      "sha256": "5caec80b828896034452a93da704ddd11f2744ed46c6980954b266f086f7b16e",
-      "size": 9930
+      "sha256": "157de4948d8e45de2a307d6e17865ca0b24a44224f2a4d2474834620546ae362",
+      "size": 10545
     },
     "src/services/pcd_plan_service.py": {
       "sha256": "ca9c816fcd69da573500b487ed07050ead46dc523830984448f96091e0bfb894",
