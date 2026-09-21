@@ -90,12 +90,12 @@
       "size": 3039
     },
     "src/gui/app.py": {
-      "sha256": "5e6151ffe175aef5ded27c29833b657c1991da66faa8c973f6a78c684a075eb4",
-      "size": 18871
+      "sha256": "5decafcb42a465982bb2045cefe86229fc4231fd03b9319bfa246e518e952c03",
+      "size": 21024
     },
     "src/gui/leader_view.py": {
-      "sha256": "528ca4bda1372588022c9debf1553b6bae9fd486590cb680bbf4097cf981e108",
-      "size": 128245
+      "sha256": "82cd75b80cf2e9fb975277e484dcbd8328dbe6978d624ab307bd139469b7a1bf",
+      "size": 135735
     },
     "src/gui/member_view.py": {
       "sha256": "f9e5308c0c7cc20426621a85c0f3a5489c281dbde20d998aa0d6e81c9df259eb",
@@ -170,12 +170,12 @@
       "size": 59
     },
     "src/gui/styles/dark_theme.qss": {
-      "sha256": "b78e6e835fb0f50c80b1d817329f51004d22d302009fe804764b85bddac73a59",
-      "size": 9556
+      "sha256": "59e633f7ecf900b5b620bcf1bc4e5b740089553e3d41bb892b5cc3811d080844",
+      "size": 9713
     },
     "src/gui/styles/light_theme.qss": {
-      "sha256": "dc918232a995cb0d5be6e2ef2e5e65b40918701b951d7e61d05d7ee61789284a",
-      "size": 9553
+      "sha256": "c086c7fc46f5f0340f72a4dadf955164898931233a185b2c3f01e5fddfd60e4a",
+      "size": 9710
     },
     "src/gui/styles/theme_manager.py": {
       "sha256": "4e4971090043210cbcafe8bc2285602ad1e4e9b72223bcfa3421d368ba04c0a6",

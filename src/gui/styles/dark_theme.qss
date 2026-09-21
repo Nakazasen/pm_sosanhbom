@@ -187,6 +187,13 @@ QHeaderView::section:checked {
     color: #F1F5F9;
 }
 
+QTableCornerButton::section {
+    background-color: #1A2436;
+    border: none;
+    border-right: 1px solid #2A374A;
+    border-bottom: 1px solid #2A374A;
+}
+
 /* Push Buttons */
 QPushButton {
     background-color: #1E293B;

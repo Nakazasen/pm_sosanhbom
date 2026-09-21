@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QStatusBar,
     QTabWidget,
     QToolBar,
@@ -88,8 +89,8 @@ class SSBOMMainWindow(QMainWindow):
         self.config_path = config_path
 
         self.setWindowTitle("Kyocera SSBOM - Chương Trình So Sánh BOM Tự Động")
-        self.resize(1280, 860)
-        self.setMinimumSize(1000, 680)
+        self.resize(1280, 800)
+        self.setMinimumSize(960, 520)
 
         self.theme_mgr = get_theme_manager()
         self.theme_mgr.apply_theme_to_app()
@@ -160,6 +161,16 @@ class SSBOMMainWindow(QMainWindow):
         self._update_theme_action(self.theme_mgr.current_theme)
         file_menu.addAction(self.action_theme)
 
+        self.action_toggle_log = QAction(" Nhật ký hoạt động", self)
+        self.action_toggle_log.setIcon(self.theme_mgr.get_styled_icon("clipboard"))
+        self.action_toggle_log.setShortcut("Ctrl+L")
+        self.action_toggle_log.setCheckable(True)
+        self.action_toggle_log.setChecked(False)
+        self.action_toggle_log.setToolTip("Ẩn / Hiện cửa sổ Nhật ký hoạt động [Ctrl+L]")
+        self.action_toggle_log.triggered.connect(self._toggle_logging_dock)
+        self.log_dock.visibilityChanged.connect(self._on_log_dock_visibility_changed)
+        file_menu.addAction(self.action_toggle_log)
+
         file_menu.addSeparator()
         action_exit = QAction("Đóng ứng dụng", self)
         action_exit.setShortcut("Alt+F4")
@@ -215,6 +226,14 @@ class SSBOMMainWindow(QMainWindow):
         self.lbl_status_msg = QLabel("Sẵn sàng làm việc")
         self.status_bar.addWidget(self.lbl_status_msg, 1)
 
+        self.btn_toggle_log = QPushButton("📋 Nhật ký (Ctrl+L)")
+        self.btn_toggle_log.setToolTip("Bật / Tắt cửa sổ Nhật ký hoạt động [Ctrl+L]")
+        self.btn_toggle_log.setStyleSheet(
+            "QPushButton { padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 3px; }"
+        )
+        self.btn_toggle_log.clicked.connect(self._toggle_logging_dock)
+        self.status_bar.addWidget(self.btn_toggle_log)
+
         # Author Credit
         self.lbl_author = QLabel("Người viết: Bùi Đức Vinh - Phòng PTHT Chế Tạo")
         self.lbl_author.setStyleSheet("font-weight: bold; margin-right: 16px;")
@@ -256,11 +275,24 @@ class SSBOMMainWindow(QMainWindow):
         self.log_dock.setWidget(dock_content)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
         self.resizeDocks([self.log_dock], [90], Qt.Orientation.Vertical)
+        self.log_dock.hide()  # Hidden by default to maximize table vertical space
 
         # Attach handler to root logger
         self.log_handler = QLogHandler()
         self.log_handler.new_record.connect(self.append_log)
         logging.getLogger().addHandler(self.log_handler)
+
+    def _toggle_logging_dock(self) -> None:
+        """Toggle visibility of the logging dock widget."""
+        visible = not self.log_dock.isVisible()
+        self.log_dock.setVisible(visible)
+        if hasattr(self, "action_toggle_log"):
+            self.action_toggle_log.setChecked(visible)
+
+    def _on_log_dock_visibility_changed(self, visible: bool) -> None:
+        """Sync action checked state with dock widget visibility."""
+        if hasattr(self, "action_toggle_log"):
+            self.action_toggle_log.setChecked(visible)
 
     @pyqtSlot(str)
     def append_log(self, text: str) -> None:
@@ -287,6 +319,8 @@ class SSBOMMainWindow(QMainWindow):
             self.action_goto_member.setIcon(self.theme_mgr.get_styled_icon("user-check"))
         if hasattr(self, "action_settings"):
             self.action_settings.setIcon(self.theme_mgr.get_styled_icon("settings"))
+        if hasattr(self, "action_toggle_log"):
+            self.action_toggle_log.setIcon(self.theme_mgr.get_styled_icon("clipboard"))
         if hasattr(self, "action_check_updates"):
             self.action_check_updates.setIcon(self.theme_mgr.get_styled_icon("refresh"))
         if hasattr(self, "action_about"):

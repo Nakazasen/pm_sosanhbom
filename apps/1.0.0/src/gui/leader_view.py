@@ -400,10 +400,10 @@ class WizardStepHeader(QWidget):
     step_clicked = pyqtSignal(int)
 
     STEP_NAMES = [
-        "1. Lập Dự Án & Phân Công",
-        "2. Tải & Xử Lý Nguồn BOM",
+        "1. Lập Dự Án && Phân Công",
+        "2. Tải && Xử Lý Nguồn BOM",
         "3. Theo dõi tổng hợp file của phụ trách",
-        "4. So Sánh BOM Tổng & Báo Cáo",
+        "4. So Sánh BOM Tổng && Báo Cáo",
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -421,7 +421,7 @@ class WizardStepHeader(QWidget):
         for idx, title in enumerate(self.STEP_NAMES):
             btn = QPushButton(title)
             btn.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
-            btn.setMinimumHeight(38)
+            btn.setMinimumHeight(34)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, i=idx: self._handle_step_click(i))
             layout.addWidget(btn, stretch=1)
@@ -512,8 +512,9 @@ class Step1ProjectSetupWidget(QWidget):
         layout.setSpacing(8)
 
         # 1. Top configuration group
-        config_group = QGroupBox("1.1 Cấu hình Dự án & Giai đoạn")
+        config_group = QGroupBox("1.1 Cấu hình Dự án && Giai đoạn")
         config_layout = QHBoxLayout(config_group)
+        config_layout.setContentsMargins(8, 4, 8, 4)
 
         config_layout.addWidget(QLabel("Model máy:"))
         self.model_combo = QComboBox()
@@ -552,13 +553,15 @@ class Step1ProjectSetupWidget(QWidget):
         # Left: Machine Code list
         mach_group = QGroupBox("1.2 Danh sách Mã Máy / Hướng Xuất")
         mach_layout = QVBoxLayout(mach_group)
+        mach_layout.setContentsMargins(6, 4, 6, 4)
+        mach_layout.setSpacing(4)
 
         self.machine_table = QTableWidget(0, 4)
         self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Bỏ qua (X)", "Ghi chú"])
         self.machine_table.verticalHeader().setDefaultSectionSize(32)
         self.machine_table.verticalHeader().setMinimumSectionSize(28)
         self.machine_table.setShowGrid(True)
-        self.machine_table.setMinimumHeight(140)
+        self.machine_table.setMinimumHeight(180)
         self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -583,10 +586,13 @@ class Step1ProjectSetupWidget(QWidget):
 
 
         # Right: Staffing Table (Sheet Lichsu)
-        staff_group = QGroupBox("1.3 Phân Công Nhân Sự (Sheet Lichsu & tenphong_pt)")
+        staff_group = QGroupBox("1.3 Phân Công Nhân Sự (Sheet Lichsu && tenphong_pt)")
         staff_layout = QVBoxLayout(staff_group)
+        staff_layout.setContentsMargins(6, 4, 6, 4)
+        staff_layout.setSpacing(4)
 
         filter_layout = QHBoxLayout()
+        filter_layout.setContentsMargins(0, 2, 0, 4)
         filter_layout.addWidget(QLabel("Lọc phòng ban:"))
         self.combo_dept_filter = QComboBox()
         self.combo_dept_filter.addItems(["Tất cả", "Cơ 1", "Cơ 2", "Cơ 3"])
@@ -618,7 +624,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
         self.staff_table.setShowGrid(True)
-        self.staff_table.setMinimumHeight(140)
+        self.staff_table.setMinimumHeight(180)
         self.staff_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -630,11 +636,11 @@ class Step1ProjectSetupWidget(QWidget):
 
         # 3. Action button
         action_layout = QHBoxLayout()
-        action_layout.setContentsMargins(0, 10, 0, 10)
-        self.btn_create_folders = QPushButton("Khởi tạo Cây Thư Mục & Sinh Gói Nộp Thành Viên")
+        action_layout.setContentsMargins(0, 4, 0, 4)
+        self.btn_create_folders = QPushButton("Khởi tạo Cây Thư Mục && Sinh Gói Nộp Thành Viên")
         self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_create_folders.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
-        self.btn_create_folders.setMinimumHeight(44)
+        self.btn_create_folders.setMinimumHeight(38)
         self.btn_create_folders.setStyleSheet(
             "background-color: #0078D4; color: white; border-radius: 4px; padding: 6px 16px;"
         )
@@ -1324,7 +1330,7 @@ class Step2DataSourcingWidget(QWidget):
         layout.addWidget(date_group)
 
         # 2. Sourcing Table Group
-        source_group = QGroupBox("2.2 Bảng Trạng Thái Nguồn Dữ Liệu & Phân Tuyến BOM")
+        source_group = QGroupBox("2.2 Bảng Trạng Thái Nguồn Dữ Liệu && Phân Tuyến BOM")
         source_layout = QVBoxLayout(source_group)
 
         self.sourcing_table = QTableWidget(0, 6)
@@ -2044,7 +2050,7 @@ class Step4ComparisonReportingWidget(QWidget):
         layout.setSpacing(8)
 
         # 1. Section: form_ssbom comparison & generation
-        comp_group = QGroupBox("4.1 Khởi Tạo File So Sánh BOM Tổng (form_ssbom.xlsm) & Pivot Tables")
+        comp_group = QGroupBox("4.1 Khởi Tạo File So Sánh BOM Tổng (form_ssbom.xlsm) && Pivot Tables")
         comp_layout = QVBoxLayout(comp_group)
 
         h_sel = QHBoxLayout()
@@ -2053,7 +2059,7 @@ class Step4ComparisonReportingWidget(QWidget):
         self.combo_active_machine.setMinimumWidth(180)
         h_sel.addWidget(self.combo_active_machine)
 
-        self.btn_gen_report = QPushButton("Tạo File BOM Tổng & Refresh Pivot Tables")
+        self.btn_gen_report = QPushButton("Tạo File BOM Tổng && Refresh Pivot Tables")
         self.btn_gen_report.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_gen_report.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_gen_report.setStyleSheet(
@@ -2086,7 +2092,7 @@ class Step4ComparisonReportingWidget(QWidget):
         layout.addWidget(comp_group)
 
         # 2. Section: Master List JIG & 4M Assessment
-        jig_group = QGroupBox("4.2 Quản Lý Danh Mục Master List JIG & Đánh Giá 4M (KTSX)")
+        jig_group = QGroupBox("4.2 Quản Lý Danh Mục Master List JIG && Đánh Giá 4M (KTSX)")
         jig_layout = QVBoxLayout(jig_group)
 
         h_jig = QHBoxLayout()
@@ -2463,13 +2469,13 @@ class KPICardWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("kpi_card")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumHeight(64)
-        self.setMaximumHeight(74)
+        self.setMinimumHeight(56)
+        self.setMaximumHeight(64)
         self._icon_name = icon_name
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(10)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(8)
 
         # Icon
         self.icon_label = QLabel(self)
@@ -2724,10 +2730,10 @@ class LeaderWorkspaceView(QWidget):
         self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
         self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
 
-        self.step_stack.addWidget(self.step1_widget)
-        self.step_stack.addWidget(self.step2_widget)
-        self.step_stack.addWidget(self.step3_widget)
-        self.step_stack.addWidget(self.step4_widget)
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
 
 
         main_layout.addWidget(self.step_stack, stretch=1)
