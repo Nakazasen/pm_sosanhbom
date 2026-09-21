@@ -109,3 +109,46 @@ class TestMemberRosterDialog:
                 found = True
                 break
         assert found is True
+
+    def test_dialog_machine_names_and_picker(self, qapp: QApplication, tmp_path: Path) -> None:
+        """Verify machine_names column, multi-model assignment, and search filtering."""
+        from src.gui.member_roster_dialog import SelectMachinesDialog
+
+        local_dir = tmp_path / "app"
+        remote_file = tmp_path / "remote" / "ssbom_master.db"
+
+        dlg = MemberRosterDialog(base_dir=local_dir, remote_db_path=remote_file)
+
+        # Verify 8 columns with "Dòng máy" at column 5
+        assert dlg.member_table.columnCount() == 8
+        assert dlg.member_table.horizontalHeaderItem(5).text() == "Dòng máy"
+
+        # Select first member
+        dlg.member_table.selectRow(0)
+        acc_id = dlg.txt_account_id.text()
+        assert bool(acc_id) is True
+
+        # Assign multiple machine models
+        dlg.txt_machine_names.setText("Virgo, 6th Next")
+        with patch("src.gui.member_roster_dialog.QMessageBox.information"):
+            dlg._on_update_member()
+
+        # Check that table updated column 5
+        assert dlg.member_table.item(0, 5).text() == "Virgo, 6th Next"
+
+        # Test searching by machine model name
+        dlg.search_edit.setText("6th Next")
+        assert dlg.member_table.rowCount() == 1
+        assert dlg.member_table.item(0, 1).text() == acc_id
+
+        # Test SelectMachinesDialog
+        selector = SelectMachinesDialog(["Virgo", "Iris 2024", "6th Next"], ["virgo"])
+        assert "Virgo" in selector.get_selected()
+        assert len(selector.get_selected()) == 1
+
+        selector._select_all()
+        assert len(selector.get_selected()) == 3
+
+        selector._deselect_all()
+        assert len(selector.get_selected()) == 0
+

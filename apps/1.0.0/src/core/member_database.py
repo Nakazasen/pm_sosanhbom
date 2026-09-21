@@ -56,6 +56,7 @@ class MemberRecord:
     full_name: str  # Full name or display name
     department: str  # Department (e.g. Cơ 1, Cơ 2, Cơ 3)
     default_sub_unit: str = ""  # Default Sub-unit / Assy (e.g. DRUM, LSU, FUSER)
+    machine_names: str = ""  # Dòng máy / Loại máy phụ trách (cách nhau dấu phẩy, e.g. 'Virgo, Iris 2024')
     is_active: bool = True  # Whether currently active in project
     notes: str = ""  # Optional notes
     id: int | None = None
@@ -145,6 +146,7 @@ class MemberDatabaseManager:
                         full_name TEXT NOT NULL,
                         department TEXT NOT NULL,
                         default_sub_unit TEXT DEFAULT '',
+                        machine_names TEXT DEFAULT '',
                         is_active INTEGER DEFAULT 1,
                         notes TEXT DEFAULT '',
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -152,6 +154,13 @@ class MemberDatabaseManager:
                     );
                     """
                 )
+                # Auto-migration for existing databases
+                try:
+                    conn.execute("ALTER TABLE members ADD COLUMN machine_names TEXT DEFAULT '';")
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_members_dept ON members(department);"
                 )
@@ -168,20 +177,20 @@ class MemberDatabaseManager:
                     logger.info("Seeding database '%s' with 38 initial engineers...", target_path)
                     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                    seed_items: list[tuple[str, str, str, str, int, str, str, str]] = []
+                    seed_items: list[tuple[str, str, str, str, str, int, str, str, str]] = []
                     for name in SEED_ROSTER_MECHA_1:
-                        seed_items.append((name, name, "Cơ 1", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 1", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                     for name in SEED_ROSTER_MECHA_2:
-                        seed_items.append((name, name, "Cơ 2", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 2", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                     for name in SEED_ROSTER_MECHA_3:
-                        seed_items.append((name, name, "Cơ 3", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 3", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
 
                     conn.executemany(
                         """
                         INSERT OR IGNORE INTO members (
-                            account_id, full_name, department, default_sub_unit,
+                            account_id, full_name, department, default_sub_unit, machine_names,
                             is_active, notes, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                         """,
                         seed_items,
                     )
@@ -210,6 +219,7 @@ class MemberDatabaseManager:
                                 full_name TEXT NOT NULL,
                                 department TEXT NOT NULL,
                                 default_sub_unit TEXT DEFAULT '',
+                                machine_names TEXT DEFAULT '',
                                 is_active INTEGER DEFAULT 1,
                                 notes TEXT DEFAULT '',
                                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -217,23 +227,29 @@ class MemberDatabaseManager:
                             );
                             """
                         )
+                        try:
+                            conn.execute("ALTER TABLE members ADD COLUMN machine_names TEXT DEFAULT '';")
+                            conn.commit()
+                        except sqlite3.OperationalError:
+                            pass
+
                         cursor = conn.cursor()
                         cursor.execute("SELECT COUNT(*) FROM members;")
                         if cursor.fetchone()[0] == 0:
                             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             seed_items = []
                             for name in SEED_ROSTER_MECHA_1:
-                                seed_items.append((name, name, "Cơ 1", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                seed_items.append((name, name, "Cơ 1", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                             for name in SEED_ROSTER_MECHA_2:
-                                seed_items.append((name, name, "Cơ 2", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                seed_items.append((name, name, "Cơ 2", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                             for name in SEED_ROSTER_MECHA_3:
-                                seed_items.append((name, name, "Cơ 3", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                seed_items.append((name, name, "Cơ 3", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                             conn.executemany(
                                 """
                                 INSERT OR IGNORE INTO members (
-                                    account_id, full_name, department, default_sub_unit,
+                                    account_id, full_name, department, default_sub_unit, machine_names,
                                     is_active, notes, created_at, updated_at
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                                 """,
                                 seed_items,
                             )
@@ -273,6 +289,7 @@ class MemberDatabaseManager:
                             full_name=row["full_name"],
                             department=row["department"],
                             default_sub_unit=row["default_sub_unit"] or "",
+                            machine_names=row["machine_names"] if ("machine_names" in row.keys() and row["machine_names"]) else "",
                             is_active=bool(row["is_active"]),
                             notes=row["notes"] or "",
                             created_at=row["created_at"],
@@ -295,6 +312,7 @@ class MemberDatabaseManager:
                                     full_name=row["full_name"],
                                     department=row["department"],
                                     default_sub_unit=row["default_sub_unit"] or "",
+                                    machine_names=row["machine_names"] if ("machine_names" in row.keys() and row["machine_names"]) else "",
                                     is_active=bool(row["is_active"]),
                                     notes=row["notes"] or "",
                                     created_at=row["created_at"],
@@ -305,6 +323,25 @@ class MemberDatabaseManager:
                     logger.error("Error reading fallback local cache: %s", local_err)
 
         return results
+
+    def get_members_for_machine(self, machine_name: str) -> list[MemberRecord]:
+        """Query all active members assigned to a specific machine/model.
+
+        Matches comma-separated machine_names (case-insensitive, exact or substring).
+        """
+        clean_target = machine_name.strip().lower()
+        all_active = self.get_members(active_only=True)
+        if not clean_target:
+            return all_active
+
+        matched = []
+        for m in all_active:
+            raw_models = getattr(m, "machine_names", "") or ""
+            m_models = [mod.strip().lower() for mod in raw_models.split(",") if mod.strip()]
+            if any(clean_target == mod or clean_target in mod or mod in clean_target for mod in m_models):
+                matched.append(m)
+
+        return matched
 
     def add_member(self, member: MemberRecord) -> tuple[bool, str]:
         """Add a new member to the database and sync cache."""
@@ -323,15 +360,16 @@ class MemberDatabaseManager:
                 conn.execute(
                     """
                     INSERT INTO members (
-                        account_id, full_name, department, default_sub_unit,
+                        account_id, full_name, department, default_sub_unit, machine_names,
                         is_active, notes, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         member.account_id.strip(),
                         full_name,
                         member.department.strip(),
                         member.default_sub_unit.strip(),
+                        getattr(member, "machine_names", "").strip(),
                         1 if member.is_active else 0,
                         member.notes.strip(),
                         now_str,
@@ -378,6 +416,7 @@ class MemberDatabaseManager:
                             full_name = ?,
                             department = ?,
                             default_sub_unit = ?,
+                            machine_names = ?,
                             is_active = ?,
                             notes = ?,
                             updated_at = ?
@@ -388,6 +427,7 @@ class MemberDatabaseManager:
                             member.full_name.strip() if member.full_name else new_acc_id,
                             member.department.strip(),
                             member.default_sub_unit.strip(),
+                            getattr(member, "machine_names", "").strip(),
                             1 if member.is_active else 0,
                             member.notes.strip(),
                             now_str,
@@ -401,6 +441,7 @@ class MemberDatabaseManager:
                             full_name = ?,
                             department = ?,
                             default_sub_unit = ?,
+                            machine_names = ?,
                             is_active = ?,
                             notes = ?,
                             updated_at = ?
@@ -410,6 +451,7 @@ class MemberDatabaseManager:
                             member.full_name.strip() if member.full_name else new_acc_id,
                             member.department.strip(),
                             member.default_sub_unit.strip(),
+                            getattr(member, "machine_names", "").strip(),
                             1 if member.is_active else 0,
                             member.notes.strip(),
                             now_str,

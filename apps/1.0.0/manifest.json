@@ -6,7 +6,7 @@
   "min_app_version": "1.0.0",
   "database_schema": 1,
   "health_check": "--health-check",
-  "created_at": "2026-09-21T12:18:24.504548+00:00",
+  "created_at": "2026-09-21T12:41:09.518924+00:00",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "config/settings.json": {
@@ -118,8 +118,8 @@
       "size": 18145
     },
     "src/core/member_database.py": {
-      "sha256": "dbe1aa61228e2561b5e4688f447d469cbe5b3bf486cc63616bf3138d6a3ff184",
-      "size": 22564
+      "sha256": "b0dc5039b69f0e0aa9f094c3ccc78e4f1fb75b23dbbbde82f4a0e51bc60de0d8",
+      "size": 24814
     },
     "src/core/model_pruner.py": {
       "sha256": "309dcc04ed7980c810bb411f6a1794d9dae5188eee80c52ab7354729b3df5529",
@@ -250,16 +250,16 @@
       "size": 146649
     },
     "src/gui/member_roster_dialog.py": {
-      "sha256": "21a47c0d092a4b0e6fa0618fb04c21cc76320fe64c39d37610dc4091fa88c5d6",
-      "size": 20772
+      "sha256": "05db0fe800c3d4ad274e8a11b29b0ca66d2ae92d2c8c82abcbf2c05f7e0f4369",
+      "size": 28209
     },
     "src/gui/member_view.py": {
       "sha256": "f75fb6d40afc11a4649b70a257283bdd4b5096baa0512de466e061ab73f4c148",
       "size": 88563
     },
     "src/gui/pcd_plan_dialog.py": {
-      "sha256": "adf3d881dfa6c0383f60773ec3a9def05b09cac932f719dc199e7d34ac72784d",
-      "size": 24512
+      "sha256": "491df86a6b0d3eef645c2cd04eadc4f47a1b7329c727dbbb2e1df380e02fa158",
+      "size": 25209
     },
     "src/gui/plm_download_dialog.py": {
       "sha256": "34594bc8d253efa621380c49d4ca0d0426d5a2061ffda6e4fe77393bf1f9ee8f",

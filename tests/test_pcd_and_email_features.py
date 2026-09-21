@@ -182,3 +182,59 @@ class TestOutlookMailerExtensions:
         assert any("Mecha" in r for r in preview.recipients_to)
         assert any("Management" in r for r in preview.recipients_cc)
         assert "CHẾ ĐỘ THỬ NGHIỆM" not in preview.html_body
+
+
+class TestPCDPlanFolderCreation:
+    def test_pcd_folder_creation_with_member_database(self, mock_dict_excel: Path, tmp_path: Path, qapp: pytest.FixtureRequest):
+        from unittest.mock import patch
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QTableWidgetItem, QComboBox
+        from src.gui.pcd_plan_dialog import PCDPlanScanDialog
+        from src.core.member_database import MemberDatabaseManager, MemberRecord
+
+        # Create member database with assigned machine
+        db_path = tmp_path / "test_ssbom_master.db"
+        mgr = MemberDatabaseManager(base_dir=tmp_path / "app", remote_db_path=db_path)
+        mgr.add_member(
+            MemberRecord(
+                account_id="Engineer_Virgo",
+                full_name="Kỹ sư Virgo",
+                department="Cơ 1",
+                machine_names="Virgo, Polaris",
+            )
+        )
+
+        dict_svc = MachineDictService(excel_path=mock_dict_excel)
+        dict_svc.load()
+
+        storage_root = tmp_path / "BOM_STORAGE"
+        storage_root.mkdir()
+
+        dlg = PCDPlanScanDialog(dict_service=dict_svc, db_manager=mgr)
+        dlg.chk_send_email.setChecked(False)
+
+        # Add 1 item to table
+        dlg.table.setRowCount(1)
+        from PyQt6.QtWidgets import QWidget, QHBoxLayout, QCheckBox
+        chk_w = QWidget()
+        chk_l = QHBoxLayout(chk_w)
+        chk = QCheckBox()
+        chk.setChecked(True)
+        chk_l.addWidget(chk)
+        dlg.table.setCellWidget(0, 0, chk_w)
+
+        dlg.table.setItem(0, 1, QTableWidgetItem("02YJ"))
+        dlg.table.setItem(0, 4, QTableWidgetItem("Virgo"))
+        combo = QComboBox()
+        combo.addItem("MP")
+        dlg.table.setCellWidget(0, 5, combo)
+        target_dir = storage_root / "Virgo" / "MP"
+        dlg.table.setItem(0, 6, QTableWidgetItem(str(target_dir)))
+
+        with patch("src.gui.pcd_plan_dialog.QMessageBox.information"):
+            dlg._on_execute_clicked()
+
+        assert target_dir.exists()
+        # Verify that Engineer_Virgo.xlsm was created specifically for this machine
+        assert (target_dir / "Engineer_Virgo.xlsm").exists()
+

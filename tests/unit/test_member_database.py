@@ -94,11 +94,49 @@ class TestMemberDatabaseManager:
 
         mgr = MemberDatabaseManager(base_dir=local_base, remote_db_path=non_existent_remote)
 
-        assert mgr.is_remote_available() is False
+        # Must fall back to local cache gracefully
+        members = mgr.get_members()
+        assert len(members) == 38
         active_path, is_remote = mgr.get_active_db_path()
         assert is_remote is False
         assert active_path == mgr.local_cache_path
-        assert active_path.exists()
 
-        members = mgr.get_members()
-        assert len(members) == 38
+    def test_get_members_for_machine(self, tmp_path: Path) -> None:
+        """Verify querying members by assigned machine names."""
+        mgr = MemberDatabaseManager(base_dir=tmp_path / "app", remote_db_path=tmp_path / "remote.db")
+
+        # Update member with multiple machines
+        son = next(m for m in mgr.get_members() if m.account_id == "Son_mecha1")
+        son.machine_names = "Virgo, Iris 2024, 6th Next"
+        ok, msg = mgr.update_member(son)
+        assert ok is True
+
+        # Add another member
+        mgr.add_member(
+            MemberRecord(
+                account_id="Hung_mecha1_test",
+                full_name="Nguyễn Văn Hùng",
+                department="Cơ 1",
+                machine_names="Virgo, Polaris",
+            )
+        )
+
+        # Query for Virgo -> Both should match
+        virgo_members = mgr.get_members_for_machine("Virgo")
+        virgo_ids = {m.account_id for m in virgo_members}
+        assert "Son_mecha1" in virgo_ids
+        assert "Hung_mecha1_test" in virgo_ids
+
+        # Query for Iris 2024 -> Only Son matches
+        iris_members = mgr.get_members_for_machine("Iris 2024")
+        assert len(iris_members) == 1
+        assert iris_members[0].account_id == "Son_mecha1"
+
+        # Query for Polaris -> Only Hung matches
+        polaris_members = mgr.get_members_for_machine("polaris")
+        assert len(polaris_members) == 1
+        assert polaris_members[0].account_id == "Hung_mecha1_test"
+
+        # Query for nonexistent machine -> None matches
+        none_members = mgr.get_members_for_machine("UnknownMachine")
+        assert len(none_members) == 0

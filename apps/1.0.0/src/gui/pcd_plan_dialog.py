@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.core.member_database import MemberDatabaseManager
 from src.gui.styles.theme_manager import get_theme_manager
 from src.reporting.outlook_mailer import EmailPreview, OutlookMailer
 from src.services.machine_dict_service import DEFAULT_DICT_PATH, MachineDictService, MachineInfo
@@ -58,12 +59,14 @@ class PCDPlanScanDialog(QDialog):
         plan_service: PCDPlanService | None = None,
         dict_service: MachineDictService | None = None,
         mailer: OutlookMailer | None = None,
+        db_manager: MemberDatabaseManager | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.plan_service = plan_service or PCDPlanService()
         self.dict_service = dict_service or MachineDictService()
         self.mailer = mailer or OutlookMailer()
+        self.db_manager = db_manager or MemberDatabaseManager(base_dir=getattr(parent, "base_dir", None))
 
         self.setWindowTitle("Quét Kế Hoạch Sản Xuất Tháng PCD & Khởi Tạo Dự Án Tự Động")
         self.resize(1020, 680)
@@ -490,14 +493,19 @@ class PCDPlanScanDialog(QDialog):
                 target_folder.mkdir(parents=True, exist_ok=True)
                 created_folders.append(target_folder)
 
-                # Generate member packages from template
-                # Default engineers or sample engineers
-                engineers = [
-                    "Toan_mecha",
-                    "Hung_mecha1",
-                    "Huong_mecha2",
-                    "Dien_electrical",
-                ]
+                # Generate member packages from template based on assigned machine models
+                matched_members = self.db_manager.get_members_for_machine(model_name)
+                if matched_members:
+                    engineers = [m.account_id for m in matched_members]
+                else:
+                    # Fallback to active members in database if none specifically matched, or default sample
+                    active_members = self.db_manager.get_members(active_only=True)
+                    engineers = [m.account_id for m in active_members[:4]] if active_members else [
+                        "Toan_mecha",
+                        "Hung_mecha1",
+                        "Huong_mecha2",
+                        "Dien_electrical",
+                    ]
                 for eng_name in engineers:
                     dest_file = target_folder / f"{eng_name}.xlsm"
                     if template_path.exists():

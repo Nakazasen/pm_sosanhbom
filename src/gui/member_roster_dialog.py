@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QDialog,
     QFormLayout,
     QGroupBox,
@@ -25,6 +26,8 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -37,6 +40,138 @@ from PyQt6.QtWidgets import (
 from src.core.member_database import MemberDatabaseManager, MemberRecord
 from src.gui.styles import get_theme_manager
 from src.reporting.excel_generator import STANDARD_SUB_UNITS
+from src.services.machine_dict_service import MachineDictService
+
+
+class MultiTokenLineEdit(QLineEdit):
+    """QLineEdit with comma-separated multi-token auto-completion."""
+
+    def __init__(self, token_list: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.token_list = token_list
+        self._completer = QCompleter(token_list, self)
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._completer.setWidget(self)
+        self._completer.activated.connect(self._insert_completion)
+
+    def set_tokens(self, tokens: list[str]) -> None:
+        self.token_list = tokens
+        from PyQt6.QtCore import QStringListModel
+        self._completer.setModel(QStringListModel(tokens, self._completer))
+
+    def _insert_completion(self, completion: str) -> None:
+        current_text = self.text()
+        cursor_pos = self.cursorPosition()
+        before_cursor = current_text[:cursor_pos]
+        after_cursor = current_text[cursor_pos:]
+        tokens_before = [t.strip() for t in before_cursor.split(",")]
+        if tokens_before:
+            tokens_before[-1] = completion.strip()
+        else:
+            tokens_before = [completion.strip()]
+        new_before = ", ".join([t for t in tokens_before if t])
+        if not new_before.endswith(", "):
+            new_before += ", "
+        new_text = new_before + after_cursor.lstrip()
+        self.setText(new_text)
+        self.setCursorPosition(len(new_before))
+
+    def keyPressEvent(self, event) -> None:
+        super().keyPressEvent(event)
+        text = self.text()[:self.cursorPosition()]
+        last_token = text.split(",")[-1].strip() if "," in text else text.strip()
+        if len(last_token) >= 1:
+            self._completer.setCompletionPrefix(last_token)
+            cr = self.cursorRect()
+            popup = self._completer.popup()
+            if popup:
+                cr.setWidth(popup.sizeHintForColumn(0) + popup.verticalScrollBar().sizeHint().width() + 40)
+                self._completer.complete(cr)
+        else:
+            popup = self._completer.popup()
+            if popup and popup.isVisible():
+                popup.hide()
+
+
+class SelectMachinesDialog(QDialog):
+    """Multi-selection checklist dialog for machine models."""
+
+    def __init__(self, available_models: list[str], current_models: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Chọn Dòng Máy Phụ Trách")
+        self.resize(380, 480)
+        self.available_models = available_models
+        self.selected_models = {m.strip().lower() for m in current_models if m.strip()}
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel("Tick chọn các dòng máy kỹ sư phụ trách:")
+        lbl.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        layout.addWidget(lbl)
+
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("🔍 Lọc tên máy...")
+        self.search_box.textChanged.connect(self._filter_list)
+        layout.addWidget(self.search_box)
+
+        self.list_widget = QListWidget()
+        layout.addWidget(self.list_widget)
+
+        for model in self.available_models:
+            item = QListWidgetItem(model)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            check_state = Qt.CheckState.Checked if model.strip().lower() in self.selected_models else Qt.CheckState.Unchecked
+            item.setCheckState(check_state)
+            self.list_widget.addItem(item)
+
+        btn_bar = QHBoxLayout()
+        btn_all = QPushButton("Chọn tất cả")
+        btn_all.clicked.connect(self._select_all)
+        btn_none = QPushButton("Bỏ chọn")
+        btn_none.clicked.connect(self._deselect_all)
+        btn_bar.addWidget(btn_all)
+        btn_bar.addWidget(btn_none)
+        btn_bar.addStretch()
+        layout.addLayout(btn_bar)
+
+        actions = QHBoxLayout()
+        btn_ok = QPushButton("Xác nhận")
+        btn_ok.setStyleSheet("background-color: #2563EB; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px;")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Hủy")
+        btn_cancel.clicked.connect(self.reject)
+        actions.addStretch()
+        actions.addWidget(btn_ok)
+        actions.addWidget(btn_cancel)
+        layout.addLayout(actions)
+
+    def _filter_list(self, text: str) -> None:
+        kw = text.strip().lower()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item.setHidden(bool(kw and kw not in item.text().lower()))
+
+    def _select_all(self) -> None:
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if not item.isHidden():
+                item.setCheckState(Qt.CheckState.Checked)
+
+    def _deselect_all(self) -> None:
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if not item.isHidden():
+                item.setCheckState(Qt.CheckState.Unchecked)
+
+    def get_selected(self) -> list[str]:
+        selected = []
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                selected.append(item.text())
+        return selected
 
 
 class MemberRosterDialog(QDialog):
@@ -52,10 +187,12 @@ class MemberRosterDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Quản lý Danh sách Thành viên (CSDL SQLite Dùng Chung)")
-        self.resize(980, 620)
-        self.setMinimumSize(850, 520)
+        self.resize(1060, 640)
+        self.setMinimumSize(900, 540)
 
         self.db_manager = MemberDatabaseManager(base_dir=base_dir, remote_db_path=remote_db_path)
+        self.dict_service = MachineDictService()
+        self.known_models = self.dict_service.get_model_names()
         self.theme_mgr = get_theme_manager()
         self._selected_member: MemberRecord | None = None
 
@@ -125,9 +262,9 @@ class MemberRosterDialog(QDialog):
         left_layout.addLayout(filter_bar)
 
         # Member table
-        self.member_table = QTableWidget(0, 7)
+        self.member_table = QTableWidget(0, 8)
         self.member_table.setHorizontalHeaderLabels([
-            "STT", "Mã thành viên", "Họ và tên", "Phòng ban", "Công đoạn", "Trạng thái", "Ghi chú",
+            "STT", "Mã thành viên", "Họ và tên", "Phòng ban", "Công đoạn", "Dòng máy", "Trạng thái", "Ghi chú",
         ])
         self.member_table.verticalHeader().setDefaultSectionSize(30)
         self.member_table.verticalHeader().setMinimumSectionSize(26)
@@ -143,16 +280,17 @@ class MemberRosterDialog(QDialog):
         self.member_table.setColumnWidth(1, 115)  # Mã thành viên
         self.member_table.setColumnWidth(2, 125)  # Họ tên
         self.member_table.setColumnWidth(3, 75)   # Phòng ban
-        self.member_table.setColumnWidth(4, 120)  # Công đoạn (hỗ trợ nhiều công đoạn)
-        self.member_table.setColumnWidth(5, 95)   # Trạng thái
-        m_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Ghi chú
+        self.member_table.setColumnWidth(4, 110)  # Công đoạn (hỗ trợ nhiều công đoạn)
+        self.member_table.setColumnWidth(5, 130)  # Dòng máy phụ trách
+        self.member_table.setColumnWidth(6, 95)   # Trạng thái
+        m_header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Ghi chú
 
         self.member_table.itemSelectionChanged.connect(self._on_table_selection_changed)
         left_layout.addWidget(self.member_table)
         splitter.addWidget(left_widget)
 
         # --- Right: Form Panel ---
-        right_group = QGroupBox("Chi tiết & Thao tác Thành viên")
+        right_group = QGroupBox("Thông tin Chi tiết Thành viên")
         right_layout = QVBoxLayout(right_group)
         right_layout.setSpacing(10)
 
@@ -180,6 +318,18 @@ class MemberRosterDialog(QDialog):
         self.combo_sub_unit.addItem("")
         self.combo_sub_unit.addItems(STANDARD_SUB_UNITS)
         form_layout.addRow("Công đoạn mặc định:", self.combo_sub_unit)
+
+        machine_row = QHBoxLayout()
+        self.txt_machine_names = MultiTokenLineEdit(self.known_models)
+        self.txt_machine_names.setPlaceholderText("VD: Virgo, Iris 2024, 6th Next")
+        machine_row.addWidget(self.txt_machine_names, stretch=1)
+
+        self.btn_pick_machines = QPushButton("Chọn...")
+        self.btn_pick_machines.setToolTip("Mở danh sách tick chọn dòng máy từ từ điển máy")
+        self.btn_pick_machines.clicked.connect(self._open_machine_selector)
+        machine_row.addWidget(self.btn_pick_machines)
+
+        form_layout.addRow("Dòng máy phụ trách:", machine_row)
 
         self.chk_is_active = QCheckBox("Đang tham gia dự án (Active)")
         self.chk_is_active.setChecked(True)
@@ -227,7 +377,7 @@ class MemberRosterDialog(QDialog):
 
         splitter.setStretchFactor(0, 5)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([630, 320])
+        splitter.setSizes([680, 360])
         main_layout.addWidget(splitter)
 
         # ---------------------------------------------------------------------
@@ -252,6 +402,17 @@ class MemberRosterDialog(QDialog):
         bottom_bar.addWidget(self.btn_close)
 
         main_layout.addLayout(bottom_bar)
+
+    def _open_machine_selector(self) -> None:
+        """Open modal dialog to check/select multiple machine models."""
+        current_text = self.txt_machine_names.text()
+        current_tokens = [t.strip() for t in current_text.split(",") if t.strip()]
+        if not self.known_models:
+            self.known_models = self.dict_service.get_model_names()
+        dlg = SelectMachinesDialog(self.known_models, current_tokens, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            selected = dlg.get_selected()
+            self.txt_machine_names.setText(", ".join(selected))
 
     def _load_roster_data(self) -> None:
         """Fetch records from SQLite and render onto table."""
@@ -298,7 +459,8 @@ class MemberRosterDialog(QDialog):
                 match_id = search_kw in m.account_id.lower()
                 match_name = search_kw in m.full_name.lower()
                 match_dept = search_kw in m.department.lower()
-                if not (match_id or match_name or match_dept):
+                match_mach = search_kw in (getattr(m, "machine_names", "") or "").lower()
+                if not (match_id or match_name or match_dept or match_mach):
                     continue
             filtered.append(m)
 
@@ -336,6 +498,10 @@ class MemberRosterDialog(QDialog):
             item_unit.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.member_table.setItem(r, 4, item_unit)
 
+            # Machine models
+            item_mach = QTableWidgetItem(getattr(rec, "machine_names", "") or "")
+            self.member_table.setItem(r, 5, item_mach)
+
             # Active status
             status_str = "● Hoạt động" if rec.is_active else "○ Tạm ngừng"
             item_status = QTableWidgetItem(status_str)
@@ -344,10 +510,10 @@ class MemberRosterDialog(QDialog):
                 item_status.setForeground(QColor("#15803D"))
             else:
                 item_status.setForeground(QColor("#94A3B8"))
-            self.member_table.setItem(r, 5, item_status)
+            self.member_table.setItem(r, 6, item_status)
 
             # Notes
-            self.member_table.setItem(r, 6, QTableWidgetItem(rec.notes))
+            self.member_table.setItem(r, 7, QTableWidgetItem(rec.notes))
 
     def _on_table_selection_changed(self) -> None:
         """Populate form when user selects a row in the table."""
@@ -365,6 +531,7 @@ class MemberRosterDialog(QDialog):
             self.txt_full_name.setText(rec.full_name)
             self.combo_dept.setCurrentText(rec.department)
             self.combo_sub_unit.setEditText(rec.default_sub_unit)
+            self.txt_machine_names.setText(getattr(rec, "machine_names", "") or "")
             self.chk_is_active.setChecked(rec.is_active)
             self.txt_notes.setText(rec.notes)
 
@@ -378,6 +545,7 @@ class MemberRosterDialog(QDialog):
         self.combo_dept.setCurrentIndex(0)
         self.combo_sub_unit.setCurrentIndex(0)
         self.combo_sub_unit.setEditText("")
+        self.txt_machine_names.clear()
         self.chk_is_active.setChecked(True)
         self.txt_notes.clear()
         self.txt_account_id.setFocus()
@@ -400,6 +568,7 @@ class MemberRosterDialog(QDialog):
             full_name=self.txt_full_name.text().strip() or acc_id,
             department=dept,
             default_sub_unit=self.combo_sub_unit.currentText().strip(),
+            machine_names=self.txt_machine_names.text().strip(),
             is_active=self.chk_is_active.isChecked(),
             notes=self.txt_notes.text().strip(),
         )
@@ -446,6 +615,7 @@ class MemberRosterDialog(QDialog):
             full_name=self.txt_full_name.text().strip() or acc_id,
             department=dept,
             default_sub_unit=self.combo_sub_unit.currentText().strip(),
+            machine_names=self.txt_machine_names.text().strip(),
             is_active=self.chk_is_active.isChecked(),
             notes=self.txt_notes.text().strip(),
         )
