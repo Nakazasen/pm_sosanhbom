@@ -558,7 +558,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.machine_table.verticalHeader().setDefaultSectionSize(32)
         self.machine_table.verticalHeader().setMinimumSectionSize(28)
         self.machine_table.setShowGrid(True)
-        self.machine_table.setMinimumHeight(320)
+        self.machine_table.setMinimumHeight(140)
         self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -579,8 +579,8 @@ class Step1ProjectSetupWidget(QWidget):
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
 
-        mach_group.setMinimumHeight(380)
         tables_layout.addWidget(mach_group, stretch=1)
+
 
         # Right: Staffing Table (Sheet Lichsu)
         staff_group = QGroupBox("1.3 Phân Công Nhân Sự (Sheet Lichsu & tenphong_pt)")
@@ -618,15 +618,15 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
         self.staff_table.setShowGrid(True)
-        self.staff_table.setMinimumHeight(340)
+        self.staff_table.setMinimumHeight(140)
         self.staff_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         staff_layout.addWidget(self.staff_table)
 
-        staff_group.setMinimumHeight(380)
         tables_layout.addWidget(staff_group, stretch=2)
         layout.addLayout(tables_layout, stretch=1)
+
 
         # 3. Action button
         action_layout = QHBoxLayout()
@@ -2724,10 +2724,11 @@ class LeaderWorkspaceView(QWidget):
         self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
         self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
 
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
+        self.step_stack.addWidget(self.step1_widget)
+        self.step_stack.addWidget(self.step2_widget)
+        self.step_stack.addWidget(self.step3_widget)
+        self.step_stack.addWidget(self.step4_widget)
+
 
         main_layout.addWidget(self.step_stack, stretch=1)
 
