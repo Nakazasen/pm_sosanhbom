@@ -23,8 +23,8 @@ from typing import Any, Optional
 
 import openpyxl
 import pandas as pd
-from PyQt6.QtCore import QDate, QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import QDate, QObject, QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QDateEdit,
     QDialog,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -41,6 +42,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -53,6 +55,7 @@ from PyQt6.QtWidgets import (
 from src.core.date_filter import DateFilter
 from src.core.model_pruner import ModelPruner
 from src.core.reconciliation import ReconciliationEngine, ReconciliationResult
+from src.gui.styles import get_theme_manager, tokens
 from src.reporting.excel_generator import (
     COLOR_GREEN_FILL_HEX,
     COLOR_GREEN_FONT_HEX,
@@ -443,22 +446,24 @@ class WizardStepHeader(QWidget):
             self.step_clicked.emit(step_idx)
 
     def _refresh_styles(self) -> None:
+        theme_mgr = get_theme_manager()
         for idx, btn in enumerate(self._buttons):
             title = self.STEP_NAMES[idx]
+            btn.setText(title)
             if idx == self.current_step:
-                btn.setText(f"▶ {title}")
+                btn.setIcon(QIcon())
                 btn.setStyleSheet(
                     "background-color: #0078D4; color: white; border: 2px solid #005A9E; "
                     "border-radius: 4px; padding: 4px 8px; font-weight: bold;"
                 )
             elif self.step_completed_flags[idx]:
-                btn.setText(f"✓ {title}")
+                btn.setIcon(theme_mgr.get_styled_icon("check-circle", color="#2E7D32"))
                 btn.setStyleSheet(
                     "background-color: #E8F5E9; color: #2E7D32; border: 1px solid #A5D6A7; "
                     "border-radius: 4px; padding: 4px 8px; font-weight: bold;"
                 )
             else:
-                btn.setText(f"🔒 {title}")
+                btn.setIcon(QIcon())
                 btn.setStyleSheet(
                     "background-color: #F5F5F5; color: #757575; border: 1px solid #E0E0E0; "
                     "border-radius: 4px; padding: 4px 8px;"
@@ -533,7 +538,8 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_browse_dir.clicked.connect(self._browse_base_dir)
         config_layout.addWidget(self.btn_browse_dir)
 
-        self.btn_open_folder = QPushButton("📂 Mở thư mục")
+        self.btn_open_folder = QPushButton("Mở thư mục")
+        self.btn_open_folder.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_open_folder.clicked.connect(self._open_base_dir)
         config_layout.addWidget(self.btn_open_folder)
 
@@ -548,6 +554,10 @@ class Step1ProjectSetupWidget(QWidget):
 
         self.machine_table = QTableWidget(0, 4)
         self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Bỏ qua (X)", "Ghi chú"])
+        self.machine_table.verticalHeader().setDefaultSectionSize(32)
+        self.machine_table.verticalHeader().setMinimumSectionSize(28)
+        self.machine_table.setShowGrid(True)
+        self.machine_table.setMinimumHeight(180)
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
@@ -558,7 +568,8 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_add_mach.clicked.connect(self._add_machine_row)
         self.btn_del_mach = QPushButton("- Xóa mã")
         self.btn_del_mach.clicked.connect(self._del_machine_row)
-        self.btn_paste_mach = QPushButton("📋 Nhập danh sách")
+        self.btn_paste_mach = QPushButton("Nhập danh sách")
+        self.btn_paste_mach.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_paste_mach.clicked.connect(self._paste_machines)
 
         mach_btn_layout.addWidget(self.btn_add_mach)
@@ -566,6 +577,7 @@ class Step1ProjectSetupWidget(QWidget):
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
 
+        mach_group.setMinimumHeight(240)
         tables_layout.addWidget(mach_group, stretch=1)
 
         # Right: Staffing Table (Sheet Lichsu)
@@ -595,16 +607,22 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.setHorizontalHeaderLabels([
             "Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Mã máy", "Công Đoạn",
         ])
+        self.staff_table.verticalHeader().setDefaultSectionSize(32)
+        self.staff_table.verticalHeader().setMinimumSectionSize(28)
+        self.staff_table.setShowGrid(True)
+        self.staff_table.setMinimumHeight(200)
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         staff_layout.addWidget(self.staff_table)
 
+        staff_group.setMinimumHeight(240)
         tables_layout.addWidget(staff_group, stretch=2)
         layout.addLayout(tables_layout, stretch=1)
 
         # 3. Action button
         action_layout = QHBoxLayout()
-        self.btn_create_folders = QPushButton("📁 Khởi tạo Cây Thư Mục & Sinh Gói Nộp Thành Viên")
+        self.btn_create_folders = QPushButton("Khởi tạo Cây Thư Mục & Sinh Gói Nộp Thành Viên")
+        self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_create_folders.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
         self.btn_create_folders.setMinimumHeight(44)
         self.btn_create_folders.setStyleSheet(
@@ -612,6 +630,10 @@ class Step1ProjectSetupWidget(QWidget):
         )
         self.btn_create_folders.clicked.connect(self.execute_create_folders_and_packages)
         action_layout.addWidget(self.btn_create_folders)
+
+        # Testing & backward compatibility aliases
+        self.btn_create_project = self.btn_create_folders
+        self.btn_add_machine = self.btn_add_mach
 
         layout.addLayout(action_layout)
 
@@ -1161,6 +1183,9 @@ class Step2DataSourcingWidget(QWidget):
         self.sourcing_table.setHorizontalHeaderLabels([
             "STT", "Mã Máy", "Ngày Hiệu Lực", "File PLM TC24", "File SAP R3 CS12", "Bộ Lọc BOM Lv1..6",
         ])
+        self.sourcing_table.verticalHeader().setDefaultSectionSize(32)
+        self.sourcing_table.verticalHeader().setMinimumSectionSize(28)
+        self.sourcing_table.setShowGrid(True)
         h_src = self.sourcing_table.horizontalHeader()
         h_src.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         h_src.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -1173,29 +1198,34 @@ class Step2DataSourcingWidget(QWidget):
         # 3. Action Buttons
         btn_layout = QHBoxLayout()
 
-        self.btn_download_plm = QPushButton("📥 Tải BOM Tự Động (PLM TC24 / SAP R3)")
+        self.btn_download_plm = QPushButton("Tải BOM Tự Động (PLM TC24 / SAP R3)")
+        self.btn_download_plm.setIcon(get_theme_manager().get_styled_icon("download"))
         self.btn_download_plm.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_download_plm.setStyleSheet(
             "background-color: #0078D4; color: white; padding: 8px 16px; border-radius: 4px;"
         )
         self.btn_download_plm.clicked.connect(self._open_download_dialog)
 
-        self.btn_import_files = QPushButton("📂 Nạp Tệp Sẵn Có Từ Ổ Đĩa")
+        self.btn_import_files = QPushButton("Nạp Tệp Sẵn Có Từ Ổ Đĩa")
+        self.btn_import_files.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_import_files.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_import_files.setStyleSheet(
             "background-color: #0D9488; color: white; padding: 8px 16px; border-radius: 4px;"
         )
         self.btn_import_files.clicked.connect(self._import_local_bom_files)
 
-        self.btn_filter_bom = QPushButton("⚡ Lọc BOM TC24 Level 1..6 & Sao Lưu")
+        self.btn_filter_bom = QPushButton("Lọc BOM TC24 Level 1..6 & Sao Lưu")
+        self.btn_filter_bom.setIcon(get_theme_manager().get_styled_icon("filter"))
         self.btn_filter_bom.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_filter_bom.setStyleSheet(
             "background-color: #D97706; color: white; padding: 8px 16px; border-radius: 4px;"
         )
         self.btn_filter_bom.clicked.connect(self.execute_bom_filtering)
 
-        self.btn_refresh_sourcing = QPushButton("🔄 Làm mới trạng thái")
+        self.btn_refresh_sourcing = QPushButton("Làm mới trạng thái")
+        self.btn_refresh_sourcing.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_refresh_sourcing.clicked.connect(self.refresh_sourcing_table)
+        self.btn_execute_sourcing = self.btn_refresh_sourcing
 
         btn_layout.addWidget(self.btn_download_plm)
         btn_layout.addWidget(self.btn_import_files)
@@ -1346,7 +1376,7 @@ class Step2DataSourcingWidget(QWidget):
 
             item_plm = QTableWidgetItem(plm_status)
             item_plm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if "✓" in plm_status:
+            if m.plm_file is not None and m.plm_file.exists():
                 item_plm.setBackground(QColor(f"#{COLOR_GREEN_FILL_HEX}"))
                 item_plm.setForeground(QColor(f"#{COLOR_GREEN_FONT_HEX}"))
             else:
@@ -1368,7 +1398,7 @@ class Step2DataSourcingWidget(QWidget):
 
             item_r3 = QTableWidgetItem(r3_status)
             item_r3.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if "✓" in r3_status:
+            if m.r3_file is not None and m.r3_file.exists():
                 item_r3.setBackground(QColor(f"#{COLOR_GREEN_FILL_HEX}"))
                 item_r3.setForeground(QColor(f"#{COLOR_GREEN_FONT_HEX}"))
             else:
@@ -1501,10 +1531,12 @@ class Step3TrackingConsolidationWidget(QWidget):
         self.combo_mach_filter.currentTextChanged.connect(self._filter_table_by_machine)
         ctrl_layout.addWidget(self.combo_mach_filter)
 
-        self.btn_scan_now = QPushButton("🔄 Quét trạng thái ngay")
+        self.btn_scan_now = QPushButton("Quét trạng thái ngay")
+        self.btn_scan_now.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_scan_now.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_scan_now.setStyleSheet("background-color: #0078D4; color: white; padding: 6px 14px; border-radius: 4px;")
         self.btn_scan_now.clicked.connect(self.scan_submissions)
+        self.btn_live_scan = self.btn_scan_now
         ctrl_layout.addWidget(self.btn_scan_now)
 
         self.chk_auto_scan = QCheckBox("Tự động quét mỗi 15 giây")
@@ -1519,6 +1551,9 @@ class Step3TrackingConsolidationWidget(QWidget):
         self.submission_table.setHorizontalHeaderLabels([
             "STT", "Mã Máy", "Công Đoạn", "Phụ trách công đoạn", "Trạng Thái Nộp", "Số LK", "MSI", "Thời Gian Nộp",
         ])
+        self.submission_table.verticalHeader().setDefaultSectionSize(32)
+        self.submission_table.verticalHeader().setMinimumSectionSize(28)
+        self.submission_table.setShowGrid(True)
         h_sub = self.submission_table.horizontalHeader()
         h_sub.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         h_sub.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -1534,7 +1569,8 @@ class Step3TrackingConsolidationWidget(QWidget):
 
         # 4. Consolidation Execution Button (Fail-Closed Gate)
         action_layout = QHBoxLayout()
-        self.btn_consolidate = QPushButton("⚡ TỔNG HỢP DỮ LIỆU THÀNH VIÊN")
+        self.btn_consolidate = QPushButton("TỔNG HỢP DỮ LIỆU THÀNH VIÊN")
+        self.btn_consolidate.setIcon(get_theme_manager().get_styled_icon("check-circle"))
         self.btn_consolidate.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
         self.btn_consolidate.setMinimumHeight(44)
         self.btn_consolidate.setEnabled(False)
@@ -1869,19 +1905,26 @@ class Step4ComparisonReportingWidget(QWidget):
         self.combo_active_machine.setMinimumWidth(180)
         h_sel.addWidget(self.combo_active_machine)
 
-        self.btn_gen_report = QPushButton("⚡ Tạo File BOM Tổng & Refresh Pivot Tables")
+        self.btn_gen_report = QPushButton("Tạo File BOM Tổng & Refresh Pivot Tables")
+        self.btn_gen_report.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_gen_report.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_gen_report.setStyleSheet(
             "background-color: #10B981; color: white; padding: 6px 16px; border-radius: 4px;"
         )
         self.btn_gen_report.clicked.connect(self.generate_master_bom_file)
+        self.btn_generate_master = self.btn_gen_report
+        self.btn_preview_emails = QPushButton("Xem trước Email", self)
+        self.btn_preview_emails.setIcon(get_theme_manager().get_styled_icon("mail"))
+        self.btn_preview_emails.clicked.connect(self._refresh_mail_previews)
         h_sel.addWidget(self.btn_gen_report)
 
-        self.btn_open_bom = QPushButton("📊 Mở File BOM Tổng")
+        self.btn_open_bom = QPushButton("Mở File BOM Tổng")
+        self.btn_open_bom.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_open_bom.clicked.connect(self._open_bom_file)
         h_sel.addWidget(self.btn_open_bom)
 
-        self.btn_open_folder = QPushButton("📁 Mở Thư Mục Máy")
+        self.btn_open_folder = QPushButton("Mở Thư Mục Máy")
+        self.btn_open_folder.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_open_folder.clicked.connect(self._open_machine_folder)
         h_sel.addWidget(self.btn_open_folder)
 
@@ -1905,7 +1948,8 @@ class Step4ComparisonReportingWidget(QWidget):
         self.combo_jig_model.setCurrentText("Virgo")
         h_jig.addWidget(self.combo_jig_model)
 
-        self.btn_load_jig = QPushButton("📥 Nạp JIG từ Master")
+        self.btn_load_jig = QPushButton("Nạp JIG từ Master")
+        self.btn_load_jig.setIcon(get_theme_manager().get_styled_icon("download"))
         self.btn_load_jig.clicked.connect(self.load_master_jig_catalog)
         h_jig.addWidget(self.btn_load_jig)
 
@@ -1981,7 +2025,8 @@ class Step4ComparisonReportingWidget(QWidget):
         btn_t1_disp = QPushButton("Mở trong Microsoft Outlook")
         btn_t1_disp.setStyleSheet("background-color: #0078D4; color: white; font-weight: bold; padding: 6px 14px;")
         btn_t1_disp.clicked.connect(self._send_tier1_display)
-        btn_t1_send = QPushButton("✉ Gửi trực tiếp qua Outlook")
+        btn_t1_send = QPushButton("Gửi trực tiếp qua Outlook")
+        btn_t1_send.setIcon(get_theme_manager().get_styled_icon("mail"))
         btn_t1_send.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px 14px;")
         btn_t1_send.clicked.connect(self._send_tier1_send)
         t1_btns.addWidget(btn_t1_disp)
@@ -1989,7 +2034,7 @@ class Step4ComparisonReportingWidget(QWidget):
         t1_btns.addStretch()
         t1_layout.addLayout(t1_btns)
 
-        self.mail_tabs.addTab(tab1_widget, "📨 Luồng 1 - Gửi Thành Viên (18 Điểm Check)")
+        self.mail_tabs.addTab(tab1_widget, "Luồng 1 - Gửi Thành Viên (18 Điểm Check)")
 
         # Tab 2: Management Report
         tab2_widget = QWidget()
@@ -2017,7 +2062,8 @@ class Step4ComparisonReportingWidget(QWidget):
         btn_t2_disp = QPushButton("Mở trong Microsoft Outlook")
         btn_t2_disp.setStyleSheet("background-color: #0078D4; color: white; font-weight: bold; padding: 6px 14px;")
         btn_t2_disp.clicked.connect(self._send_tier2_display)
-        btn_t2_send = QPushButton("✉ Gửi trực tiếp qua Outlook")
+        btn_t2_send = QPushButton("Gửi trực tiếp qua Outlook")
+        btn_t2_send.setIcon(get_theme_manager().get_styled_icon("mail"))
         btn_t2_send.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px 14px;")
         btn_t2_send.clicked.connect(self._send_tier2_send)
         t2_btns.addWidget(btn_t2_disp)
@@ -2025,7 +2071,7 @@ class Step4ComparisonReportingWidget(QWidget):
         t2_btns.addStretch()
         t2_layout.addLayout(t2_btns)
 
-        self.mail_tabs.addTab(tab2_widget, "👔 Luồng 2 - Gửi Quản Lý Báo Cáo Xác Nhận")
+        self.mail_tabs.addTab(tab2_widget, "Luồng 2 - Gửi Quản Lý Báo Cáo Xác Nhận")
 
         mail_layout.addWidget(self.mail_tabs)
         layout.addWidget(mail_group, stretch=1)
@@ -2251,6 +2297,105 @@ class Step4ComparisonReportingWidget(QWidget):
 
 
 # =============================================================================
+# =============================================================================
+# Compact KPI Cards (Data-Dense Dashboard Header)
+# =============================================================================
+
+class KPICardWidget(QFrame):
+    """Compact KPI metric card adhering to Data-Dense Enterprise Dashboard standard."""
+
+    def __init__(
+        self,
+        title: str,
+        initial_value: str = "0",
+        subtitle: str = "",
+        icon_name: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("kpi_card")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setMinimumHeight(64)
+        self.setMaximumHeight(74)
+        self._icon_name = icon_name
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(10)
+
+        # Icon
+        self.icon_label = QLabel(self)
+        self.icon_label.setFixedSize(24, 24)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.icon_label)
+
+        # Texts
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Medium))
+        text_layout.addWidget(self.title_label)
+
+        self.value_label = QLabel(initial_value, self)
+        self.value_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        text_layout.addWidget(self.value_label)
+
+        if subtitle:
+            self.subtitle_label = QLabel(subtitle, self)
+            self.subtitle_label.setFont(QFont("Segoe UI", 8))
+            text_layout.addWidget(self.subtitle_label)
+        else:
+            self.subtitle_label = None
+
+        layout.addLayout(text_layout)
+        layout.addStretch()
+
+        self.update_theme()
+
+    def update_theme(self, is_dark: bool | None = None) -> None:
+        """Dynamically style KPI card according to theme mode."""
+        if is_dark is None:
+            is_dark = get_theme_manager().is_dark()
+        if is_dark:
+            self.setStyleSheet(
+                "QFrame#kpi_card {"
+                "  background-color: #1A2436;"
+                "  border: 1px solid #2A374A;"
+                "  border-radius: 6px;"
+                "  padding: 4px 8px;"
+                "}"
+            )
+            self.title_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
+            self.value_label.setStyleSheet("color: #F8FAFC; font-size: 15px; font-weight: bold;")
+            if self.subtitle_label:
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+            if self._icon_name:
+                pix = get_theme_manager().get_styled_icon(self._icon_name, color="#60A5FA").pixmap(22, 22)
+                self.icon_label.setPixmap(pix)
+        else:
+            self.setStyleSheet(
+                "QFrame#kpi_card {"
+                "  background-color: #FFFFFF;"
+                "  border: 1px solid #CBD5E1;"
+                "  border-radius: 6px;"
+                "  padding: 4px 8px;"
+                "}"
+            )
+            self.title_label.setStyleSheet("color: #475569; font-size: 11px; font-weight: 600;")
+            self.value_label.setStyleSheet("color: #0F172A; font-size: 15px; font-weight: bold;")
+            if self.subtitle_label:
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+            if self._icon_name:
+                pix = get_theme_manager().get_styled_icon(self._icon_name, color="#2563EB").pixmap(22, 22)
+                self.icon_label.setPixmap(pix)
+
+    def set_value(self, val: str) -> None:
+        self.value_label.setText(val)
+
+
+# =============================================================================
 # Master Leader Workspace View (Sequential 4-Step Wizard)
 # =============================================================================
 
@@ -2279,17 +2424,151 @@ class LeaderWorkspaceView(QWidget):
 
         self._init_ui()
         self._wire_signals()
+        self.refresh_kpi_cards()
+
+    def _build_kpi_panel(self) -> QWidget:
+        container = QWidget(self)
+        panel_layout = QHBoxLayout(container)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(6)
+
+        self.kpi_card_total_models = KPICardWidget("Tổng số Model", "0", "Mã máy trong dự án", "folder", container)
+        self.kpi_card_ready_models = KPICardWidget("Model đủ BOM", "0", "Đã nạp PLM & R3", "check-circle", container)
+        self.kpi_card_cttt_progress = KPICardWidget("Tiến độ nộp CTTT", "0%", "Tỷ lệ bài nộp OK", "user-check", container)
+        self.kpi_card_recon_status = KPICardWidget("Trạng thái đối soát", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", container)
+
+        # Aliases for backward and testing compatibility
+        self.kpi_total_card = self.kpi_card_total_models
+        self.kpi_ready_card = self.kpi_card_ready_models
+        self.kpi_progress_card = self.kpi_card_cttt_progress
+        self.kpi_status_card = self.kpi_card_recon_status
+
+        self.lbl_kpi_total_models = self.kpi_card_total_models.value_label
+        self.lbl_kpi_ready_models = self.kpi_card_ready_models.value_label
+        self.lbl_kpi_cttt_progress = self.kpi_card_cttt_progress.value_label
+        self.lbl_kpi_recon_status = self.kpi_card_recon_status.value_label
+
+        panel_layout.addWidget(self.kpi_card_total_models, stretch=1)
+        panel_layout.addWidget(self.kpi_card_ready_models, stretch=1)
+        panel_layout.addWidget(self.kpi_card_cttt_progress, stretch=1)
+        panel_layout.addWidget(self.kpi_card_recon_status, stretch=1)
+
+        theme_mgr = get_theme_manager()
+
+        self.btn_quick_download_plm = QPushButton("Tải BOM TC2412", container)
+        self.btn_quick_download_plm.setIcon(theme_mgr.get_styled_icon("download"))
+        self.btn_quick_download_plm.setStyleSheet(
+            "QPushButton { background-color: #2563EB; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #1D4ED8; }"
+        )
+        self.btn_quick_download_plm.clicked.connect(self._open_plm_download_dialog)
+
+        self.btn_quick_scan = QPushButton("Quét nộp bài", container)
+        self.btn_quick_scan.setIcon(theme_mgr.get_styled_icon("refresh"))
+        self.btn_quick_scan.setStyleSheet(
+            "QPushButton { background-color: #0D9488; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #0F766E; }"
+        )
+        self.btn_quick_scan.clicked.connect(self.scan_member_submissions)
+
+        self.btn_quick_export = QPushButton("Xuất Excel", container)
+        self.btn_quick_export.setIcon(theme_mgr.get_styled_icon("file-spreadsheet"))
+        self.btn_quick_export.setStyleSheet(
+            "QPushButton { background-color: #059669; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #047857; }"
+        )
+        self.btn_quick_export.clicked.connect(self.trigger_batch_reconciliation)
+
+        # Aliases for test compatibility
+        self.btn_quick_report = self.btn_quick_export
+        self.btn_quick_reset = QPushButton("Đặt lại")
+        self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
+        self.btn_quick_reset.setStyleSheet(
+            "QPushButton { background-color: #64748B; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #475569; }"
+        )
+        self.btn_quick_reset.clicked.connect(lambda: self.switch_to_step(0))
+        self.btn_quick_reset.hide()
+
+        panel_layout.addWidget(self.btn_quick_download_plm)
+        panel_layout.addWidget(self.btn_quick_scan)
+        panel_layout.addWidget(self.btn_quick_export)
+
+        return container
+
+    def refresh_kpi_cards(self) -> None:
+        """Update KPI metrics across all 4 cards."""
+        total_machines = len(self.state.machines)
+        self.lbl_kpi_total_models.setText(str(total_machines))
+
+        ready_count = 0
+        for m in self.state.machines:
+            has_plm = m.plm_file is not None and m.plm_file.exists()
+            has_r3 = m.r3_file is not None and m.r3_file.exists()
+            if has_plm and has_r3:
+                ready_count += 1
+        self.lbl_kpi_ready_models.setText(f"{ready_count}/{total_machines}" if total_machines > 0 else "0")
+
+        total_subs = len(self.state.submissions)
+        ok_subs = sum(1 for s in self.state.submissions if s.is_submitted_ok)
+        if total_subs > 0:
+            pct = int((ok_subs / total_subs) * 100)
+            self.lbl_kpi_cttt_progress.setText(f"{pct}% ({ok_subs}/{total_subs})")
+        else:
+            self.lbl_kpi_cttt_progress.setText("0%")
+
+        if self.current_result is not None or self.last_report_path is not None:
+            self.lbl_kpi_recon_status.setText("Hoàn tất")
+        elif self.state.step3_completed:
+            self.lbl_kpi_recon_status.setText("Sẵn sàng đối soát")
+        elif total_machines > 0:
+            self.lbl_kpi_recon_status.setText("Đang chuẩn bị")
+        else:
+            self.lbl_kpi_recon_status.setText("Chờ khởi tạo")
+
+    def _wrap_step_scroll(self, widget: QWidget) -> QScrollArea:
+        scroll = QScrollArea(self)
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        return scroll
+
+    def on_theme_changed(self, effective_theme: str) -> None:
+        """Propagate theme changes to KPI cards and action icons."""
+        is_dark = effective_theme == "dark"
+        for card in (
+            self.kpi_card_total_models,
+            self.kpi_card_ready_models,
+            self.kpi_card_cttt_progress,
+            self.kpi_card_recon_status,
+        ):
+            if hasattr(card, "update_theme"):
+                card.update_theme(is_dark)
+
+        theme_mgr = get_theme_manager()
+        self.btn_quick_download_plm.setIcon(theme_mgr.get_styled_icon("download"))
+        self.btn_quick_scan.setIcon(theme_mgr.get_styled_icon("refresh"))
+        self.btn_quick_export.setIcon(theme_mgr.get_styled_icon("file-spreadsheet"))
+        if hasattr(self, "btn_quick_reset"):
+            self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
+        # 0. Compact KPI Header Panel (4 KPI Cards + 3 Quick Action Buttons)
+        self.kpi_panel = self._build_kpi_panel()
+        main_layout.addWidget(self.kpi_panel)
+
         # 1. Wizard Step Breadcrumb Header
         self.nav_header = WizardStepHeader(self)
         main_layout.addWidget(self.nav_header)
 
-        # 2. QStackedWidget with the 4 steps
+        # 2. QStackedWidget with the 4 steps wrapped in scroll areas
         self.step_stack = QStackedWidget(self)
 
         self.step1_widget = Step1ProjectSetupWidget(self.state, self)
@@ -2297,17 +2576,17 @@ class LeaderWorkspaceView(QWidget):
         self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
         self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
 
-        self.step_stack.addWidget(self.step1_widget)
-        self.step_stack.addWidget(self.step2_widget)
-        self.step_stack.addWidget(self.step3_widget)
-        self.step_stack.addWidget(self.step4_widget)
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
 
         main_layout.addWidget(self.step_stack, stretch=1)
 
         # 3. Footer Navigation Bar
         footer_layout = QHBoxLayout()
 
-        self.btn_prev = QPushButton("◀ Quay lại Bước trước")
+        self.btn_prev = QPushButton("Quay lại Bước trước")
         self.btn_prev.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_prev.setEnabled(False)
         self.btn_prev.clicked.connect(self.go_previous_step)
@@ -2329,7 +2608,7 @@ class LeaderWorkspaceView(QWidget):
 
         footer_layout.addStretch()
 
-        self.btn_next = QPushButton("Tiếp tục sang Bước tiếp theo ▶")
+        self.btn_next = QPushButton("Tiếp tục sang Bước tiếp theo")
         self.btn_next.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_next.setStyleSheet("background-color: #0078D4; color: white; border-radius: 4px; padding: 6px 14px;")
         self.btn_next.clicked.connect(self.go_next_step)
@@ -2359,6 +2638,7 @@ class LeaderWorkspaceView(QWidget):
                 self.step3_widget.scan_submissions()
             elif step_idx == 3:
                 self.step4_widget.sync_machine_combo()
+            self.refresh_kpi_cards()
 
     def go_previous_step(self) -> None:
         curr = self.step_stack.currentIndex()
@@ -2401,11 +2681,15 @@ class LeaderWorkspaceView(QWidget):
 
     def create_project_folder_structure(self) -> Path:
         """Create canonical folder structure."""
-        return self.step1_widget.create_project_folder_structure()
+        res = self.step1_widget.create_project_folder_structure()
+        self.refresh_kpi_cards()
+        return res
 
     def scan_member_submissions(self) -> dict[str, dict[str, Any]]:
         """Real-time scan for member submissions."""
-        return self.step3_widget.scan_submissions()
+        res = self.step3_widget.scan_submissions()
+        self.refresh_kpi_cards()
+        return res
 
     def get_sub_unit_statuses(self) -> dict[str, str]:
         """Return dict mapping sub-unit -> status."""
@@ -2470,6 +2754,7 @@ class LeaderWorkspaceView(QWidget):
         self.current_result = result
         self.progress_bar.setValue(100)
         self.lbl_progress_status.setText(f"Đã đối soát xong! Phán định: {result.overall_status}")
+        self.refresh_kpi_cards()
         self.batch_finished.emit(result)
 
         if self.thread and self.thread.isRunning():
@@ -2515,6 +2800,7 @@ class LeaderWorkspaceView(QWidget):
                 sub_unit_statuses=self.get_sub_unit_statuses(),
             )
             self.last_report_path = res_path
+            self.refresh_kpi_cards()
             self.lbl_progress_status.setText(f"Báo cáo đã xuất: {res_path.name}")
             self.report_generated.emit(str(res_path))
 

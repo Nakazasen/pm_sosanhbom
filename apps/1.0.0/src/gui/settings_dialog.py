@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -32,9 +33,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.styles import get_theme_manager
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIG_PATH = Path.home() / ".ssbom" / "config.json"
+DEFAULT_CONFIG_PATH = Path("config/settings.json")
+FALLBACK_CONFIG_PATH = Path.home() / ".ssbom" / "config.json"
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "tc14": {
@@ -59,6 +63,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "reports_dir": r"D:\Sandbox\pm_sosanhbom\Reports",
         "default_model": "Virgo",
     },
+    "ui": {
+        "theme": "light",
+    },
 }
 
 
@@ -75,7 +82,14 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Cấu hình Hệ thống (System Settings)")
         self.resize(580, 480)
-        self.config_path = Path(config_path or DEFAULT_CONFIG_PATH)
+        if config_path is not None:
+            self.config_path = Path(config_path)
+        elif DEFAULT_CONFIG_PATH.exists():
+            self.config_path = DEFAULT_CONFIG_PATH
+        elif FALLBACK_CONFIG_PATH.exists():
+            self.config_path = FALLBACK_CONFIG_PATH
+        else:
+            self.config_path = DEFAULT_CONFIG_PATH
 
         self._current_settings: dict[str, Any] = json.loads(json.dumps(DEFAULT_SETTINGS))
         self._init_ui()
@@ -83,6 +97,9 @@ class SettingsDialog(QDialog):
 
     def _init_ui(self) -> None:
         """Create tabbed configuration interface."""
+        theme_mgr = get_theme_manager()
+        self.setWindowIcon(theme_mgr.get_styled_icon("settings"))
+
         main_layout = QVBoxLayout(self)
 
         self.tab_widget = QTabWidget()
@@ -118,7 +135,8 @@ class SettingsDialog(QDialog):
         tc_form.addRow("Thời gian chờ (Timeout):", self.tc_timeout_spin)
 
         tc_btn_layout = QHBoxLayout()
-        self.btn_test_tc = QPushButton("Kiểm tra kết nối TC24")
+        self.btn_test_tc = QPushButton(" Kiểm tra kết nối TC24")
+        self.btn_test_tc.setIcon(theme_mgr.get_styled_icon("refresh"))
         self.btn_test_tc.clicked.connect(self._test_tc_connection)
         tc_btn_layout.addWidget(self.btn_test_tc)
         tc_btn_layout.addStretch()
@@ -126,7 +144,7 @@ class SettingsDialog(QDialog):
         tc_layout.addWidget(tc_group)
         tc_layout.addLayout(tc_btn_layout)
         tc_layout.addStretch()
-        self.tab_widget.addTab(tc_widget, "Teamcenter TC24")
+        self.tab_widget.addTab(tc_widget, theme_mgr.get_styled_icon("layers"), "Teamcenter TC24")
 
         # Tab 2: SAP R3
         sap_widget = QWidget()
@@ -142,7 +160,8 @@ class SettingsDialog(QDialog):
 
         sap_path_layout = QHBoxLayout()
         self.sap_path_edit = QLineEdit()
-        btn_browse_sap = QPushButton("Chọn...")
+        btn_browse_sap = QPushButton(" Chọn...")
+        btn_browse_sap.setIcon(theme_mgr.get_styled_icon("folder"))
         btn_browse_sap.clicked.connect(self._browse_saplogon)
         sap_path_layout.addWidget(self.sap_path_edit)
         sap_path_layout.addWidget(btn_browse_sap)
@@ -155,7 +174,8 @@ class SettingsDialog(QDialog):
         sap_form.addRow("Đường dẫn saplogon.exe:", sap_path_layout)
 
         sap_btn_layout = QHBoxLayout()
-        self.btn_test_sap = QPushButton("Kiểm tra kết nối SAP GUI")
+        self.btn_test_sap = QPushButton(" Kiểm tra kết nối SAP GUI")
+        self.btn_test_sap.setIcon(theme_mgr.get_styled_icon("refresh"))
         self.btn_test_sap.clicked.connect(self._test_sap_connection)
         sap_btn_layout.addWidget(self.btn_test_sap)
         sap_btn_layout.addStretch()
@@ -163,7 +183,7 @@ class SettingsDialog(QDialog):
         sap_layout.addWidget(sap_group)
         sap_layout.addLayout(sap_btn_layout)
         sap_layout.addStretch()
-        self.tab_widget.addTab(sap_widget, "SAP R3")
+        self.tab_widget.addTab(sap_widget, theme_mgr.get_styled_icon("download"), "SAP R3")
 
         # Tab 3: Directories and Paths
         path_widget = QWidget()
@@ -174,7 +194,8 @@ class SettingsDialog(QDialog):
         # Base Dir
         base_layout = QHBoxLayout()
         self.base_dir_edit = QLineEdit()
-        btn_browse_base = QPushButton("Chọn...")
+        btn_browse_base = QPushButton(" Chọn...")
+        btn_browse_base.setIcon(theme_mgr.get_styled_icon("folder"))
         btn_browse_base.clicked.connect(lambda: self._browse_dir(self.base_dir_edit, "Chọn thư mục gốc dự án"))
         base_layout.addWidget(self.base_dir_edit)
         base_layout.addWidget(btn_browse_base)
@@ -182,7 +203,8 @@ class SettingsDialog(QDialog):
         # Fix serial path
         fs_layout = QHBoxLayout()
         self.fs_path_edit = QLineEdit()
-        btn_browse_fs = QPushButton("Chọn...")
+        btn_browse_fs = QPushButton(" Chọn...")
+        btn_browse_fs.setIcon(theme_mgr.get_styled_icon("folder"))
         btn_browse_fs.clicked.connect(self._browse_fix_serial)
         fs_layout.addWidget(self.fs_path_edit)
         fs_layout.addWidget(btn_browse_fs)
@@ -190,7 +212,8 @@ class SettingsDialog(QDialog):
         # Reports dir
         rep_layout = QHBoxLayout()
         self.reports_dir_edit = QLineEdit()
-        btn_browse_rep = QPushButton("Chọn...")
+        btn_browse_rep = QPushButton(" Chọn...")
+        btn_browse_rep.setIcon(theme_mgr.get_styled_icon("folder"))
         btn_browse_rep.clicked.connect(lambda: self._browse_dir(self.reports_dir_edit, "Chọn thư mục lưu báo cáo"))
         rep_layout.addWidget(self.reports_dir_edit)
         rep_layout.addWidget(btn_browse_rep)
@@ -205,16 +228,43 @@ class SettingsDialog(QDialog):
 
         path_layout.addWidget(path_group)
         path_layout.addStretch()
-        self.tab_widget.addTab(path_widget, "Đường dẫn & Dữ liệu")
+        self.tab_widget.addTab(path_widget, theme_mgr.get_styled_icon("folder"), "Đường dẫn & Dữ liệu")
+
+        # Tab 4: Giao diện (UI Theme)
+        theme_widget = QWidget()
+        theme_layout = QVBoxLayout(theme_widget)
+        theme_group = QGroupBox("Giao diện & Hiển thị (UI / Theme)")
+        theme_form = QFormLayout(theme_group)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Giao diện Sáng (Slate Industrial)", "light")
+        self.theme_combo.addItem("Giao diện Tối (Industrial Dark Mode)", "dark")
+        self.theme_combo.addItem("Theo cài đặt hệ thống Windows", "system")
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_selection_changed)
+
+        theme_form.addRow("Chế độ giao diện (Theme):", self.theme_combo)
+
+        theme_note = QLabel(
+            "<b>Chuẩn Enterprise Data-Dense:</b> Hỗ trợ thay đổi theme tức thì (hot-reload) mà không cần khởi động lại ứng dụng. "
+            "Tối ưu tương phản WCAG AAA (> 7.0:1) cho môi trường nhà xưởng và văn phòng kỹ thuật."
+        )
+        theme_note.setWordWrap(True)
+        theme_note.setStyleSheet("color: #475569; font-size: 11.5px; line-height: 1.4; padding-top: 8px;")
+        theme_layout.addWidget(theme_group)
+        theme_layout.addWidget(theme_note)
+        theme_layout.addStretch()
+        self.tab_widget.addTab(theme_widget, theme_mgr.get_styled_icon("sun"), "Giao diện (UI Theme)")
 
         # Dialog Buttons
         bottom_layout = QHBoxLayout()
-        btn_reset = QPushButton("Khôi phục mặc định")
+        btn_reset = QPushButton(" Khôi phục mặc định")
+        btn_reset.setIcon(theme_mgr.get_styled_icon("rotate-ccw"))
         btn_reset.clicked.connect(self.reset_to_defaults)
 
-        btn_save = QPushButton("💾 Lưu cấu hình")
+        btn_save = QPushButton(" Lưu cấu hình")
+        btn_save.setIcon(theme_mgr.get_styled_icon("save", color="#FFFFFF"))
         btn_save.setDefault(True)
-        btn_save.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px 14px;")
+        btn_save.setStyleSheet("background-color: #059669; color: white; font-weight: bold; padding: 6px 14px;")
         btn_save.clicked.connect(self.save_and_close)
 
         btn_cancel = QPushButton("Đóng")
@@ -258,10 +308,22 @@ class SettingsDialog(QDialog):
         if idx >= 0:
             self.default_model_combo.setCurrentIndex(idx)
 
+        ui_cfg = settings_dict.get("ui", {})
+        theme_code = ui_cfg.get("theme", settings_dict.get("theme", "light"))
+        idx_t = self.theme_combo.findData(theme_code)
+        if idx_t >= 0:
+            self.theme_combo.setCurrentIndex(idx_t)
+
         self._current_settings = settings_dict
+
+    def _on_theme_selection_changed(self) -> None:
+        """Apply theme hot-reload immediately upon selection."""
+        theme_code = self.theme_combo.currentData() or "light"
+        get_theme_manager().set_theme(theme_code, save_preference=True)
 
     def get_settings(self) -> dict[str, Any]:
         """Collect current form values into settings dictionary."""
+        theme_val = self.theme_combo.currentData() or "light"
         return {
             "tc14": {
                 "base_url": self.tc_url_edit.text().strip(),
@@ -285,6 +347,10 @@ class SettingsDialog(QDialog):
                 "reports_dir": self.reports_dir_edit.text().strip(),
                 "default_model": self.default_model_combo.currentText().strip(),
             },
+            "ui": {
+                "theme": theme_val,
+            },
+            "theme": theme_val,
         }
 
     def load_from_file(self) -> None:
@@ -294,23 +360,26 @@ class SettingsDialog(QDialog):
                 with open(self.config_path, "r", encoding="utf-8") as fp:
                     data = json.load(fp)
                 self.load_settings(data)
-                logger.info("Loaded configuration from %s", self.config_path)
+                logger.info("Đã nạp cấu hình hệ thống từ: %s", self.config_path)
                 return
             except Exception as exc:
-                logger.warning("Could not read config file %s: %s", self.config_path, exc)
+                logger.warning("Không thể đọc tệp cấu hình %s: %s", self.config_path, exc)
         self.load_settings(DEFAULT_SETTINGS)
 
     def save_and_close(self) -> None:
         """Save settings to config file and emit signal."""
         cfg = self.get_settings()
         try:
+            theme_val = cfg.get("theme") or cfg.get("ui", {}).get("theme", "light")
+            get_theme_manager().set_theme(theme_val, save_preference=True)
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_path, "w", encoding="utf-8") as fp:
                 json.dump(cfg, fp, indent=2, ensure_ascii=False)
-            logger.info("Saved settings to %s", self.config_path)
+            logger.info("Đã lưu cấu hình hệ thống vào: %s", self.config_path)
             self._current_settings = cfg
             self.settings_saved.emit(cfg)
-            QMessageBox.information(self, "Thành công", "Đã lưu cấu hình hệ thống thành công.")
+            if self.isVisible():
+                QMessageBox.information(self, "Thành công", "Đã lưu cấu hình hệ thống thành công.")
             self.accept()
         except Exception as exc:
             logger.error("Failed to write config file %s: %s", self.config_path, exc)

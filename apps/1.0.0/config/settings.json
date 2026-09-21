@@ -1,0 +1,28 @@
+{
+  "tc14": {
+    "base_url": "http://tcmp3gwb:3000/",
+    "username": "vn_pe03",
+    "password": "vn_pe03",
+    "browser": "chrome",
+    "headless": true,
+    "timeout": 30
+  },
+  "sap": {
+    "system_id": "P1J(ERP60-AWS)-VN",
+    "client": "100",
+    "plant": "2200",
+    "bom_usage": "pp01",
+    "alternative": "01",
+    "saplogon_path": "C:\\Program Files (x86)\\SAP\\FrontEnd\\SAPgui\\saplogon.exe"
+  },
+  "paths": {
+    "base_dir": "D:\\Sandbox\\pm_sosanhbom",
+    "fix_serial_path": "D:\\Sandbox\\pm_sosanhbom\\FIX_SERIAL_DLTOOL_VER010.xls",
+    "reports_dir": "D:\\Sandbox\\pm_sosanhbom\\Reports",
+    "default_model": "Virgo"
+  },
+  "ui": {
+    "theme": "system"
+  },
+  "theme": "system"
+}

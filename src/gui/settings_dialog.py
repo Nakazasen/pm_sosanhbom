@@ -360,10 +360,10 @@ class SettingsDialog(QDialog):
                 with open(self.config_path, "r", encoding="utf-8") as fp:
                     data = json.load(fp)
                 self.load_settings(data)
-                logger.info("Loaded configuration from %s", self.config_path)
+                logger.info("Đã nạp cấu hình hệ thống từ: %s", self.config_path)
                 return
             except Exception as exc:
-                logger.warning("Could not read config file %s: %s", self.config_path, exc)
+                logger.warning("Không thể đọc tệp cấu hình %s: %s", self.config_path, exc)
         self.load_settings(DEFAULT_SETTINGS)
 
     def save_and_close(self) -> None:
@@ -375,7 +375,7 @@ class SettingsDialog(QDialog):
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_path, "w", encoding="utf-8") as fp:
                 json.dump(cfg, fp, indent=2, ensure_ascii=False)
-            logger.info("Saved settings to %s", self.config_path)
+            logger.info("Đã lưu cấu hình hệ thống vào: %s", self.config_path)
             self._current_settings = cfg
             self.settings_saved.emit(cfg)
             if self.isVisible():

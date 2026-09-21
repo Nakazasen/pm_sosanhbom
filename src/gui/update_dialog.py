@@ -237,7 +237,7 @@ class UpdateDialog(QDialog):
 
     def _restart_app(self) -> None:
         """Trigger application restart via SSBOM_Launcher."""
-        logger.info("Restarting SSBOM Manager after update...")
+        logger.info("Đang khởi động lại ứng dụng SSBOM sau cập nhật...")
         install_root = self.update_manager.install_root
 
         # Check for SSBOM_Launcher.exe or SSBOM_Launcher.bat

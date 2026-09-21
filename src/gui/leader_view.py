@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -556,6 +557,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.machine_table.verticalHeader().setDefaultSectionSize(32)
         self.machine_table.verticalHeader().setMinimumSectionSize(28)
         self.machine_table.setShowGrid(True)
+        self.machine_table.setMinimumHeight(180)
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
@@ -575,6 +577,7 @@ class Step1ProjectSetupWidget(QWidget):
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
 
+        mach_group.setMinimumHeight(240)
         tables_layout.addWidget(mach_group, stretch=1)
 
         # Right: Staffing Table (Sheet Lichsu)
@@ -607,10 +610,12 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
         self.staff_table.setShowGrid(True)
+        self.staff_table.setMinimumHeight(200)
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         staff_layout.addWidget(self.staff_table)
 
+        staff_group.setMinimumHeight(240)
         tables_layout.addWidget(staff_group, stretch=2)
         layout.addLayout(tables_layout, stretch=1)
 
@@ -2310,27 +2315,17 @@ class KPICardWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("kpi_card")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setStyleSheet(
-            "QFrame#kpi_card {"
-            "  background-color: #FFFFFF;"
-            "  border: 1px solid #CBD5E1;"
-            "  border-radius: 6px;"
-            "  padding: 6px 10px;"
-            "}"
-        )
         self.setMinimumHeight(64)
+        self.setMaximumHeight(74)
+        self._icon_name = icon_name
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(10)
 
         # Icon
         self.icon_label = QLabel(self)
-        if icon_name:
-            theme_mgr = get_theme_manager()
-            pix = theme_mgr.get_styled_icon(icon_name, color="#2563EB").pixmap(24, 24)
-            self.icon_label.setPixmap(pix)
-        self.icon_label.setFixedSize(28, 28)
+        self.icon_label.setFixedSize(24, 24)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.icon_label)
 
@@ -2341,24 +2336,60 @@ class KPICardWidget(QFrame):
 
         self.title_label = QLabel(title, self)
         self.title_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Medium))
-        self.title_label.setStyleSheet("color: #475569;")
         text_layout.addWidget(self.title_label)
 
         self.value_label = QLabel(initial_value, self)
-        self.value_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        self.value_label.setStyleSheet("color: #0F172A;")
+        self.value_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         text_layout.addWidget(self.value_label)
 
         if subtitle:
             self.subtitle_label = QLabel(subtitle, self)
             self.subtitle_label.setFont(QFont("Segoe UI", 8))
-            self.subtitle_label.setStyleSheet("color: #64748B;")
             text_layout.addWidget(self.subtitle_label)
         else:
             self.subtitle_label = None
 
         layout.addLayout(text_layout)
         layout.addStretch()
+
+        self.update_theme()
+
+    def update_theme(self, is_dark: bool | None = None) -> None:
+        """Dynamically style KPI card according to theme mode."""
+        if is_dark is None:
+            is_dark = get_theme_manager().is_dark()
+        if is_dark:
+            self.setStyleSheet(
+                "QFrame#kpi_card {"
+                "  background-color: #1A2436;"
+                "  border: 1px solid #2A374A;"
+                "  border-radius: 6px;"
+                "  padding: 4px 8px;"
+                "}"
+            )
+            self.title_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
+            self.value_label.setStyleSheet("color: #F8FAFC; font-size: 15px; font-weight: bold;")
+            if self.subtitle_label:
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+            if self._icon_name:
+                pix = get_theme_manager().get_styled_icon(self._icon_name, color="#60A5FA").pixmap(22, 22)
+                self.icon_label.setPixmap(pix)
+        else:
+            self.setStyleSheet(
+                "QFrame#kpi_card {"
+                "  background-color: #FFFFFF;"
+                "  border: 1px solid #CBD5E1;"
+                "  border-radius: 6px;"
+                "  padding: 4px 8px;"
+                "}"
+            )
+            self.title_label.setStyleSheet("color: #475569; font-size: 11px; font-weight: 600;")
+            self.value_label.setStyleSheet("color: #0F172A; font-size: 15px; font-weight: bold;")
+            if self.subtitle_label:
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+            if self._icon_name:
+                pix = get_theme_manager().get_styled_icon(self._icon_name, color="#2563EB").pixmap(22, 22)
+                self.icon_label.setPixmap(pix)
 
     def set_value(self, val: str) -> None:
         self.value_label.setText(val)
@@ -2397,17 +2428,14 @@ class LeaderWorkspaceView(QWidget):
 
     def _build_kpi_panel(self) -> QWidget:
         container = QWidget(self)
-        panel_layout = QVBoxLayout(container)
+        panel_layout = QHBoxLayout(container)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(6)
 
-        cards_layout = QHBoxLayout()
-        cards_layout.setSpacing(8)
-
-        self.kpi_card_total_models = KPICardWidget("Tổng số Model", "0", "Mã máy trong dự án", "folder", self)
-        self.kpi_card_ready_models = KPICardWidget("Model đủ BOM", "0", "Đã nạp PLM & R3", "check-circle", self)
-        self.kpi_card_cttt_progress = KPICardWidget("Tiến độ nộp CTTT", "0%", "Tỷ lệ bài nộp OK", "user-check", self)
-        self.kpi_card_recon_status = KPICardWidget("Trạng thái đối soát", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", self)
+        self.kpi_card_total_models = KPICardWidget("Tổng số Model", "0", "Mã máy trong dự án", "folder", container)
+        self.kpi_card_ready_models = KPICardWidget("Model đủ BOM", "0", "Đã nạp PLM & R3", "check-circle", container)
+        self.kpi_card_cttt_progress = KPICardWidget("Tiến độ nộp CTTT", "0%", "Tỷ lệ bài nộp OK", "user-check", container)
+        self.kpi_card_recon_status = KPICardWidget("Trạng thái đối soát", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", container)
 
         # Aliases for backward and testing compatibility
         self.kpi_total_card = self.kpi_card_total_models
@@ -2420,55 +2448,52 @@ class LeaderWorkspaceView(QWidget):
         self.lbl_kpi_cttt_progress = self.kpi_card_cttt_progress.value_label
         self.lbl_kpi_recon_status = self.kpi_card_recon_status.value_label
 
-        cards_layout.addWidget(self.kpi_card_total_models, stretch=1)
-        cards_layout.addWidget(self.kpi_card_ready_models, stretch=1)
-        cards_layout.addWidget(self.kpi_card_cttt_progress, stretch=1)
-        cards_layout.addWidget(self.kpi_card_recon_status, stretch=1)
-
-        panel_layout.addLayout(cards_layout)
-
-        # Quick Actions Strip
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
+        panel_layout.addWidget(self.kpi_card_total_models, stretch=1)
+        panel_layout.addWidget(self.kpi_card_ready_models, stretch=1)
+        panel_layout.addWidget(self.kpi_card_cttt_progress, stretch=1)
+        panel_layout.addWidget(self.kpi_card_recon_status, stretch=1)
 
         theme_mgr = get_theme_manager()
 
-        self.btn_quick_download_plm = QPushButton("Tải BOM TC2412", self)
+        self.btn_quick_download_plm = QPushButton("Tải BOM TC2412", container)
         self.btn_quick_download_plm.setIcon(theme_mgr.get_styled_icon("download"))
         self.btn_quick_download_plm.setStyleSheet(
-            "QPushButton { background-color: #2563EB; color: white; border-radius: 4px; padding: 5px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton { background-color: #2563EB; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
             "QPushButton:hover { background-color: #1D4ED8; }"
         )
         self.btn_quick_download_plm.clicked.connect(self._open_plm_download_dialog)
 
-        self.btn_quick_scan = QPushButton("Quét nộp bài", self)
+        self.btn_quick_scan = QPushButton("Quét nộp bài", container)
         self.btn_quick_scan.setIcon(theme_mgr.get_styled_icon("refresh"))
         self.btn_quick_scan.setStyleSheet(
-            "QPushButton { background-color: #0D9488; color: white; border-radius: 4px; padding: 5px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton { background-color: #0D9488; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
             "QPushButton:hover { background-color: #0F766E; }"
         )
         self.btn_quick_scan.clicked.connect(self.scan_member_submissions)
 
-        self.btn_quick_export = QPushButton("Xuất Excel", self)
+        self.btn_quick_export = QPushButton("Xuất Excel", container)
         self.btn_quick_export.setIcon(theme_mgr.get_styled_icon("file-spreadsheet"))
         self.btn_quick_export.setStyleSheet(
-            "QPushButton { background-color: #059669; color: white; border-radius: 4px; padding: 5px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton { background-color: #059669; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
             "QPushButton:hover { background-color: #047857; }"
         )
         self.btn_quick_export.clicked.connect(self.trigger_batch_reconciliation)
 
         # Aliases for test compatibility
         self.btn_quick_report = self.btn_quick_export
-        self.btn_quick_reset = QPushButton("Đặt lại", self)
+        self.btn_quick_reset = QPushButton("Đặt lại")
         self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
+        self.btn_quick_reset.setStyleSheet(
+            "QPushButton { background-color: #64748B; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #475569; }"
+        )
         self.btn_quick_reset.clicked.connect(lambda: self.switch_to_step(0))
+        self.btn_quick_reset.hide()
 
-        actions_layout.addStretch()
-        actions_layout.addWidget(self.btn_quick_download_plm)
-        actions_layout.addWidget(self.btn_quick_scan)
-        actions_layout.addWidget(self.btn_quick_export)
+        panel_layout.addWidget(self.btn_quick_download_plm)
+        panel_layout.addWidget(self.btn_quick_scan)
+        panel_layout.addWidget(self.btn_quick_export)
 
-        panel_layout.addLayout(actions_layout)
         return container
 
     def refresh_kpi_cards(self) -> None:
@@ -2501,6 +2526,35 @@ class LeaderWorkspaceView(QWidget):
         else:
             self.lbl_kpi_recon_status.setText("Chờ khởi tạo")
 
+    def _wrap_step_scroll(self, widget: QWidget) -> QScrollArea:
+        scroll = QScrollArea(self)
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        return scroll
+
+    def on_theme_changed(self, effective_theme: str) -> None:
+        """Propagate theme changes to KPI cards and action icons."""
+        is_dark = effective_theme == "dark"
+        for card in (
+            self.kpi_card_total_models,
+            self.kpi_card_ready_models,
+            self.kpi_card_cttt_progress,
+            self.kpi_card_recon_status,
+        ):
+            if hasattr(card, "update_theme"):
+                card.update_theme(is_dark)
+
+        theme_mgr = get_theme_manager()
+        self.btn_quick_download_plm.setIcon(theme_mgr.get_styled_icon("download"))
+        self.btn_quick_scan.setIcon(theme_mgr.get_styled_icon("refresh"))
+        self.btn_quick_export.setIcon(theme_mgr.get_styled_icon("file-spreadsheet"))
+        if hasattr(self, "btn_quick_reset"):
+            self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
+
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -2514,7 +2568,7 @@ class LeaderWorkspaceView(QWidget):
         self.nav_header = WizardStepHeader(self)
         main_layout.addWidget(self.nav_header)
 
-        # 2. QStackedWidget with the 4 steps
+        # 2. QStackedWidget with the 4 steps wrapped in scroll areas
         self.step_stack = QStackedWidget(self)
 
         self.step1_widget = Step1ProjectSetupWidget(self.state, self)
@@ -2522,10 +2576,10 @@ class LeaderWorkspaceView(QWidget):
         self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
         self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
 
-        self.step_stack.addWidget(self.step1_widget)
-        self.step_stack.addWidget(self.step2_widget)
-        self.step_stack.addWidget(self.step3_widget)
-        self.step_stack.addWidget(self.step4_widget)
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
+        self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
 
         main_layout.addWidget(self.step_stack, stretch=1)
 

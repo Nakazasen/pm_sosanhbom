@@ -24,12 +24,13 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 import pandas as pd
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QCompleter,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -37,6 +38,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -53,6 +55,17 @@ from src.core.reconciliation import (
     _to_float,
 )
 from src.gui.leader_view import ROSTER_MECHA_1, ROSTER_MECHA_2, ROSTER_MECHA_3
+from src.gui.styles import get_theme_manager, tokens
+from src.gui.styles.tokens import (
+    COLOR_DARK_STATUS_DIFF_BG,
+    COLOR_DARK_STATUS_DIFF_TEXT,
+    COLOR_DARK_STATUS_MATCH_BG,
+    COLOR_DARK_STATUS_MATCH_TEXT,
+    COLOR_LIGHT_STATUS_DIFF_BG,
+    COLOR_LIGHT_STATUS_DIFF_TEXT,
+    COLOR_LIGHT_STATUS_MATCH_BG,
+    COLOR_LIGHT_STATUS_MATCH_TEXT,
+)
 from src.reporting.excel_generator import (
     COLOR_GREEN_FILL_HEX,
     COLOR_GREEN_FONT_HEX,
@@ -103,10 +116,123 @@ CANONICAL_MSI_UNITS = [
 ]
 
 
+# =============================================================================
+# Workflow Stepper 3 Steps (Data-Dense Dashboard Header)
+# =============================================================================
+
+class MemberWorkflowStepper(QFrame):
+    """3-Step Workflow Progress Stepper with SVG icons and active state indicators."""
+
+    step_changed = pyqtSignal(int)
+
+    STEPS = [
+        ("Bước 1: Chọn Model & BOM", "folder"),
+        ("Bước 2: Đối Soát Quy Tắc", "search"),
+        ("Bước 3: Phụ trách công đoạn & Xuất Kết Quả", "file-spreadsheet"),
+    ]
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("workflow_stepper")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setStyleSheet(
+            "QFrame#workflow_stepper {"
+            "  background-color: #FFFFFF;"
+            "  border: 1px solid #CBD5E1;"
+            "  border-radius: 6px;"
+            "  padding: 4px;"
+            "}"
+        )
+        self.current_step = 0
+        self.step_completed_flags = [False, False, False]
+        self._step_widgets: list[QWidget] = []
+        self._step_labels: list[QLabel] = []
+        self._icon_labels: list[QLabel] = []
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(12)
+
+        for idx, (title, default_icon) in enumerate(self.STEPS):
+            step_w = QWidget(self)
+            w_layout = QHBoxLayout(step_w)
+            w_layout.setContentsMargins(8, 6, 8, 6)
+            w_layout.setSpacing(8)
+
+            icon_lbl = QLabel(step_w)
+            icon_lbl.setFixedSize(22, 22)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            w_layout.addWidget(icon_lbl)
+
+            text_lbl = QLabel(title, step_w)
+            text_lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Medium))
+            w_layout.addWidget(text_lbl)
+
+            layout.addWidget(step_w, stretch=1)
+            self._step_widgets.append(step_w)
+            self._icon_labels.append(icon_lbl)
+            self._step_labels.append(text_lbl)
+
+            if idx < len(self.STEPS) - 1:
+                sep = QLabel("→", self)
+                sep.setStyleSheet("color: #94A3B8; font-weight: bold; font-size: 14px;")
+                sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(sep)
+
+        self._refresh_step_styles()
+
+    def set_current_step(self, step_idx: int) -> None:
+        if 0 <= step_idx < len(self.STEPS):
+            self.current_step = step_idx
+            self._refresh_step_styles()
+
+    def set_step_completed(self, step_idx: int, completed: bool = True) -> None:
+        if 0 <= step_idx < len(self.STEPS):
+            self.step_completed_flags[step_idx] = completed
+            self._refresh_step_styles()
+
+    def _refresh_step_styles(self) -> None:
+        theme_mgr = get_theme_manager()
+        for idx in range(len(self.STEPS)):
+            step_w = self._step_widgets[idx]
+            icon_lbl = self._icon_labels[idx]
+            text_lbl = self._step_labels[idx]
+            _, def_icon = self.STEPS[idx]
+
+            if self.step_completed_flags[idx]:
+                # Completed: Green check SVG (WCAG AAA >= 7.0:1)
+                icon_lbl.setPixmap(theme_mgr.get_styled_icon("check-circle", color="#064E3B").pixmap(18, 18))
+                text_lbl.setStyleSheet("color: #064E3B; font-weight: 600;")
+                step_w.setStyleSheet(
+                    "background-color: #DCFCE7; border: 1px solid #86EFAC; border-radius: 4px;"
+                )
+            elif idx == self.current_step:
+                # Active: Blue
+                icon_lbl.setPixmap(theme_mgr.get_styled_icon(def_icon, color="#2563EB").pixmap(18, 18))
+                text_lbl.setStyleSheet("color: #1E40AF; font-weight: bold;")
+                step_w.setStyleSheet(
+                    "background-color: #EFF6FF; border: 1px solid #93C5FD; border-radius: 4px;"
+                )
+            else:
+                # Pending: Slate
+                icon_lbl.setPixmap(theme_mgr.get_styled_icon("alert-triangle", color="#94A3B8").pixmap(16, 16))
+                text_lbl.setStyleSheet("color: #64748B; font-weight: normal;")
+                step_w.setStyleSheet(
+                    "background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 4px;"
+                )
+
+
 class MemberWorkspaceView(QWidget):
     """Modern Member Workspace implementing Requirement R6 and legacy formnguoidung."""
 
     submission_completed = pyqtSignal(dict)  # Emits metadata on successful Q2="OK" submission
+
+    def on_theme_changed(self, effective_theme: str) -> None:
+        """Propagate theme changes to MemberWorkflowStepper and styled icons."""
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper._refresh_step_styles()
 
     def __init__(
         self,
@@ -140,9 +266,28 @@ class MemberWorkspaceView(QWidget):
 
     def _init_ui(self) -> None:
         """Construct full responsive layout for Member Workspace."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
+
+        # ---------------------------------------------------------------------
+        # Zone 0: 3-Step Workflow Stepper
+        # ---------------------------------------------------------------------
+        self.workflow_stepper = MemberWorkflowStepper(self)
+        self.stepper = self.workflow_stepper
+        main_layout.addWidget(self.workflow_stepper)
 
         # ---------------------------------------------------------------------
         # Zone 1: Auto-loading Banner & Assignment Information
@@ -153,12 +298,14 @@ class MemberWorkspaceView(QWidget):
 
         # Row A: Action buttons & file path
         row_a = QHBoxLayout()
-        self.btn_open_assignment = QPushButton("📂 Mở gói phân công...")
+        self.btn_open_assignment = QPushButton("Mở gói phân công...")
+        self.btn_open_assignment.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_open_assignment.setStyleSheet("font-weight: bold; padding: 4px 10px;")
         self.btn_open_assignment.clicked.connect(lambda: self.open_assignment_package())
         row_a.addWidget(self.btn_open_assignment)
 
-        self.btn_select_machine_dir = QPushButton("📁 Chọn thư mục máy...")
+        self.btn_select_machine_dir = QPushButton("Chọn thư mục máy...")
+        self.btn_select_machine_dir.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_select_machine_dir.clicked.connect(lambda: self.load_machine_directory())
         row_a.addWidget(self.btn_select_machine_dir)
 
@@ -168,7 +315,8 @@ class MemberWorkspaceView(QWidget):
         row_a.addWidget(self.lbl_assignment_path)
         row_a.addStretch()
 
-        self.btn_load_refs = QPushButton("📂 Nạp PLM & R3 đối chiếu...")
+        self.btn_load_refs = QPushButton("Nạp PLM & R3 đối chiếu...")
+        self.btn_load_refs.setIcon(get_theme_manager().get_styled_icon("download"))
         self.btn_load_refs.clicked.connect(self._select_reference_files)
         row_a.addWidget(self.btn_load_refs)
 
@@ -248,29 +396,35 @@ class MemberWorkspaceView(QWidget):
         cttt_bar.addWidget(cttt_title)
         cttt_bar.addStretch()
 
-        self.btn_add_row = QPushButton("➕ Thêm dòng")
+        self.btn_add_row = QPushButton("Thêm dòng")
+        self.btn_add_row.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_add_row.clicked.connect(lambda: self.add_cttt_row())
         cttt_bar.addWidget(self.btn_add_row)
 
-        self.btn_remove_row = QPushButton("➖ Xóa dòng")
+        self.btn_remove_row = QPushButton("Xóa dòng")
+        self.btn_remove_row.setIcon(get_theme_manager().get_styled_icon("x-circle"))
         self.btn_remove_row.clicked.connect(self.remove_selected_cttt_row)
         cttt_bar.addWidget(self.btn_remove_row)
 
-        self.btn_import_excel = QPushButton("📥 Nhập từ Excel/CSV...")
+        self.btn_import_excel = QPushButton("Nhập từ Excel/CSV...")
+        self.btn_import_excel.setIcon(get_theme_manager().get_styled_icon("download"))
         self.btn_import_excel.clicked.connect(self.import_cttt_from_file)
         cttt_bar.addWidget(self.btn_import_excel)
 
-        self.btn_paste_clipboard = QPushButton("📋 Dán Clipboard")
+        self.btn_paste_clipboard = QPushButton("Dán Clipboard")
+        self.btn_paste_clipboard.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_paste_clipboard.clicked.connect(self.paste_cttt_from_clipboard)
         cttt_bar.addWidget(self.btn_paste_clipboard)
 
-        self.btn_clear_table = QPushButton("🗑️ Xóa hết")
+        self.btn_clear_table = QPushButton("Xóa hết")
+        self.btn_clear_table.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_clear_table.clicked.connect(self.clear_cttt_table)
         cttt_bar.addWidget(self.btn_clear_table)
 
         cttt_layout.addLayout(cttt_bar)
 
         self.cttt_table = QTableWidget(0, 15)
+        self.cttt_table.setMinimumHeight(280)
         self.cttt_table.setHorizontalHeaderLabels([
             "Trang CTTT",
             "Mã Linh Kiện",
@@ -288,14 +442,32 @@ class MemberWorkspaceView(QWidget):
             "Rev R3",
             "So Sánh Rev PLM vs R3",
         ])
+        self.cttt_table.verticalHeader().setDefaultSectionSize(32)
+        self.cttt_table.verticalHeader().setMinimumSectionSize(28)
+        self.cttt_table.setShowGrid(True)
         c_header = self.cttt_table.horizontalHeader()
-        c_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        c_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        c_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        c_header.setDefaultSectionSize(115)
+        c_header.setMinimumSectionSize(65)
+        self.cttt_table.setColumnWidth(0, 80)   # Trang CTTT
+        self.cttt_table.setColumnWidth(1, 120)  # Mã Linh Kiện
+        self.cttt_table.setColumnWidth(2, 200)  # Tên Linh Kiện
+        self.cttt_table.setColumnWidth(3, 75)   # Số Lượng
+        self.cttt_table.setColumnWidth(4, 130)  # SL PLM (Tham chiếu)
+        self.cttt_table.setColumnWidth(5, 130)  # SL R3 (Tham chiếu)
+        self.cttt_table.setColumnWidth(6, 170)  # Giải Thích Sai Khác
+        self.cttt_table.setColumnWidth(7, 120)  # Kết Quả So Sánh
+        self.cttt_table.setColumnWidth(8, 120)  # Unit / Công đoạn
+        self.cttt_table.setColumnWidth(9, 120)  # Người Phụ Trách
+        self.cttt_table.setColumnWidth(10, 140) # So Sánh CTTT vs PLM
+        self.cttt_table.setColumnWidth(11, 75)  # Rev PLM
+        self.cttt_table.setColumnWidth(12, 135) # So Sánh CTTT vs R3
+        self.cttt_table.setColumnWidth(13, 75)  # Rev R3
+        self.cttt_table.setColumnWidth(14, 150) # So Sánh Rev PLM vs R3
         self.cttt_table.setAlternatingRowColors(True)
         cttt_layout.addWidget(self.cttt_table)
 
-        self.main_tab_widget.addTab(cttt_widget, "📋 1. Linh kiện CTTT (A:N)")
+        self.main_tab_widget.addTab(cttt_widget, "1. Linh kiện CTTT (A:N)")
+        self.main_tab_widget.setTabIcon(0, get_theme_manager().get_styled_icon("file-spreadsheet"))
 
         # Tab 2: MSI Table (35 Canonical Rows x 12 Columns)
         msi_widget = QWidget()
@@ -308,12 +480,14 @@ class MemberWorkspaceView(QWidget):
         msi_bar.addWidget(msi_title)
         msi_bar.addStretch()
 
-        self.btn_clear_msi = QPushButton("🗑️ Đặt lại 35 Unit")
+        self.btn_clear_msi = QPushButton("Đặt lại 35 Unit")
+        self.btn_clear_msi.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_clear_msi.clicked.connect(self._populate_canonical_msi_table)
         msi_bar.addWidget(self.btn_clear_msi)
         msi_layout.addLayout(msi_bar)
 
         self.msi_table = QTableWidget(0, 12)
+        self.msi_table.setMinimumHeight(240)
         self.msi_table.setHorizontalHeaderLabels([
             "Mã LK Barcode",
             "Mã UNIT/Bản mạch",
@@ -328,8 +502,12 @@ class MemberWorkspaceView(QWidget):
             "Kết quả so sánh",
             "Ghi chú",
         ])
+        self.msi_table.verticalHeader().setDefaultSectionSize(32)
+        self.msi_table.verticalHeader().setMinimumSectionSize(28)
+        self.msi_table.setShowGrid(True)
         m_header = self.msi_table.horizontalHeader()
-        m_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        m_header.setDefaultSectionSize(110)
+        self.msi_table.setColumnWidth(2, 190)
         self.msi_table.setAlternatingRowColors(True)
         self.msi_table.cellClicked.connect(self._on_msi_table_row_selected)
         msi_layout.addWidget(self.msi_table)
@@ -387,13 +565,15 @@ class MemberWorkspaceView(QWidget):
         col3_layout.addWidget(self.lbl_msi_badge)
         msi_edit_layout.addLayout(col3_layout)
 
-        self.btn_apply_msi_edit = QPushButton("💾 Cập nhật\nvào bảng MSI")
+        self.btn_apply_msi_edit = QPushButton("Cập nhật\nvào bảng MSI")
+        self.btn_apply_msi_edit.setIcon(get_theme_manager().get_styled_icon("check-circle", color="#FFFFFF"))
         self.btn_apply_msi_edit.setStyleSheet("font-weight: bold; padding: 8px 16px; background-color: #0d6efd; color: white;")
         self.btn_apply_msi_edit.clicked.connect(self._apply_msi_quick_edit)
         msi_edit_layout.addWidget(self.btn_apply_msi_edit)
 
         msi_layout.addWidget(msi_edit_box)
-        self.main_tab_widget.addTab(msi_widget, "🏷️ 2. Quản lý MSI (35 Unit)")
+        self.main_tab_widget.addTab(msi_widget, "2. Quản lý MSI (35 Unit)")
+        self.main_tab_widget.setTabIcon(1, get_theme_manager().get_styled_icon("filter"))
 
         # Tab 3: Label 7980 / 7990 Table (12 Columns)
         label_widget = QWidget()
@@ -406,20 +586,24 @@ class MemberWorkspaceView(QWidget):
         lbl_bar.addWidget(lbl_title)
         lbl_bar.addStretch()
 
-        self.btn_add_label_row = QPushButton("➕ Thêm dòng nhãn")
+        self.btn_add_label_row = QPushButton("Thêm dòng nhãn")
+        self.btn_add_label_row.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_add_label_row.clicked.connect(lambda: self.add_label_row())
         lbl_bar.addWidget(self.btn_add_label_row)
 
-        self.btn_remove_label_row = QPushButton("➖ Xóa dòng nhãn")
+        self.btn_remove_label_row = QPushButton("Xóa dòng nhãn")
+        self.btn_remove_label_row.setIcon(get_theme_manager().get_styled_icon("x-circle"))
         self.btn_remove_label_row.clicked.connect(self.remove_selected_label_row)
         lbl_bar.addWidget(self.btn_remove_label_row)
 
-        self.btn_clear_label_table = QPushButton("🗑️ Xóa hết nhãn")
+        self.btn_clear_label_table = QPushButton("Xóa hết nhãn")
+        self.btn_clear_label_table.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_clear_label_table.clicked.connect(self.clear_label_table)
         lbl_bar.addWidget(self.btn_clear_label_table)
         label_layout.addLayout(lbl_bar)
 
         self.label_table = QTableWidget(0, 12)
+        self.label_table.setMinimumHeight(240)
         self.label_table.setHorizontalHeaderLabels([
             "Công đoạn (7980)",
             "Trang CTTT (7980)",
@@ -434,6 +618,11 @@ class MemberWorkspaceView(QWidget):
             "Số lượng (7990)",
             "Phụ trách (7990)",
         ])
+        self.label_table.verticalHeader().setDefaultSectionSize(32)
+        self.label_table.verticalHeader().setMinimumSectionSize(28)
+        self.label_table.setShowGrid(True)
+        l_header = self.label_table.horizontalHeader()
+        l_header.setDefaultSectionSize(115)
         self.label_table.setAlternatingRowColors(True)
         label_layout.addWidget(self.label_table)
 
@@ -466,7 +655,8 @@ class MemberWorkspaceView(QWidget):
         lbl_quick_layout.addLayout(l_col2)
 
         label_layout.addWidget(lbl_quick_box)
-        self.main_tab_widget.addTab(label_widget, "🏷️ 3. Nhãn LCP 7980 / 7990")
+        self.main_tab_widget.addTab(label_widget, "3. Nhãn LCP 7980 / 7990")
+        self.main_tab_widget.setTabIcon(2, get_theme_manager().get_styled_icon("calendar"))
 
         main_layout.addWidget(self.main_tab_widget)
 
@@ -475,7 +665,8 @@ class MemberWorkspaceView(QWidget):
         # ---------------------------------------------------------------------
         action_bar = QHBoxLayout()
 
-        self.btn_self_check = QPushButton("🔍 Kiểm tra Sơ bộ (Self-Check PLM & R3)")
+        self.btn_self_check = QPushButton("Kiểm tra Sơ bộ (Self-Check PLM & R3)")
+        self.btn_self_check.setIcon(get_theme_manager().get_styled_icon("search", color="#FFFFFF"))
         self.btn_self_check.setMinimumHeight(44)
         self.btn_self_check.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_self_check.setStyleSheet(
@@ -490,7 +681,8 @@ class MemberWorkspaceView(QWidget):
 
         action_bar.addStretch()
 
-        self.btn_unlock = QPushButton("🔓 Hủy nộp / Mở khóa")
+        self.btn_unlock = QPushButton("Hủy nộp / Mở khóa")
+        self.btn_unlock.setIcon(get_theme_manager().get_styled_icon("refresh", color="#FFFFFF"))
         self.btn_unlock.setMinimumHeight(44)
         self.btn_unlock.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_unlock.setStyleSheet(
@@ -499,16 +691,17 @@ class MemberWorkspaceView(QWidget):
         self.btn_unlock.clicked.connect(self.unlock_submission)
         action_bar.addWidget(self.btn_unlock)
 
-        self.btn_submit = QPushButton("🚀 Xác nhận Nộp (Đóng dấu Q2 = OK)")
+        self.btn_submit = QPushButton("Xác nhận Nộp (Đóng dấu Q2 = OK)")
+        self.btn_submit.setIcon(get_theme_manager().get_styled_icon("check-circle", color="#FFFFFF"))
         self.btn_submit.setMinimumHeight(44)
         self.btn_submit.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_submit.setStyleSheet(
             "background-color: #10B981; color: white; border-radius: 4px; padding: 6px 22px;"
         )
-        self.btn_submit.clicked.connect(self.submit_data)
-        action_bar.addWidget(self.btn_submit)
-
         main_layout.addLayout(action_bar)
+
+        scroll_area.setWidget(content_widget)
+        outer_layout.addWidget(scroll_area)
 
     # =========================================================================
     # Assignment Auto-Loading
@@ -687,6 +880,10 @@ class MemberWorkspaceView(QWidget):
         except Exception as exc:
             logger.warning("Failed to inspect assignment workbook: %s", exc)
 
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.set_step_completed(0, True)
+            self.workflow_stepper.set_current_step(1)
+
         return True
 
     def load_machine_directory(self, dir_path: Path | str | None = None) -> bool:
@@ -720,6 +917,9 @@ class MemberWorkspaceView(QWidget):
 
         # Otherwise just auto-discover BOMs
         self._auto_discover_boms(dir_path)
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.set_step_completed(0, True)
+            self.workflow_stepper.set_current_step(1)
         return True
 
     def _auto_discover_boms(self, machine_dir: Path) -> None:
@@ -1255,6 +1455,9 @@ class MemberWorkspaceView(QWidget):
         if plm_data is not None or r3_data is not None:
             self.lbl_ref_status.setText("BOM PLM & R3 sẵn sàng")
             self.lbl_ref_status.setStyleSheet("color: #10B981; font-weight: bold;")
+            if hasattr(self, "workflow_stepper"):
+                self.workflow_stepper.set_step_completed(0, True)
+                self.workflow_stepper.set_current_step(1)
 
     def run_preliminary_self_check(self) -> dict[str, Any]:
         """Execute instant three-way self-check on CTTT & MSI with soft green/red styling."""
@@ -1271,7 +1474,7 @@ class MemberWorkspaceView(QWidget):
         plm_dict: dict[str, tuple[float, str]] = {}
         if self.plm_data is not None and not self.plm_data.empty:
             id_col = next((c for c in self.plm_data.columns if any(k in str(c).upper() for k in ["ITEM ID", "ITEM_ID", "PART_CODE", "PART CODE", "NAME", "MÃ"])), None)
-            qty_col = next((c for c in self.plm_data.columns if any(k in str(c).upper() for k in ["QUANTITY", "QTY", "SL", "SỐ LƯỢNG"])), None)
+            qty_col = next((c for c in self.plm_data.columns if any(k in str(c).upper().replace(".", "").replace("'", "") for k in ["QUANTITY", "QTY", "SL", "SOLUONG", "SỐ LƯỢNG", "SỐLƯỢNG"]) or any(k in str(c).upper() for k in ["Q.TY", "Q'TY", "Q.TY."])), None)
             rev_col = next((c for c in self.plm_data.columns if any(k in str(c).upper() for k in ["REVISION", "REV", "ITEM_REV", "RELEASE STATUS"])), None)
             if id_col and qty_col:
                 for _, pr in self.plm_data.iterrows():
@@ -1288,7 +1491,7 @@ class MemberWorkspaceView(QWidget):
         r3_dict: dict[str, tuple[float, str]] = {}
         if self.r3_data is not None and not self.r3_data.empty:
             mat_col = next((c for c in self.r3_data.columns if any(k in str(c).upper() for k in ["MATERIAL", "COMPONENT", "PART_CODE", "PART CODE", "MÃ"])), None)
-            qty_col = next((c for c in self.r3_data.columns if any(k in str(c).upper() for k in ["QUANTITY", "QTY", "SL", "SỐ LƯỢNG"])), None)
+            qty_col = next((c for c in self.r3_data.columns if any(k in str(c).upper().replace(".", "").replace("'", "") for k in ["QUANTITY", "QTY", "SL", "SOLUONG", "SỐ LƯỢNG", "SỐLƯỢNG"]) or any(k in str(c).upper() for k in ["Q.TY", "Q'TY", "Q.TY."])), None)
             rev_col = next((c for c in self.r3_data.columns if any(k in str(c).upper() for k in ["REVLEV", "REVISION", "REV"])), None)
             if mat_col and qty_col:
                 for _, rr in self.r3_data.iterrows():
@@ -1427,6 +1630,11 @@ class MemberWorkspaceView(QWidget):
         else:
             self.lbl_check_summary.setStyleSheet("color: #28a745; font-weight: bold;")
 
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.set_step_completed(0, True)
+            self.workflow_stepper.set_step_completed(1, True)
+            self.workflow_stepper.set_current_step(2)
+
         return {
             "status": "OK" if ng_count == 0 else "NG",
             "ok_count": ok_count,
@@ -1435,22 +1643,25 @@ class MemberWorkspaceView(QWidget):
         }
 
     def _style_table_row(self, row_idx: int, is_ok: bool) -> None:
-        """Apply soft green (OK) or soft red (NG) styling across the row."""
+        """Apply soft green (OK) or soft red (NG) styling across the row with WCAG AAA contrast."""
+        col_count = self.cttt_table.columnCount()
+        row_bg = QColor("#DCFCE7") if is_ok else QColor("#FEE2E2")
+        row_fg = QColor("#064E3B") if is_ok else QColor("#7F1D1D")
+
+        for c in range(col_count):
+            it = self.cttt_table.item(row_idx, c)
+            if it and c != 7:
+                it.setBackground(row_bg)
+                it.setForeground(row_fg)
+
+        # Highlight Status cell (Col 7) with official Excel stamp color for backward compatibility
         bg_color = QColor(f"#{COLOR_GREEN_FILL_HEX}") if is_ok else QColor(f"#{COLOR_RED_FILL_HEX}")
         fg_color = QColor(f"#{COLOR_GREEN_FONT_HEX}") if is_ok else QColor(f"#{COLOR_RED_FONT_HEX}")
-
-        # Highlight Status cell (Col 7)
         status_item = self.cttt_table.item(row_idx, 7)
         if status_item:
             status_item.setBackground(bg_color)
             status_item.setForeground(fg_color)
             status_item.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
-
-        # Highlight Part Code cell (Col 1) if NG
-        part_item = self.cttt_table.item(row_idx, 1)
-        if part_item and not is_ok:
-            part_item.setBackground(bg_color)
-            part_item.setForeground(fg_color)
 
     # =========================================================================
     # Submission Seal Engine (Q2 = "OK")
@@ -1599,7 +1810,7 @@ class MemberWorkspaceView(QWidget):
                 ws_lbl.cell(row=2, column=6, value=author)
 
             wb.save(target_file)
-            logger.info("Successfully stamped Q2='OK' and saved member workbook to: %s", target_file)
+            logger.info("Đã đóng dấu phê duyệt Q2='OK' thành công vào file: %s", target_file.name)
 
             self.is_submitted_ok = True
             self.lbl_submission_seal.setText("✅ ĐÃ NỘP BÀI (Q2 = OK)")
@@ -1607,6 +1818,10 @@ class MemberWorkspaceView(QWidget):
                 "background-color: #C6EFCE; color: #006100; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
             )
             self.cttt_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+            if hasattr(self, "workflow_stepper"):
+                self.workflow_stepper.set_step_completed(2, True)
+                self.workflow_stepper.set_current_step(2)
 
             submission_info = {
                 "sub_unit": sub_unit,
@@ -1647,7 +1862,7 @@ class MemberWorkspaceView(QWidget):
                     ws_cttt["Q2"].fill = PatternFill(fill_type=None)
                     ws_cttt["Q2"].font = Font(name="Calibri", size=11)
                     wb.save(self.current_assignment_file)
-                    logger.info("Cleared Q2 seal in %s", self.current_assignment_file)
+                    logger.info("Đã mở khóa bài nộp và xóa dấu cờ Q2 trong file: %s", self.current_assignment_file.name)
             except Exception as exc:
                 logger.warning("Could not clear Q2 in file: %s", exc)
 
@@ -1661,4 +1876,14 @@ class MemberWorkspaceView(QWidget):
             | QTableWidget.EditTrigger.SelectedClicked
             | QTableWidget.EditTrigger.EditKeyPressed
         )
+
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.set_step_completed(2, False)
+            self.workflow_stepper.set_step_completed(1, False)
+            self.workflow_stepper.set_current_step(1)
+        elif hasattr(self, "stepper"):
+            self.stepper.set_step_completed(2, False)
+            self.stepper.set_step_completed(1, False)
+            self.stepper.set_current_step(1)
+
         QMessageBox.information(self, "Mở khóa thành công", "Đã hủy nộp và mở khóa để chỉnh sửa bài làm.")

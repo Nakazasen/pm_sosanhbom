@@ -37,6 +37,8 @@ hidden_imports = [
 datas = [
     ("locales", "locales"),
     ("update_sources.default.json", "."),
+    ("src/gui/assets", "src/gui/assets"),
+    ("src/gui/styles", "src/gui/styles"),
 ]
 
 a = Analysis(

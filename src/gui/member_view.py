@@ -38,6 +38,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -228,6 +229,11 @@ class MemberWorkspaceView(QWidget):
 
     submission_completed = pyqtSignal(dict)  # Emits metadata on successful Q2="OK" submission
 
+    def on_theme_changed(self, effective_theme: str) -> None:
+        """Propagate theme changes to MemberWorkflowStepper and styled icons."""
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper._refresh_step_styles()
+
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -260,9 +266,21 @@ class MemberWorkspaceView(QWidget):
 
     def _init_ui(self) -> None:
         """Construct full responsive layout for Member Workspace."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
         # ---------------------------------------------------------------------
         # Zone 0: 3-Step Workflow Stepper
@@ -406,6 +424,7 @@ class MemberWorkspaceView(QWidget):
         cttt_layout.addLayout(cttt_bar)
 
         self.cttt_table = QTableWidget(0, 15)
+        self.cttt_table.setMinimumHeight(280)
         self.cttt_table.setHorizontalHeaderLabels([
             "Trang CTTT",
             "Mã Linh Kiện",
@@ -427,9 +446,23 @@ class MemberWorkspaceView(QWidget):
         self.cttt_table.verticalHeader().setMinimumSectionSize(28)
         self.cttt_table.setShowGrid(True)
         c_header = self.cttt_table.horizontalHeader()
-        c_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        c_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        c_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        c_header.setDefaultSectionSize(115)
+        c_header.setMinimumSectionSize(65)
+        self.cttt_table.setColumnWidth(0, 80)   # Trang CTTT
+        self.cttt_table.setColumnWidth(1, 120)  # Mã Linh Kiện
+        self.cttt_table.setColumnWidth(2, 200)  # Tên Linh Kiện
+        self.cttt_table.setColumnWidth(3, 75)   # Số Lượng
+        self.cttt_table.setColumnWidth(4, 130)  # SL PLM (Tham chiếu)
+        self.cttt_table.setColumnWidth(5, 130)  # SL R3 (Tham chiếu)
+        self.cttt_table.setColumnWidth(6, 170)  # Giải Thích Sai Khác
+        self.cttt_table.setColumnWidth(7, 120)  # Kết Quả So Sánh
+        self.cttt_table.setColumnWidth(8, 120)  # Unit / Công đoạn
+        self.cttt_table.setColumnWidth(9, 120)  # Người Phụ Trách
+        self.cttt_table.setColumnWidth(10, 140) # So Sánh CTTT vs PLM
+        self.cttt_table.setColumnWidth(11, 75)  # Rev PLM
+        self.cttt_table.setColumnWidth(12, 135) # So Sánh CTTT vs R3
+        self.cttt_table.setColumnWidth(13, 75)  # Rev R3
+        self.cttt_table.setColumnWidth(14, 150) # So Sánh Rev PLM vs R3
         self.cttt_table.setAlternatingRowColors(True)
         cttt_layout.addWidget(self.cttt_table)
 
@@ -454,6 +487,7 @@ class MemberWorkspaceView(QWidget):
         msi_layout.addLayout(msi_bar)
 
         self.msi_table = QTableWidget(0, 12)
+        self.msi_table.setMinimumHeight(240)
         self.msi_table.setHorizontalHeaderLabels([
             "Mã LK Barcode",
             "Mã UNIT/Bản mạch",
@@ -472,7 +506,8 @@ class MemberWorkspaceView(QWidget):
         self.msi_table.verticalHeader().setMinimumSectionSize(28)
         self.msi_table.setShowGrid(True)
         m_header = self.msi_table.horizontalHeader()
-        m_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        m_header.setDefaultSectionSize(110)
+        self.msi_table.setColumnWidth(2, 190)
         self.msi_table.setAlternatingRowColors(True)
         self.msi_table.cellClicked.connect(self._on_msi_table_row_selected)
         msi_layout.addWidget(self.msi_table)
@@ -568,6 +603,7 @@ class MemberWorkspaceView(QWidget):
         label_layout.addLayout(lbl_bar)
 
         self.label_table = QTableWidget(0, 12)
+        self.label_table.setMinimumHeight(240)
         self.label_table.setHorizontalHeaderLabels([
             "Công đoạn (7980)",
             "Trang CTTT (7980)",
@@ -585,6 +621,8 @@ class MemberWorkspaceView(QWidget):
         self.label_table.verticalHeader().setDefaultSectionSize(32)
         self.label_table.verticalHeader().setMinimumSectionSize(28)
         self.label_table.setShowGrid(True)
+        l_header = self.label_table.horizontalHeader()
+        l_header.setDefaultSectionSize(115)
         self.label_table.setAlternatingRowColors(True)
         label_layout.addWidget(self.label_table)
 
@@ -660,9 +698,10 @@ class MemberWorkspaceView(QWidget):
         self.btn_submit.setStyleSheet(
             "background-color: #10B981; color: white; border-radius: 4px; padding: 6px 22px;"
         )
-        action_bar.addWidget(self.btn_submit)
-
         main_layout.addLayout(action_bar)
+
+        scroll_area.setWidget(content_widget)
+        outer_layout.addWidget(scroll_area)
 
     # =========================================================================
     # Assignment Auto-Loading
@@ -1771,7 +1810,7 @@ class MemberWorkspaceView(QWidget):
                 ws_lbl.cell(row=2, column=6, value=author)
 
             wb.save(target_file)
-            logger.info("Successfully stamped Q2='OK' and saved member workbook to: %s", target_file)
+            logger.info("Đã đóng dấu phê duyệt Q2='OK' thành công vào file: %s", target_file.name)
 
             self.is_submitted_ok = True
             self.lbl_submission_seal.setText("✅ ĐÃ NỘP BÀI (Q2 = OK)")
@@ -1823,7 +1862,7 @@ class MemberWorkspaceView(QWidget):
                     ws_cttt["Q2"].fill = PatternFill(fill_type=None)
                     ws_cttt["Q2"].font = Font(name="Calibri", size=11)
                     wb.save(self.current_assignment_file)
-                    logger.info("Cleared Q2 seal in %s", self.current_assignment_file)
+                    logger.info("Đã mở khóa bài nộp và xóa dấu cờ Q2 trong file: %s", self.current_assignment_file.name)
             except Exception as exc:
                 logger.warning("Could not clear Q2 in file: %s", exc)
 
