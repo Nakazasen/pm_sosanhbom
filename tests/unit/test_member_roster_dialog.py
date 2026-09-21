@@ -73,3 +73,39 @@ class TestMemberRosterDialog:
                 dlg._on_delete_member()
 
         assert dlg.member_table.rowCount() == 38
+
+    def test_dialog_edit_account_id_and_multi_subunits(self, qapp: QApplication, tmp_path: Path) -> None:
+        """Verify that account_id can be edited (unlocked) and multi-subunits can be saved."""
+        local_dir = tmp_path / "app"
+        remote_file = tmp_path / "remote" / "ssbom_master.db"
+
+        dlg = MemberRosterDialog(base_dir=local_dir, remote_db_path=remote_file)
+
+        # Select row for Son_mecha1
+        target_row = -1
+        for r in range(dlg.member_table.rowCount()):
+            if dlg.member_table.item(r, 1).text() == "Son_mecha1":
+                target_row = r
+                break
+        assert target_row >= 0
+        dlg.member_table.selectRow(target_row)
+        assert dlg.txt_account_id.isReadOnly() is False
+        assert dlg.txt_account_id.text() == "Son_mecha1"
+
+        # Edit account_id and multi-subunits
+        dlg.txt_account_id.setText("Son_mecha1_edited")
+        dlg.txt_full_name.setText("Nguyễn Văn Sơn Cải Tiến")
+        dlg.combo_sub_unit.setEditText("LSU, DRUM")
+
+        with patch("src.gui.member_roster_dialog.QMessageBox.information"):
+            dlg._on_update_member()
+
+        # Check that table updated with new account_id and multi-subunits
+        found = False
+        for r in range(dlg.member_table.rowCount()):
+            if dlg.member_table.item(r, 1).text() == "Son_mecha1_edited":
+                assert dlg.member_table.item(r, 2).text() == "Nguyễn Văn Sơn Cải Tiến"
+                assert dlg.member_table.item(r, 4).text() == "LSU, DRUM"
+                found = True
+                break
+        assert found is True

@@ -350,9 +350,10 @@ class MemberDatabaseManager:
             return False, f"Lỗi lưu CSDL: {exc}"
 
     def update_member(self, member: MemberRecord) -> tuple[bool, str]:
-        """Update existing member information."""
-        if not member.account_id or not member.account_id.strip():
-            return False, "Mã thành viên không hợp lệ."
+        """Update existing member information, allowing account_id modification when member.id is provided."""
+        new_acc_id = member.account_id.strip() if member.account_id else ""
+        if not new_acc_id:
+            return False, "Mã thành viên không được để trống."
 
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         db_path, is_remote = self.get_active_db_path()
@@ -360,53 +361,95 @@ class MemberDatabaseManager:
         try:
             with self._get_connection(db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    UPDATE members SET
-                        full_name = ?,
-                        department = ?,
-                        default_sub_unit = ?,
-                        is_active = ?,
-                        notes = ?,
-                        updated_at = ?
-                    WHERE account_id = ?;
-                    """,
-                    (
-                        member.full_name.strip(),
-                        member.department.strip(),
-                        member.default_sub_unit.strip(),
-                        1 if member.is_active else 0,
-                        member.notes.strip(),
-                        now_str,
-                        member.account_id.strip(),
-                    ),
-                )
+
+                if member.id is not None:
+                    # Check if new account_id is taken by another member
+                    cursor.execute(
+                        "SELECT id FROM members WHERE account_id = ? AND id != ?;",
+                        (new_acc_id, member.id),
+                    )
+                    if cursor.fetchone():
+                        return False, f"Mã thành viên '{new_acc_id}' đã trùng với thành viên khác trong CSDL."
+
+                    cursor.execute(
+                        """
+                        UPDATE members SET
+                            account_id = ?,
+                            full_name = ?,
+                            department = ?,
+                            default_sub_unit = ?,
+                            is_active = ?,
+                            notes = ?,
+                            updated_at = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            new_acc_id,
+                            member.full_name.strip() if member.full_name else new_acc_id,
+                            member.department.strip(),
+                            member.default_sub_unit.strip(),
+                            1 if member.is_active else 0,
+                            member.notes.strip(),
+                            now_str,
+                            member.id,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE members SET
+                            full_name = ?,
+                            department = ?,
+                            default_sub_unit = ?,
+                            is_active = ?,
+                            notes = ?,
+                            updated_at = ?
+                        WHERE account_id = ?;
+                        """,
+                        (
+                            member.full_name.strip() if member.full_name else new_acc_id,
+                            member.department.strip(),
+                            member.default_sub_unit.strip(),
+                            1 if member.is_active else 0,
+                            member.notes.strip(),
+                            now_str,
+                            new_acc_id,
+                        ),
+                    )
+
                 if cursor.rowcount == 0:
-                    return False, f"Không tìm thấy thành viên '{member.account_id}' để cập nhật."
+                    return False, f"Không tìm thấy thành viên '{new_acc_id}' để cập nhật."
                 conn.commit()
 
             self._sync_active_with_alternate(db_path, is_remote)
-            return True, f"Đã cập nhật thông tin thành viên '{member.account_id}' thành công."
+            return True, f"Đã cập nhật thông tin thành viên '{new_acc_id}' thành công."
+        except sqlite3.IntegrityError:
+            return False, f"Mã thành viên '{new_acc_id}' đã tồn tại trong CSDL."
         except Exception as exc:
             logger.error("Failed to update member: %s", exc)
             return False, f"Lỗi cập nhật CSDL: {exc}"
 
-    def delete_member(self, account_id: str) -> tuple[bool, str]:
-        """Delete member by account_id."""
-        if not account_id or not account_id.strip():
+    def delete_member(self, account_id: str, member_id: int | None = None) -> tuple[bool, str]:
+        """Delete member by member_id (preferred) or account_id."""
+        acc_id = account_id.strip() if account_id else ""
+        if not acc_id and member_id is None:
             return False, "Mã thành viên không hợp lệ."
 
         db_path, is_remote = self.get_active_db_path()
         try:
             with self._get_connection(db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM members WHERE account_id = ?;", (account_id.strip(),))
+                if member_id is not None:
+                    cursor.execute("DELETE FROM members WHERE id = ?;", (member_id,))
+                else:
+                    cursor.execute("DELETE FROM members WHERE account_id = ?;", (acc_id,))
+
                 if cursor.rowcount == 0:
-                    return False, f"Không tìm thấy thành viên '{account_id}' để xóa."
+                    return False, f"Không tìm thấy thành viên '{acc_id}' để xóa."
                 conn.commit()
 
             self._sync_active_with_alternate(db_path, is_remote)
-            return True, f"Đã xóa thành viên '{account_id}' thành công."
+            return True, f"Đã xóa thành viên '{acc_id or str(member_id)}' thành công."
         except Exception as exc:
             logger.error("Failed to delete member: %s", exc)
             return False, f"Lỗi xóa dữ liệu: {exc}"

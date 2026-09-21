@@ -47,11 +47,15 @@ class OutlookMailer:
         default_sender: str = "vn_pe03@dtvn.kyocera.com",
         default_cc: list[str] | None = None,
         com_dispatch: Any | None = None,
+        test_mode: bool = True,
+        test_recipient: str = "vinh.bd@dtvn.kyocera.com",
     ) -> None:
         """Initialize mailer with optional mockable COM dispatch."""
         self.default_sender = default_sender
         self.default_cc = default_cc or ["vinh.bd@dtvn.kyocera.com"]
         self._custom_dispatch = com_dispatch
+        self.test_mode = test_mode
+        self.test_recipient = test_recipient
 
     def build_email_preview(
         self,
@@ -322,6 +326,170 @@ class OutlookMailer:
         except Exception as exc:
             logger.error("Failed to send email via Outlook: %s", exc)
             return False
+
+    def build_task_assignment_email(
+        self,
+        machine_type: str,
+        start_date: str,
+        quantity: int | str,
+        phase: str,
+        deadline_copy: str,
+        deadline_verify: str,
+        attachment_path: str | Path,
+        recipients_to: str | list[str] | None = None,
+        recipients_cc: str | list[str] | None = None,
+    ) -> EmailPreview:
+        """Build email requesting engineers to perform BOM comparison (Mail yêu cầu phụ trách so sánh BOM)."""
+        subject = f'So sánh BOM mã hàng mới "{machine_type}"'
+
+        # Process real recipients
+        if recipients_to:
+            real_to = [r.strip() for r in (recipients_to.split(";") if isinstance(recipients_to, str) else recipients_to) if r.strip()]
+        else:
+            real_to = [
+                "KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-ProductionEngineering_Mecha2_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-ProductionEngineering_Mecha3_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-Production-Engineering_Mecha32@dtvn.kyocera.com",
+            ]
+
+        if recipients_cc:
+            real_cc = [c.strip() for c in (recipients_cc.split(";") if isinstance(recipients_cc, str) else recipients_cc) if c.strip()]
+        else:
+            real_cc = ["KDTVN-Production-Engineering_Management@kdcf.onmicrosoft.com"]
+
+        # Apply Test Mode if enabled
+        if self.test_mode:
+            final_to = [self.test_recipient]
+            final_cc = []
+            test_banner = (
+                f'<div style="background-color: #FFF3CD; border: 1px solid #FFEEBA; color: #856404; padding: 10px; margin-bottom: 15px; border-radius: 4px;">'
+                f'<strong>[CHẾ ĐỘ THỬ NGHIỆM / TEST MODE]</strong><br>'
+                f'Thư này được chuyển hướng tới: <code>{self.test_recipient}</code><br>'
+                f'Người nhận thực tế khi chạy chính thức:<br>'
+                f'• To: {"; ".join(real_to)}<br>'
+                f'• CC: {"; ".join(real_cc)}'
+                f'</div>'
+            )
+        else:
+            final_to = real_to
+            final_cc = real_cc
+            test_banner = ""
+
+        att_path_str = str(attachment_path).replace("\\", "/")
+
+        html_body = f"""<html>
+<body style="font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; color: #222;">
+{test_banner}
+<p>Dear all,</p>
+
+<p>Dự định từ "{start_date}" sẽ sản xuất "{quantity}" mã hàng mới giai đoạn "{phase}" của máy "{machine_type}"</p>
+
+<ol>
+    <li><strong>Mọi người kiểm tra các hàng mục xác nhận trước sản xuất: 18 điểm (chi tiết trong file hàng mục chữ ý khi sản xuất mã hàng mới)</strong><br>
+    Khi hoàn thành hàng mục này thì check OK vào hàng mục đó. Yêu cầu trước ngày sản xuất 3 ngày phải hoàn thành 18 điểm chú ý.</li>
+
+    <li><strong>Chuẩn bị so sánh BOM</strong><br>
+    Mọi người copy danh sách linh kiện và MSI mới nhất vào link dưới<br>
+    Hạn hoàn thành copy danh sách linh kiện và MSI : <span style="background-color: yellow;">trong ngày "{deadline_copy}"</span><br>
+    Hạn hoàn thành xác nhận sai khác : <span style="background-color: yellow;">trong ngày "{deadline_verify}"</span></li>
+</ol>
+
+<p><span style="background-color: yellow;">Ưu tiên hoàn thành so sánh BOM hiện tại để đảm bảo sản xuất tốt xác nhân hiệu quả so sánh BOM tự động.</span><br>
+</p>
+
+<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}">"{attachment_path}"</a></p>
+
+</body>
+</html>"""
+
+        attachments: list[Path] = []
+        p = Path(attachment_path)
+        if p.exists() and p.is_file():
+            attachments.append(p.resolve())
+
+        return EmailPreview(
+            subject=subject,
+            recipients_to=final_to,
+            recipients_cc=final_cc,
+            html_body=html_body,
+            attachment_paths=attachments,
+            overall_status="OK",
+        )
+
+    def build_management_review_email(
+        self,
+        machine_type: str,
+        production_date: str,
+        attachment_path: str | Path,
+        recipients_to: str | list[str] | None = None,
+        recipients_cc: str | list[str] | None = None,
+    ) -> EmailPreview:
+        """Build email requesting managers to review completed BOM (Mail nhờ quản lý check BOM)."""
+        subject = f'So sánh BOM mã hàng mới "{machine_type}"'
+
+        if recipients_to:
+            real_to = [r.strip() for r in (recipients_to.split(";") if isinstance(recipients_to, str) else recipients_to) if r.strip()]
+        else:
+            real_to = ["KDTVN-Production-Engineering_Management@kdcf.onmicrosoft.com"]
+
+        if recipients_cc:
+            real_cc = [c.strip() for c in (recipients_cc.split(";") if isinstance(recipients_cc, str) else recipients_cc) if c.strip()]
+        else:
+            real_cc = [
+                "KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-ProductionEngineering_Mecha2_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-ProductionEngineering_Mecha3_Local_@kdcf.onmicrosoft.com",
+                "KDTVN-Production-Engineering_Mecha32@dtvn.kyocera.com",
+            ]
+
+        # Apply Test Mode if enabled
+        if self.test_mode:
+            final_to = [self.test_recipient]
+            final_cc = []
+            test_banner = (
+                f'<div style="background-color: #FFF3CD; border: 1px solid #FFEEBA; color: #856404; padding: 10px; margin-bottom: 15px; border-radius: 4px;">'
+                f'<strong>[CHẾ ĐỘ THỬ NGHIỆM / TEST MODE]</strong><br>'
+                f'Thư này được chuyển hướng tới: <code>{self.test_recipient}</code><br>'
+                f'Người nhận thực tế khi chạy chính thức:<br>'
+                f'• To: {"; ".join(real_to)}<br>'
+                f'• CC: {"; ".join(real_cc)}'
+                f'</div>'
+            )
+        else:
+            final_to = real_to
+            final_cc = real_cc
+            test_banner = ""
+
+        att_path_str = str(attachment_path).replace("\\", "/")
+
+        html_body = f"""<html>
+<body style="font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; color: #222;">
+{test_banner}
+<p>Dear các anh quản lý,</p>
+
+<p>Mọi người đã hoàn thành so sánh BOM mã hàng mới "{machine_type}" bên dưới.<br>
+Các anh kiểm tra lại giúp em với.</p>
+
+<p>Ngày sản xuất dự kiến: <span style="background-color: yellow;">trong ngày "{production_date}"</span><br> </p> 
+
+<p>Link so sánh BOM hiện tại: <a href="file:///{att_path_str}">"{attachment_path}"</a></p>
+</body>
+</html>"""
+
+        attachments: list[Path] = []
+        p = Path(attachment_path)
+        if p.exists() and p.is_file():
+            attachments.append(p.resolve())
+
+        return EmailPreview(
+            subject=subject,
+            recipients_to=final_to,
+            recipients_cc=final_cc,
+            html_body=html_body,
+            attachment_paths=attachments,
+            overall_status="OK",
+        )
 
     def _get_outlook_application(self) -> Any:
         """Obtain Outlook Application instance via win32com or custom mock."""

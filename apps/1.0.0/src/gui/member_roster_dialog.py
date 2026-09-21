@@ -57,6 +57,7 @@ class MemberRosterDialog(QDialog):
 
         self.db_manager = MemberDatabaseManager(base_dir=base_dir, remote_db_path=remote_db_path)
         self.theme_mgr = get_theme_manager()
+        self._selected_member: MemberRecord | None = None
 
         self._init_ui()
         self._load_roster_data()
@@ -138,12 +139,12 @@ class MemberRosterDialog(QDialog):
 
         m_header = self.member_table.horizontalHeader()
         m_header.setDefaultSectionSize(110)
-        self.member_table.setColumnWidth(0, 45)   # STT
-        self.member_table.setColumnWidth(1, 120)  # Mã thành viên
-        self.member_table.setColumnWidth(2, 130)  # Họ tên
-        self.member_table.setColumnWidth(3, 85)   # Phòng ban
-        self.member_table.setColumnWidth(4, 85)   # Công đoạn
-        self.member_table.setColumnWidth(5, 100)  # Trạng thái
+        self.member_table.setColumnWidth(0, 40)   # STT
+        self.member_table.setColumnWidth(1, 115)  # Mã thành viên
+        self.member_table.setColumnWidth(2, 125)  # Họ tên
+        self.member_table.setColumnWidth(3, 75)   # Phòng ban
+        self.member_table.setColumnWidth(4, 120)  # Công đoạn (hỗ trợ nhiều công đoạn)
+        self.member_table.setColumnWidth(5, 95)   # Trạng thái
         m_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Ghi chú
 
         self.member_table.itemSelectionChanged.connect(self._on_table_selection_changed)
@@ -172,6 +173,10 @@ class MemberRosterDialog(QDialog):
         form_layout.addRow("Phòng ban (*):", self.combo_dept)
 
         self.combo_sub_unit = QComboBox()
+        self.combo_sub_unit.setEditable(True)
+        self.combo_sub_unit.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        if self.combo_sub_unit.lineEdit():
+            self.combo_sub_unit.lineEdit().setPlaceholderText("VD: LSU hoặc LSU, DRUM")
         self.combo_sub_unit.addItem("")
         self.combo_sub_unit.addItems(STANDARD_SUB_UNITS)
         form_layout.addRow("Công đoạn mặc định:", self.combo_sub_unit)
@@ -220,8 +225,9 @@ class MemberRosterDialog(QDialog):
         right_layout.addStretch()
         splitter.addWidget(right_group)
 
-        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(0, 5)
         splitter.setStretchFactor(1, 2)
+        splitter.setSizes([630, 320])
         main_layout.addWidget(splitter)
 
         # ---------------------------------------------------------------------
@@ -350,25 +356,28 @@ class MemberRosterDialog(QDialog):
             return
         row = selected_rows[0].row()
 
-        acc_id = self.member_table.item(row, 1).text()
+        acc_id = self.member_table.item(row, 1).text().strip()
         rec = next((m for m in getattr(self, "_all_records", []) if m.account_id == acc_id), None)
         if rec:
+            self._selected_member = rec
             self.txt_account_id.setText(rec.account_id)
-            self.txt_account_id.setReadOnly(True)  # Lock account ID during edit
+            self.txt_account_id.setReadOnly(False)  # Allow editing account ID
             self.txt_full_name.setText(rec.full_name)
             self.combo_dept.setCurrentText(rec.department)
-            self.combo_sub_unit.setCurrentText(rec.default_sub_unit)
+            self.combo_sub_unit.setEditText(rec.default_sub_unit)
             self.chk_is_active.setChecked(rec.is_active)
             self.txt_notes.setText(rec.notes)
 
     def _clear_form(self) -> None:
         """Reset form inputs for adding a new member."""
         self.member_table.clearSelection()
+        self._selected_member = None
         self.txt_account_id.setReadOnly(False)
         self.txt_account_id.clear()
         self.txt_full_name.clear()
         self.combo_dept.setCurrentIndex(0)
         self.combo_sub_unit.setCurrentIndex(0)
+        self.combo_sub_unit.setEditText("")
         self.chk_is_active.setChecked(True)
         self.txt_notes.clear()
         self.txt_account_id.setFocus()
@@ -405,17 +414,34 @@ class MemberRosterDialog(QDialog):
             QMessageBox.critical(self, "Lỗi", msg)
 
     def _on_update_member(self) -> None:
-        """Handle 'Cập nhật thông tin' action."""
+        """Handle 'Cập nhật thông tin' action, supporting account_id modification."""
+        if not self._selected_member:
+            selected_rows = self.member_table.selectionModel().selectedRows()
+            if selected_rows:
+                row = selected_rows[0].row()
+                acc_id = self.member_table.item(row, 1).text().strip()
+                self._selected_member = next(
+                    (m for m in getattr(self, "_all_records", []) if m.account_id == acc_id),
+                    None,
+                )
+
+        if not self._selected_member:
+            QMessageBox.warning(self, "Chưa chọn", "Vui lòng chọn thành viên trong bảng để cập nhật.")
+            return
+
         acc_id = self.txt_account_id.text().strip()
         dept = self.combo_dept.currentText().strip()
         if not acc_id:
-            QMessageBox.warning(self, "Chưa chọn", "Vui lòng chọn thành viên trong bảng để cập nhật.")
+            QMessageBox.warning(self, "Thiếu thông tin", "Mã thành viên không được để trống.")
+            self.txt_account_id.setFocus()
             return
         if not dept:
             QMessageBox.warning(self, "Thiếu thông tin", "Phòng ban không được để trống.")
+            self.combo_dept.setFocus()
             return
 
         rec = MemberRecord(
+            id=self._selected_member.id,
             account_id=acc_id,
             full_name=self.txt_full_name.text().strip() or acc_id,
             department=dept,
@@ -427,6 +453,7 @@ class MemberRosterDialog(QDialog):
         ok, msg = self.db_manager.update_member(rec)
         if ok:
             QMessageBox.information(self, "Thành công", msg)
+            self._selected_member = rec
             self._load_roster_data()
             self.roster_changed.emit()
         else:
@@ -435,7 +462,8 @@ class MemberRosterDialog(QDialog):
     def _on_delete_member(self) -> None:
         """Handle 'Xóa thành viên' action."""
         acc_id = self.txt_account_id.text().strip()
-        if not acc_id:
+        member_id = self._selected_member.id if self._selected_member else None
+        if not acc_id and member_id is None:
             QMessageBox.warning(self, "Chưa chọn", "Vui lòng chọn thành viên trong bảng cần xóa.")
             return
 
@@ -449,11 +477,11 @@ class MemberRosterDialog(QDialog):
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
-        ok, msg = self.db_manager.delete_member(acc_id)
+        ok, msg = self.db_manager.delete_member(acc_id, member_id=member_id)
         if ok:
             QMessageBox.information(self, "Thành công", msg)
-            self._load_roster_data()
             self._clear_form()
+            self._load_roster_data()
             self.roster_changed.emit()
         else:
             QMessageBox.critical(self, "Lỗi", msg)

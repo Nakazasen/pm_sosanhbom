@@ -44,6 +44,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -184,7 +185,13 @@ class LeaderSessionState:
     """Global session state for the 4-step sequential wizard."""
     model_name: str = "Virgo"
     stage: ProjectStage = ProjectStage.MA_1
-    base_dir: Path = field(default_factory=lambda: Path(r"D:\Sandbox\pm_sosanhbom"))
+    base_dir: Path = field(
+        default_factory=lambda: (
+            Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3")
+            if Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3").exists()
+            else Path(r"D:\Sandbox\pm_sosanhbom")
+        )
+    )
 
     # Step 1
     machines: list[MachineTarget] = field(default_factory=list)
@@ -211,6 +218,10 @@ class LeaderSessionState:
     ktsx_reviewer: str = ""
     step4_completed: bool = False
     last_bom_file: Optional[Path] = None
+
+    # Storage Hierarchy
+    use_date_hierarchy: bool = False
+    current_model_dir: Optional[Path] = None
 
 
 # =============================================================================
@@ -499,30 +510,35 @@ class Step1ProjectSetupWidget(QWidget):
 
     step_completed = pyqtSignal(bool)
 
-    def __init__(self, state: LeaderSessionState, parent: QWidget | None = None) -> None:
+    def __init__(self, state: LeaderSessionState, mailer: OutlookMailer | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.state = state
+        self.mailer = mailer or OutlookMailer()
         self._is_updating_machine_table: bool = False
         self._init_ui()
         self._populate_defaults()
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
 
-        # 1. Top configuration group
+        # 1. Top configuration group (2-row spacious layout, zero horizontal overflow)
         config_group = QGroupBox("1.1 Cấu hình Dự án && Giai đoạn")
-        config_layout = QHBoxLayout(config_group)
+        config_layout = QVBoxLayout(config_group)
         config_layout.setContentsMargins(8, 4, 8, 4)
+        config_layout.setSpacing(4)
 
-        config_layout.addWidget(QLabel("Model máy:"))
+        # Row 1: Model, Stage, and Primary Action Button
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(8)
+        row1_layout.addWidget(QLabel("Model máy:"))
         self.model_combo = QComboBox()
         self.model_combo.addItems(["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"])
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
-        config_layout.addWidget(self.model_combo)
+        row1_layout.addWidget(self.model_combo)
 
-        config_layout.addWidget(QLabel("Giai đoạn:"))
+        row1_layout.addWidget(QLabel("Giai đoạn:"))
         self.stage_combo = QComboBox()
         self.stage_combo.addItems([
             "MP (ma1 - tiền tố 110)",
@@ -530,20 +546,57 @@ class Step1ProjectSetupWidget(QWidget):
             "DMT / PMT (maT - tiền tố T10)",
         ])
         self.stage_combo.currentTextChanged.connect(self._on_stage_changed)
-        config_layout.addWidget(self.stage_combo)
+        row1_layout.addWidget(self.stage_combo)
 
-        config_layout.addWidget(QLabel("Thư mục gốc:"))
+        row1_layout.addStretch()
+
+        self.btn_scan_pcd = QPushButton("Quét Kế Hoạch PCD...")
+        self.btn_scan_pcd.setIcon(get_theme_manager().get_styled_icon("calendar"))
+        self.btn_scan_pcd.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_scan_pcd.setMinimumHeight(28)
+        self.btn_scan_pcd.setStyleSheet(
+            "background-color: #2E7D32; color: white; border-radius: 4px; padding: 4px 12px; font-weight: bold;"
+        )
+        self.btn_scan_pcd.clicked.connect(self._open_pcd_scan_dialog)
+        row1_layout.addWidget(self.btn_scan_pcd)
+
+        self.btn_send_assign_email = QPushButton("Gửi Mail Yêu Cầu Phụ Trách...")
+        self.btn_send_assign_email.setIcon(get_theme_manager().get_styled_icon("mail"))
+        self.btn_send_assign_email.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_send_assign_email.setMinimumHeight(28)
+        self.btn_send_assign_email.setStyleSheet(
+            "background-color: #E65100; color: white; border-radius: 4px; padding: 4px 12px; font-weight: bold;"
+        )
+        self.btn_send_assign_email.clicked.connect(self._on_send_assignment_email)
+        row1_layout.addWidget(self.btn_send_assign_email)
+
+        self.btn_create_folders = QPushButton("Khởi Tạo Thư Mục Dự Án && Xuất File Phân Công")
+        self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
+        self.btn_create_folders.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_create_folders.setMinimumHeight(28)
+        self.btn_create_folders.setStyleSheet(
+            "background-color: #0078D4; color: white; border-radius: 4px; padding: 4px 14px;"
+        )
+        self.btn_create_folders.clicked.connect(self.execute_create_folders_and_packages)
+        row1_layout.addWidget(self.btn_create_folders)
+        config_layout.addLayout(row1_layout)
+
+        # Row 2: Base directory full width path + browse & open buttons
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(8)
+        row2_layout.addWidget(QLabel("Thư mục gốc:"))
         self.edit_base_dir = QLineEdit(str(self.state.base_dir))
-        config_layout.addWidget(self.edit_base_dir, stretch=1)
+        row2_layout.addWidget(self.edit_base_dir, stretch=1)
 
         self.btn_browse_dir = QPushButton("Duyệt...")
         self.btn_browse_dir.clicked.connect(self._browse_base_dir)
-        config_layout.addWidget(self.btn_browse_dir)
+        row2_layout.addWidget(self.btn_browse_dir)
 
         self.btn_open_folder = QPushButton("Mở thư mục")
         self.btn_open_folder.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_open_folder.clicked.connect(self._open_base_dir)
-        config_layout.addWidget(self.btn_open_folder)
+        row2_layout.addWidget(self.btn_open_folder)
+        config_layout.addLayout(row2_layout)
 
         layout.addWidget(config_group)
 
@@ -556,19 +609,8 @@ class Step1ProjectSetupWidget(QWidget):
         mach_layout.setContentsMargins(6, 4, 6, 4)
         mach_layout.setSpacing(4)
 
-        self.machine_table = QTableWidget(0, 4)
-        self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Bỏ qua (X)", "Ghi chú"])
-        self.machine_table.verticalHeader().setDefaultSectionSize(32)
-        self.machine_table.verticalHeader().setMinimumSectionSize(28)
-        self.machine_table.setShowGrid(True)
-        self.machine_table.setMinimumHeight(180)
-        self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        h_mach = self.machine_table.horizontalHeader()
-        h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
-        mach_layout.addWidget(self.machine_table)
-
         mach_btn_layout = QHBoxLayout()
+        mach_btn_layout.setContentsMargins(0, 2, 0, 4)
         self.btn_add_mach = QPushButton("+ Thêm mã")
         self.btn_add_mach.clicked.connect(self._add_machine_row)
         self.btn_del_mach = QPushButton("- Xóa mã")
@@ -581,6 +623,24 @@ class Step1ProjectSetupWidget(QWidget):
         mach_btn_layout.addWidget(self.btn_del_mach)
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
+
+        self.machine_table = QTableWidget(0, 4)
+        self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Bỏ qua (X)", "Ghi chú"])
+        self.machine_table.verticalHeader().setDefaultSectionSize(32)
+        self.machine_table.verticalHeader().setMinimumSectionSize(28)
+        self.machine_table.setShowGrid(True)
+        self.machine_table.setMinimumHeight(160)
+        self.machine_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        h_mach = self.machine_table.horizontalHeader()
+        h_mach.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.machine_table.setColumnWidth(0, 45)
+        h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        h_mach.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.machine_table.setColumnWidth(2, 75)
+        h_mach.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
+        mach_layout.addWidget(self.machine_table)
 
         tables_layout.addWidget(mach_group, stretch=1)
 
@@ -624,34 +684,27 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
         self.staff_table.setShowGrid(True)
-        self.staff_table.setMinimumHeight(180)
+        self.staff_table.setMinimumHeight(160)
+        self.staff_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.staff_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_staff = self.staff_table.horizontalHeader()
+        h_staff.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.staff_table.setColumnWidth(0, 60)
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        h_staff.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.staff_table.setColumnWidth(2, 75)
+        h_staff.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.staff_table.setColumnWidth(3, 115)
+        h_staff.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.staff_table.setColumnWidth(4, 130)
         staff_layout.addWidget(self.staff_table)
 
         tables_layout.addWidget(staff_group, stretch=2)
         layout.addLayout(tables_layout, stretch=1)
 
-
-        # 3. Action button
-        action_layout = QHBoxLayout()
-        action_layout.setContentsMargins(0, 4, 0, 4)
-        self.btn_create_folders = QPushButton("Khởi tạo Cây Thư Mục && Sinh Gói Nộp Thành Viên")
-        self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
-        self.btn_create_folders.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
-        self.btn_create_folders.setMinimumHeight(38)
-        self.btn_create_folders.setStyleSheet(
-            "background-color: #0078D4; color: white; border-radius: 4px; padding: 6px 16px;"
-        )
-        self.btn_create_folders.clicked.connect(self.execute_create_folders_and_packages)
-        action_layout.addWidget(self.btn_create_folders)
-
         # Testing & backward compatibility aliases
         self.btn_create_project = self.btn_create_folders
         self.btn_add_machine = self.btn_add_mach
-
-        layout.addLayout(action_layout)
 
     def _open_manage_roster_dialog(self) -> None:
         """Open the Member Roster Management Dialog."""
@@ -755,17 +808,12 @@ class Step1ProjectSetupWidget(QWidget):
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
             combo_sub = QComboBox()
-            combo_sub.setStyleSheet(
-                "QComboBox { padding: 2px 4px; font-size: 11px; border: 1px solid #D0D0D0; border-radius: 3px; background-color: #FFFFFF; }"
-                "QComboBox:focus { border: 1px solid #0078D4; }"
-            )
+            combo_sub.setEditable(True)
+            combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+            combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
             for u in STANDARD_SUB_UNITS:
                 combo_sub.addItem(u)
-            if assigned_unit in STANDARD_SUB_UNITS:
-                combo_sub.setCurrentText(assigned_unit)
-            else:
-                combo_sub.addItem(assigned_unit)
-                combo_sub.setCurrentText(assigned_unit)
+            combo_sub.setEditText(assigned_unit)
             self.staff_table.setCellWidget(r, 4, combo_sub)
             combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
 
@@ -849,17 +897,12 @@ class Step1ProjectSetupWidget(QWidget):
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
             combo_sub = QComboBox()
-            combo_sub.setStyleSheet(
-                "QComboBox { padding: 2px 4px; font-size: 11px; border: 1px solid #D0D0D0; border-radius: 3px; background-color: #FFFFFF; }"
-                "QComboBox:focus { border: 1px solid #0078D4; }"
-            )
+            combo_sub.setEditable(True)
+            combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+            combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
             for u in STANDARD_SUB_UNITS:
                 combo_sub.addItem(u)
-            if assigned_unit in STANDARD_SUB_UNITS:
-                combo_sub.setCurrentText(assigned_unit)
-            else:
-                combo_sub.addItem(assigned_unit)
-                combo_sub.setCurrentText(assigned_unit)
+            combo_sub.setEditText(assigned_unit)
             self.staff_table.setCellWidget(r, 4, combo_sub)
             combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
 
@@ -1007,10 +1050,7 @@ class Step1ProjectSetupWidget(QWidget):
             combo = self.staff_table.cellWidget(r, 3)
             if not isinstance(combo, QComboBox):
                 combo = QComboBox()
-                combo.setStyleSheet(
-                    "QComboBox { padding: 2px 4px; font-size: 11px; border: 1px solid #D0D0D0; border-radius: 3px; background-color: #FFFFFF; }"
-                    "QComboBox:focus { border: 1px solid #0078D4; }"
-                )
+                combo.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
                 self.staff_table.setCellWidget(r, 3, combo)
 
             current_text = combo.currentText().strip()
@@ -1177,10 +1217,71 @@ class Step1ProjectSetupWidget(QWidget):
                 elif sub_item:
                     assignment.sub_unit = sub_item.text().strip()
 
-    def create_project_folder_structure(self) -> Path:
-        """Canonical folder creation for model (backward compatible)."""
+    def _open_pcd_scan_dialog(self) -> None:
+        """Open PCD Monthly Production Plan scanner dialog."""
+        from src.gui.pcd_plan_dialog import PCDPlanScanDialog
+        dlg = PCDPlanScanDialog(mailer=self.mailer, parent=self)
+        dlg.exec()
+
+    def _on_send_assignment_email(self) -> None:
+        """Open Email Preview for task assignment to engineers."""
+        model = self.state.model_name
+        stage_txt = self.stage_combo.currentText().strip()
+        stage_code = "MP"
+        if "DMT" in stage_txt or "PMT" in stage_txt:
+            stage_code = "DMT/PMT"
+        elif "PP" in stage_txt:
+            stage_code = "PP"
+
+        active_machines = [m for m in self.state.machines if not m.is_excluded]
+        qty = len(active_machines) or 1
+        now_str = datetime.datetime.now().strftime("%d/%m")
+        today = datetime.date.today()
+        deadline_copy = (today + datetime.timedelta(days=3)).strftime("%d.%m.%Y")
+        deadline_verify = (today + datetime.timedelta(days=5)).strftime("%d.%m.%Y")
+
+        att_path = self.state.base_dir / model
+
+        preview = self.mailer.build_task_assignment_email(
+            machine_type=model,
+            start_date=now_str,
+            quantity=qty,
+            phase=stage_code,
+            deadline_copy=deadline_copy,
+            deadline_verify=deadline_verify,
+            attachment_path=att_path,
+        )
+        dlg = EmailPreviewDialog(preview, self.mailer, parent=self)
+        dlg.exec()
+
+    def create_project_folder_structure(self, force_date_hierarchy: bool | None = None) -> Path:
+        """Canonical folder creation for model with phase and Year.Month (YYYY.MM)."""
         self.sync_state_from_ui()
-        model_dir = self.state.base_dir / self.state.model_name
+        stage_txt = self.stage_combo.currentText().strip()
+        stage_code = "MP"
+        if "DMT" in stage_txt or "PMT" in stage_txt:
+            stage_code = "DMT"
+        elif "PP" in stage_txt:
+            stage_code = "PP"
+
+        now = datetime.datetime.now()
+        year_month = f"{now.year}.{now.month:02d}"
+
+        # Standard hierarchy: <base_dir>/<model_name>/<stage>/<year_month> when on network UNC storage,
+        # or flat <base_dir>/<model_name> for local test/custom environments unless explicitly forced.
+        is_canonical_unc = "SO SANH PLM-CTTT-R3" in str(self.state.base_dir).upper()
+        use_hierarchy = (
+            force_date_hierarchy
+            if force_date_hierarchy is not None
+            else (is_canonical_unc or getattr(self.state, "use_date_hierarchy", False))
+        )
+
+        if use_hierarchy:
+            model_dir = self.state.base_dir / self.state.model_name / stage_code / year_month
+        else:
+            model_dir = self.state.base_dir / self.state.model_name
+
+        self.state.current_model_dir = model_dir
 
         dirs_to_create = [
             model_dir / "PLM",
@@ -1213,16 +1314,34 @@ class Step1ProjectSetupWidget(QWidget):
 
         model_dir = self.create_project_folder_structure()
 
-        # Locate formnguoidung template if explicitly present in base_dir
+        # Locate formnguoidung template (check local base_dir or canonical UNC)
         src_template: Path | None = None
         cand = self.state.base_dir / "formnguoidung.xlsm"
+        unc_template = Path(
+            r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)"
+            r"\Hang muc can luu\Vinh\Pm_sosanhBOM\formnguoidung.xlsm"
+        )
         if cand.exists():
             src_template = cand
+        elif unc_template.exists():
+            src_template = unc_template
 
         # Create machine directories and engineer submission packages
         for m in active_machines:
             m.machine_code = sanitize_machine_code(m.machine_code)
             m_dir = model_dir / m.machine_code
+
+            if m_dir.exists():
+                reply = QMessageBox.question(
+                    self,
+                    "Xác nhận Thư mục Đã Tồn Tại",
+                    f"Thư mục dự án đã tồn tại:\n{m_dir}\n\nBạn có muốn ghi đè / tạo lại gói nộp không?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    continue
+
             m_dir.mkdir(parents=True, exist_ok=True)
             m.folder_path = m_dir
 
@@ -1769,13 +1888,24 @@ class Step3TrackingConsolidationWidget(QWidget):
         pending_engineers: list[str] = []
         statuses: dict[str, dict[str, Any]] = {}
 
-        model_dir = self.state.base_dir / self.state.model_name
+        model_dir = getattr(self.state, "current_model_dir", None) or (self.state.base_dir / self.state.model_name)
+        if not model_dir.exists():
+            # Check if canonical date hierarchy directory exists
+            for cand in (self.state.base_dir / self.state.model_name).glob("*/*"):
+                if cand.is_dir() and (cand / "CTTT").exists():
+                    model_dir = cand
+                    break
+
         active_machines = [m for m in self.state.machines if not m.is_excluded]
 
         # Mode A: Machine Folders with Member Workbooks
         scanned_files_count = 0
         for m in active_machines:
             m_dir = m.folder_path or (model_dir / m.machine_code)
+            if not m_dir.exists():
+                cands = [p for p in (self.state.base_dir / self.state.model_name).rglob(m.machine_code) if p.is_dir()]
+                if cands:
+                    m_dir = cands[0]
             if not m_dir.exists():
                 continue
 
@@ -1788,9 +1918,18 @@ class Step3TrackingConsolidationWidget(QWidget):
                 is_ok, item_count, msi_count, label_count = self._inspect_submission_file(f)
                 mtime = datetime.datetime.fromtimestamp(f.stat().st_mtime)
 
+                assigned_unit = "CTTT"
+                for r_item in self.state.staff_roster:
+                    if r_item.engineer_name == f.stem and (
+                        r_item.machine_code == m.machine_code
+                        or r_item.machine_code in ("(Tất cả mã máy)", "Tất cả", "")
+                    ):
+                        assigned_unit = r_item.sub_unit or "CTTT"
+                        break
+
                 sub = MemberSubmissionStatus(
                     machine_code=m.machine_code,
-                    sub_unit="CTTT",
+                    sub_unit=assigned_unit,
                     engineer_name=f.stem,
                     file_path=f,
                     is_submitted_ok=is_ok,
@@ -1811,7 +1950,14 @@ class Step3TrackingConsolidationWidget(QWidget):
                     pending_engineers.append(f"{f.stem} ({m.machine_code})")
 
         # Mode B: Fallback / Legacy Sub-unit Directories (model_dir / CTTT / <sub_unit>)
-        cttt_base = model_dir / "CTTT" if (model_dir / "CTTT").exists() else self.state.base_dir / "CTTT"
+        cttt_base = model_dir / "CTTT"
+        if not cttt_base.exists():
+            found_cttt = list((self.state.base_dir / self.state.model_name).rglob("CTTT"))
+            if found_cttt:
+                cttt_base = found_cttt[0]
+            elif (self.state.base_dir / "CTTT").exists():
+                cttt_base = self.state.base_dir / "CTTT"
+
         if scanned_files_count == 0 and cttt_base.exists():
             for unit in STANDARD_SUB_UNITS:
                 unit_dir = cttt_base / unit
@@ -2067,10 +2213,21 @@ class Step4ComparisonReportingWidget(QWidget):
         )
         self.btn_gen_report.clicked.connect(self.generate_master_bom_file)
         self.btn_generate_master = self.btn_gen_report
+        h_sel.addWidget(self.btn_gen_report)
+
+        self.btn_send_manager_email = QPushButton("Gửi Mail Nhờ Quản Lý Check BOM...")
+        self.btn_send_manager_email.setIcon(get_theme_manager().get_styled_icon("mail"))
+        self.btn_send_manager_email.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_send_manager_email.setStyleSheet(
+            "background-color: #0078D4; color: white; padding: 6px 14px; border-radius: 4px; font-weight: bold;"
+        )
+        self.btn_send_manager_email.clicked.connect(self._on_send_management_review_email)
+        h_sel.addWidget(self.btn_send_manager_email)
+
         self.btn_preview_emails = QPushButton("Xem trước Email", self)
         self.btn_preview_emails.setIcon(get_theme_manager().get_styled_icon("mail"))
         self.btn_preview_emails.clicked.connect(self._refresh_mail_previews)
-        h_sel.addWidget(self.btn_gen_report)
+        h_sel.addWidget(self.btn_preview_emails)
 
         self.btn_open_bom = QPushButton("Mở File BOM Tổng")
         self.btn_open_bom.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
@@ -2449,6 +2606,22 @@ class Step4ComparisonReportingWidget(QWidget):
         else:
             QMessageBox.warning(self, "Lỗi Outlook", "Không thể gửi email qua Outlook COM. Vui lòng mở trong Outlook.")
 
+    def _on_send_management_review_email(self) -> None:
+        """Open Email Preview for management review with user's standard template."""
+        model = self.state.model_name
+        today = datetime.date.today()
+        prod_date = (today + datetime.timedelta(days=7)).strftime("%d.%m.%Y")
+        m_code = self.combo_active_machine.currentText().strip() or "110C103NL0"
+        att_path = self.state.last_bom_file or (self.state.base_dir / model / f"BOM_{m_code}.xlsm")
+
+        preview = self.mailer.build_management_review_email(
+            machine_type=model,
+            production_date=prod_date,
+            attachment_path=att_path,
+        )
+        dlg = EmailPreviewDialog(preview, self.mailer, parent=self)
+        dlg.exec()
+
 
 # =============================================================================
 # =============================================================================
@@ -2469,31 +2642,31 @@ class KPICardWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("kpi_card")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumHeight(56)
-        self.setMaximumHeight(64)
+        self.setMinimumHeight(44)
+        self.setMaximumHeight(48)
         self._icon_name = icon_name
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(6)
 
         # Icon
         self.icon_label = QLabel(self)
-        self.icon_label.setFixedSize(24, 24)
+        self.icon_label.setFixedSize(20, 20)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.icon_label)
 
         # Texts
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(2)
+        text_layout.setSpacing(1)
 
         self.title_label = QLabel(title, self)
-        self.title_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Medium))
+        self.title_label.setFont(QFont("Segoe UI", 8, QFont.Weight.Medium))
         text_layout.addWidget(self.title_label)
 
         self.value_label = QLabel(initial_value, self)
-        self.value_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.value_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         text_layout.addWidget(self.value_label)
 
         if subtitle:
@@ -2589,7 +2762,7 @@ class LeaderWorkspaceView(QWidget):
         self.kpi_card_total_models = KPICardWidget("Tổng số Model", "0", "Mã máy trong dự án", "folder", container)
         self.kpi_card_ready_models = KPICardWidget("Model đủ BOM", "0", "Đã nạp PLM & R3", "check-circle", container)
         self.kpi_card_cttt_progress = KPICardWidget("Tiến độ nộp CTTT", "0%", "Tỷ lệ bài nộp OK", "user-check", container)
-        self.kpi_card_recon_status = KPICardWidget("Trạng thái đối soát", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", container)
+        self.kpi_card_recon_status = KPICardWidget("Trạng thái so sánh BOM", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", container)
 
         # Aliases for backward and testing compatibility
         self.kpi_total_card = self.kpi_card_total_models
@@ -2638,10 +2811,10 @@ class LeaderWorkspaceView(QWidget):
         self.btn_quick_reset = QPushButton("Đặt lại")
         self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
         self.btn_quick_reset.setStyleSheet(
-            "QPushButton { background-color: #64748B; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
-            "QPushButton:hover { background-color: #475569; }"
+            "QPushButton { background-color: #475569; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
+            "QPushButton:hover { background-color: #334155; }"
         )
-        self.btn_quick_reset.clicked.connect(lambda: self.switch_to_step(0))
+        self.btn_quick_reset.clicked.connect(self.reset_workspace)
         self.btn_quick_reset.hide()
 
         panel_layout.addWidget(self.btn_quick_download_plm)
@@ -2649,6 +2822,18 @@ class LeaderWorkspaceView(QWidget):
         panel_layout.addWidget(self.btn_quick_export)
 
         return container
+
+    def get_active_machine_codes(self) -> list[str]:
+        if hasattr(self.step1_widget, "get_active_machine_codes"):
+            return self.step1_widget.get_active_machine_codes()
+        return [self.model_combo.currentText().strip()] if self.model_combo.currentText().strip() else []
+
+    def reset_workspace(self) -> None:
+        self.switch_to_step(0)
+        self.state = LeaderSessionState(base_dir=self.base_dir)
+        self.current_result = None
+        self.last_report_path = None
+        self.refresh_kpi_cards()
 
     def refresh_kpi_cards(self) -> None:
         """Update KPI metrics across all 4 cards."""
@@ -2672,9 +2857,9 @@ class LeaderWorkspaceView(QWidget):
             self.lbl_kpi_cttt_progress.setText("0%")
 
         if self.current_result is not None or self.last_report_path is not None:
-            self.lbl_kpi_recon_status.setText("Hoàn tất")
+            self.lbl_kpi_recon_status.setText("Đã so sánh xong")
         elif self.state.step3_completed:
-            self.lbl_kpi_recon_status.setText("Sẵn sàng đối soát")
+            self.lbl_kpi_recon_status.setText("Sẵn sàng so sánh")
         elif total_machines > 0:
             self.lbl_kpi_recon_status.setText("Đang chuẩn bị")
         else:
@@ -2711,8 +2896,8 @@ class LeaderWorkspaceView(QWidget):
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(6, 4, 6, 4)
+        main_layout.setSpacing(4)
 
         # 0. Compact KPI Header Panel (4 KPI Cards + 3 Quick Action Buttons)
         self.kpi_panel = self._build_kpi_panel()
@@ -2725,7 +2910,7 @@ class LeaderWorkspaceView(QWidget):
         # 2. QStackedWidget with the 4 steps wrapped in scroll areas
         self.step_stack = QStackedWidget(self)
 
-        self.step1_widget = Step1ProjectSetupWidget(self.state, self)
+        self.step1_widget = Step1ProjectSetupWidget(self.state, mailer=self.mailer, parent=self)
         self.step2_widget = Step2DataSourcingWidget(self.state, self)
         self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
         self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
@@ -2834,9 +3019,9 @@ class LeaderWorkspaceView(QWidget):
     def submission_table(self) -> QTableWidget:
         return self.step3_widget.submission_table
 
-    def create_project_folder_structure(self) -> Path:
+    def create_project_folder_structure(self, force_date_hierarchy: bool | None = None) -> Path:
         """Create canonical folder structure."""
-        res = self.step1_widget.create_project_folder_structure()
+        res = self.step1_widget.create_project_folder_structure(force_date_hierarchy=force_date_hierarchy)
         self.refresh_kpi_cards()
         return res
 

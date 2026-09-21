@@ -30,6 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("package_app")
 
 APP_NAME = "SSBOM_Manager"
+APP_VERSION = "1.0.0"
 DEFAULT_MIN_APP_VERSION = "1.0.0"
 
 # Verified Inno Setup compiler search locations

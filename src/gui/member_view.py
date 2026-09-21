@@ -126,9 +126,9 @@ class MemberWorkflowStepper(QFrame):
     step_changed = pyqtSignal(int)
 
     STEPS = [
-        ("Bước 1: Chọn Model & BOM", "folder"),
-        ("Bước 2: Đối Soát Quy Tắc", "search"),
-        ("Bước 3: Phụ trách công đoạn & Xuất Kết Quả", "file-spreadsheet"),
+        ("Bước 1: Chọn Model && BOM", "folder"),
+        ("Bước 2: Kiểm Tra && Đối Chiếu BOM", "search"),
+        ("Bước 3: Xác Nhận && Nộp Kết Quả", "file-spreadsheet"),
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -248,7 +248,7 @@ class MemberWorkspaceView(QWidget):
         # Assignment state
         self.current_assignment_file: Path | None = None
         self.current_machine_dir: Path | None = None
-        self.engineer_name: str = "Chưa nạp phân công (Bấm Mở gói hoặc gõ bên dưới)"
+        self.engineer_name: str = "Chưa chọn file phân công (Bấm Mở file hoặc gõ bên dưới)"
         self.machine_code: str = ""
         self.department: str = "Phòng Kỹ Thuật Cơ"
         self.is_submitted_ok: bool = False
@@ -298,7 +298,7 @@ class MemberWorkspaceView(QWidget):
 
         # Row A: Action buttons & file path
         row_a = QHBoxLayout()
-        self.btn_open_assignment = QPushButton("Mở gói phân công...")
+        self.btn_open_assignment = QPushButton("Mở file phân công...")
         self.btn_open_assignment.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_open_assignment.setStyleSheet("font-weight: bold; padding: 4px 10px;")
         self.btn_open_assignment.clicked.connect(lambda: self.open_assignment_package())
@@ -309,8 +309,8 @@ class MemberWorkspaceView(QWidget):
         self.btn_select_machine_dir.clicked.connect(lambda: self.load_machine_directory())
         row_a.addWidget(self.btn_select_machine_dir)
 
-        row_a.addWidget(QLabel("Đường dẫn gói:"))
-        self.lbl_assignment_path = QLabel("Chưa nạp gói phân công")
+        row_a.addWidget(QLabel("File phân công:"))
+        self.lbl_assignment_path = QLabel("Chưa chọn file phân công")
         self.lbl_assignment_path.setStyleSheet("color: #495057; font-style: italic;")
         row_a.addWidget(self.lbl_assignment_path)
         row_a.addStretch()
@@ -684,7 +684,7 @@ class MemberWorkspaceView(QWidget):
         self.btn_self_check.clicked.connect(self.run_preliminary_self_check)
         action_bar.addWidget(self.btn_self_check)
 
-        self.lbl_check_summary = QLabel("Chưa đối soát")
+        self.lbl_check_summary = QLabel("Chưa kiểm tra đối chiếu")
         self.lbl_check_summary.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         action_bar.addWidget(self.lbl_check_summary)
 
@@ -1472,7 +1472,7 @@ class MemberWorkspaceView(QWidget):
         """Execute instant three-way self-check on CTTT & MSI with soft green/red styling."""
         row_count = self.cttt_table.rowCount()
         if row_count == 0:
-            QMessageBox.warning(self, "Cảnh báo", "Bảng linh kiện CTTT chưa có dữ liệu để đối soát.")
+            QMessageBox.warning(self, "Cảnh báo", "Bảng linh kiện CTTT chưa có dữ liệu để kiểm tra đối chiếu.")
             return {"status": "EMPTY", "ok_count": 0, "ng_count": 0, "total": 0}
 
         # Auto-discover reference data from machine folder if not in memory

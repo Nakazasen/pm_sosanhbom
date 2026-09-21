@@ -40,6 +40,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = Path("config/settings.json")
 FALLBACK_CONFIG_PATH = Path.home() / ".ssbom" / "config.json"
 
+DEFAULT_DICT_PATH = (
+    r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)"
+    r"\Hang muc can luu\Vinh\Pm_sosanhBOM\file_loaimay_nhommail.xlsx"
+)
+DEFAULT_MEMBER_TEMPLATE = (
+    r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)"
+    r"\Hang muc can luu\Vinh\Pm_sosanhBOM\formnguoidung.xlsm"
+)
+DEFAULT_MASTER_TEMPLATE = (
+    r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)"
+    r"\Hang muc can luu\Vinh\Pm_sosanhBOM\form_ssbom.xlsm"
+)
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     "tc14": {
         "base_url": "http://tcmp3gwb:3000/",
@@ -52,6 +65,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "sap": {
         "system_id": "P1J(ERP60-AWS)-VN",
         "client": "100",
+        "username": "v130474",
+        "password": "0123456789",
+        "language": "EN",
         "plant": "2200",
         "bom_usage": "pp01",
         "alternative": "01",
@@ -64,6 +80,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "default_model": "Virgo",
         "shared_db_path": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\ssbom_master.db",
         "update_dir": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\release_update",
+    },
+    "email": {
+        "test_mode": True,
+        "test_recipient": "vinh.bd@dtvn.kyocera.com",
+        "default_sender": "vn_pe03@dtvn.kyocera.com",
+    },
+    "templates": {
+        "dict_path": DEFAULT_DICT_PATH,
+        "member_template": DEFAULT_MEMBER_TEMPLATE,
+        "master_template": DEFAULT_MASTER_TEMPLATE,
     },
     "ui": {
         "theme": "light",
@@ -156,6 +182,11 @@ class SettingsDialog(QDialog):
 
         self.sap_system_edit = QLineEdit()
         self.sap_client_edit = QLineEdit()
+        self.sap_user_edit = QLineEdit()
+        self.sap_pass_edit = QLineEdit()
+        self.sap_pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.sap_pass_edit.setPlaceholderText("Nhập mật khẩu SAP (nếu cần tự động đăng nhập)")
+        self.sap_lang_edit = QLineEdit()
         self.sap_plant_edit = QLineEdit()
         self.sap_usage_edit = QLineEdit()
         self.sap_alt_edit = QLineEdit()
@@ -170,6 +201,9 @@ class SettingsDialog(QDialog):
 
         sap_form.addRow("System Description (P1J):", self.sap_system_edit)
         sap_form.addRow("SAP Client:", self.sap_client_edit)
+        sap_form.addRow("Tài khoản SAP (User ID):", self.sap_user_edit)
+        sap_form.addRow("Mật khẩu SAP (Password):", self.sap_pass_edit)
+        sap_form.addRow("Ngôn ngữ (Language):", self.sap_lang_edit)
         sap_form.addRow("Plant (Mã nhà máy):", self.sap_plant_edit)
         sap_form.addRow("BOM Usage:", self.sap_usage_edit)
         sap_form.addRow("Alternative:", self.sap_alt_edit)
@@ -277,6 +311,39 @@ class SettingsDialog(QDialog):
         theme_layout.addStretch()
         self.tab_widget.addTab(theme_widget, theme_mgr.get_styled_icon("sun"), "Giao diện (UI Theme)")
 
+        # Tab 5: Email & Mẫu Form Chuẩn
+        mail_widget = QWidget()
+        mail_layout = QVBoxLayout(mail_widget)
+
+        email_group = QGroupBox("Cấu hình Email Thông Báo (Outlook COM)")
+        email_form = QFormLayout(email_group)
+
+        self.email_test_mode_chk = QCheckBox("Bật chế độ Thử Nghiệm (Test Mode - Chuyển hướng toàn bộ thư tới người kiểm thử)")
+        self.email_test_mode_chk.setChecked(True)
+
+        self.email_test_recipient_edit = QLineEdit("vinh.bd@dtvn.kyocera.com")
+        self.email_sender_edit = QLineEdit("vn_pe03@dtvn.kyocera.com")
+
+        email_form.addRow("Chế độ Thử nghiệm:", self.email_test_mode_chk)
+        email_form.addRow("Email người nhận Test:", self.email_test_recipient_edit)
+        email_form.addRow("Email người gửi mặc định:", self.email_sender_edit)
+        mail_layout.addWidget(email_group)
+
+        tmpl_group = QGroupBox("Tệp Danh Bạ & Mẫu Form Chuẩn (Ổ Mạng LAN)")
+        tmpl_form = QFormLayout(tmpl_group)
+
+        self.dict_path_edit = QLineEdit(DEFAULT_DICT_PATH)
+        self.member_tmpl_edit = QLineEdit(DEFAULT_MEMBER_TEMPLATE)
+        self.master_tmpl_edit = QLineEdit(DEFAULT_MASTER_TEMPLATE)
+
+        tmpl_form.addRow("Từ điển Loại máy & Nhóm Mail:", self.dict_path_edit)
+        tmpl_form.addRow("Mẫu Phụ trách (formnguoidung.xlsm):", self.member_tmpl_edit)
+        tmpl_form.addRow("Mẫu BOM Tổng (form_ssbom.xlsm):", self.master_tmpl_edit)
+        mail_layout.addWidget(tmpl_group)
+
+        mail_layout.addStretch()
+        self.tab_widget.addTab(mail_widget, theme_mgr.get_styled_icon("mail"), "Email & Mẫu Form")
+
         # Dialog Buttons
         bottom_layout = QHBoxLayout()
         btn_reset = QPushButton(" Khôi phục mặc định")
@@ -316,6 +383,9 @@ class SettingsDialog(QDialog):
         sap = settings_dict.get("sap", {})
         self.sap_system_edit.setText(sap.get("system_id", DEFAULT_SETTINGS["sap"]["system_id"]))
         self.sap_client_edit.setText(sap.get("client", DEFAULT_SETTINGS["sap"]["client"]))
+        self.sap_user_edit.setText(sap.get("username", DEFAULT_SETTINGS["sap"]["username"]))
+        self.sap_pass_edit.setText(sap.get("password", DEFAULT_SETTINGS["sap"]["password"]))
+        self.sap_lang_edit.setText(sap.get("language", DEFAULT_SETTINGS["sap"]["language"]))
         self.sap_plant_edit.setText(sap.get("plant", DEFAULT_SETTINGS["sap"]["plant"]))
         self.sap_usage_edit.setText(sap.get("bom_usage", DEFAULT_SETTINGS["sap"]["bom_usage"]))
         self.sap_alt_edit.setText(sap.get("alternative", DEFAULT_SETTINGS["sap"]["alternative"]))
@@ -331,6 +401,16 @@ class SettingsDialog(QDialog):
         idx = self.default_model_combo.findText(model)
         if idx >= 0:
             self.default_model_combo.setCurrentIndex(idx)
+
+        email_cfg = settings_dict.get("email", {})
+        self.email_test_mode_chk.setChecked(bool(email_cfg.get("test_mode", DEFAULT_SETTINGS["email"]["test_mode"])))
+        self.email_test_recipient_edit.setText(email_cfg.get("test_recipient", DEFAULT_SETTINGS["email"]["test_recipient"]))
+        self.email_sender_edit.setText(email_cfg.get("default_sender", DEFAULT_SETTINGS["email"]["default_sender"]))
+
+        tmpl_cfg = settings_dict.get("templates", {})
+        self.dict_path_edit.setText(tmpl_cfg.get("dict_path", DEFAULT_SETTINGS["templates"]["dict_path"]))
+        self.member_tmpl_edit.setText(tmpl_cfg.get("member_template", DEFAULT_SETTINGS["templates"]["member_template"]))
+        self.master_tmpl_edit.setText(tmpl_cfg.get("master_template", DEFAULT_SETTINGS["templates"]["master_template"]))
 
         ui_cfg = settings_dict.get("ui", {})
         theme_code = ui_cfg.get("theme", settings_dict.get("theme", "light"))
@@ -360,6 +440,9 @@ class SettingsDialog(QDialog):
             "sap": {
                 "system_id": self.sap_system_edit.text().strip(),
                 "client": self.sap_client_edit.text().strip(),
+                "username": self.sap_user_edit.text().strip(),
+                "password": self.sap_pass_edit.text(),
+                "language": self.sap_lang_edit.text().strip(),
                 "plant": self.sap_plant_edit.text().strip(),
                 "bom_usage": self.sap_usage_edit.text().strip(),
                 "alternative": self.sap_alt_edit.text().strip(),
@@ -372,6 +455,16 @@ class SettingsDialog(QDialog):
                 "shared_db_path": self.shared_db_edit.text().strip(),
                 "update_dir": self.update_dir_edit.text().strip(),
                 "default_model": self.default_model_combo.currentText().strip(),
+            },
+            "email": {
+                "test_mode": self.email_test_mode_chk.isChecked(),
+                "test_recipient": self.email_test_recipient_edit.text().strip(),
+                "default_sender": self.email_sender_edit.text().strip(),
+            },
+            "templates": {
+                "dict_path": self.dict_path_edit.text().strip(),
+                "member_template": self.member_tmpl_edit.text().strip(),
+                "master_template": self.master_tmpl_edit.text().strip(),
             },
             "ui": {
                 "theme": theme_val,
