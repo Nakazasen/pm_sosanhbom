@@ -6,12 +6,12 @@
   "min_app_version": "1.0.0",
   "database_schema": 1,
   "health_check": "--health-check",
-  "created_at": "2026-09-21T11:55:07.948092+00:00",
+  "created_at": "2026-09-21T12:08:29.679572+00:00",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "config/settings.json": {
-      "sha256": "d2bf6de00a2c43f0d67fe558b3089d53a2e034a9bfc141063fa08691f59b1b96",
-      "size": 725
+      "sha256": "5cbfafb04790bf6ad7d5a2c093f6ea884d9b1c23ba2e1d6e47b49718a9ad527b",
+      "size": 1831
     },
     "locales/ja.json": {
       "sha256": "a75e7d63a7fd1eb1aedf4d721ff3aa7ddc09fb1a31c0ad99c2817130ab6bb6d7",
@@ -154,8 +154,8 @@
       "size": 923
     },
     "src/gui/app.py": {
-      "sha256": "5decafcb42a465982bb2045cefe86229fc4231fd03b9319bfa246e518e952c03",
-      "size": 21024
+      "sha256": "240c2f1b9c41d7394992734470a33a3d3a494bb4daba1a6b7dbb5348e94d509d",
+      "size": 21107
     },
     "src/gui/assets/icons/alert-triangle.svg": {
       "sha256": "615d5fa85e13b8313b950b6f9bb00238ea616b0d966656be1c6f29103cd8c873",
@@ -246,8 +246,8 @@
       "size": 271
     },
     "src/gui/leader_view.py": {
-      "sha256": "911bbf8ad0b7fda57c18bb56da3b2df35d5be5890522b5d3fcdb4f152ae1580d",
-      "size": 145057
+      "sha256": "f990afc343f6a336cb2b5d412cf22a06373aaa7c91f56790fb2fca35e8d75739",
+      "size": 145173
     },
     "src/gui/member_roster_dialog.py": {
       "sha256": "21a47c0d092a4b0e6fa0618fb04c21cc76320fe64c39d37610dc4091fa88c5d6",

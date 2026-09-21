@@ -550,32 +550,32 @@ class Step1ProjectSetupWidget(QWidget):
 
         row1_layout.addStretch()
 
-        self.btn_scan_pcd = QPushButton("Quét Kế Hoạch PCD...")
+        self.btn_scan_pcd = QPushButton("Quét Kế Hoạch PCD")
         self.btn_scan_pcd.setIcon(get_theme_manager().get_styled_icon("calendar"))
         self.btn_scan_pcd.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_scan_pcd.setMinimumHeight(28)
         self.btn_scan_pcd.setStyleSheet(
-            "background-color: #2E7D32; color: white; border-radius: 4px; padding: 4px 12px; font-weight: bold;"
+            "background-color: #2E7D32; color: white; border-radius: 4px; padding: 4px 6px; font-weight: bold;"
         )
         self.btn_scan_pcd.clicked.connect(self._open_pcd_scan_dialog)
         row1_layout.addWidget(self.btn_scan_pcd)
 
-        self.btn_send_assign_email = QPushButton("Gửi Mail Yêu Cầu Phụ Trách...")
+        self.btn_send_assign_email = QPushButton("Gửi Mail Phụ Trách")
         self.btn_send_assign_email.setIcon(get_theme_manager().get_styled_icon("mail"))
         self.btn_send_assign_email.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_send_assign_email.setMinimumHeight(28)
         self.btn_send_assign_email.setStyleSheet(
-            "background-color: #E65100; color: white; border-radius: 4px; padding: 4px 12px; font-weight: bold;"
+            "background-color: #E65100; color: white; border-radius: 4px; padding: 4px 6px; font-weight: bold;"
         )
         self.btn_send_assign_email.clicked.connect(self._on_send_assignment_email)
         row1_layout.addWidget(self.btn_send_assign_email)
 
-        self.btn_create_folders = QPushButton("Khởi Tạo Thư Mục Dự Án && Xuất File Phân Công")
+        self.btn_create_folders = QPushButton("Khởi Tạo Thư Mục && Phân Công")
         self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_create_folders.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_create_folders.setMinimumHeight(28)
         self.btn_create_folders.setStyleSheet(
-            "background-color: #0078D4; color: white; border-radius: 4px; padding: 4px 14px;"
+            "background-color: #0078D4; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold;"
         )
         self.btn_create_folders.clicked.connect(self.execute_create_folders_and_packages)
         row1_layout.addWidget(self.btn_create_folders)
@@ -2642,17 +2642,17 @@ class KPICardWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("kpi_card")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumHeight(44)
-        self.setMaximumHeight(48)
+        self.setMinimumHeight(56)
+        self.setMaximumHeight(62)
         self._icon_name = icon_name
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(6)
 
         # Icon
         self.icon_label = QLabel(self)
-        self.icon_label.setFixedSize(20, 20)
+        self.icon_label.setFixedSize(22, 22)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.icon_label)
 
@@ -2662,11 +2662,11 @@ class KPICardWidget(QFrame):
         text_layout.setSpacing(1)
 
         self.title_label = QLabel(title, self)
-        self.title_label.setFont(QFont("Segoe UI", 8, QFont.Weight.Medium))
+        self.title_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Medium))
         text_layout.addWidget(self.title_label)
 
         self.value_label = QLabel(initial_value, self)
-        self.value_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.value_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         text_layout.addWidget(self.value_label)
 
         if subtitle:
@@ -2691,13 +2691,13 @@ class KPICardWidget(QFrame):
                 "  background-color: #1A2436;"
                 "  border: 1px solid #2A374A;"
                 "  border-radius: 6px;"
-                "  padding: 4px 8px;"
+                "  padding: 1px 4px;"
                 "}"
             )
-            self.title_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
-            self.value_label.setStyleSheet("color: #F8FAFC; font-size: 15px; font-weight: bold;")
+            self.title_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600; margin: 0; padding: 0;")
+            self.value_label.setStyleSheet("color: #F8FAFC; font-size: 15px; font-weight: bold; margin: 0; padding: 0;")
             if self.subtitle_label:
-                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px; margin: 0; padding: 0;")
             if self._icon_name:
                 pix = get_theme_manager().get_styled_icon(self._icon_name, color="#60A5FA").pixmap(22, 22)
                 self.icon_label.setPixmap(pix)
@@ -2707,13 +2707,13 @@ class KPICardWidget(QFrame):
                 "  background-color: #FFFFFF;"
                 "  border: 1px solid #CBD5E1;"
                 "  border-radius: 6px;"
-                "  padding: 4px 8px;"
+                "  padding: 1px 4px;"
                 "}"
             )
-            self.title_label.setStyleSheet("color: #475569; font-size: 11px; font-weight: 600;")
-            self.value_label.setStyleSheet("color: #0F172A; font-size: 15px; font-weight: bold;")
+            self.title_label.setStyleSheet("color: #475569; font-size: 11px; font-weight: 600; margin: 0; padding: 0;")
+            self.value_label.setStyleSheet("color: #0F172A; font-size: 15px; font-weight: bold; margin: 0; padding: 0;")
             if self.subtitle_label:
-                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px;")
+                self.subtitle_label.setStyleSheet("color: #64748B; font-size: 10px; margin: 0; padding: 0;")
             if self._icon_name:
                 pix = get_theme_manager().get_styled_icon(self._icon_name, color="#2563EB").pixmap(22, 22)
                 self.icon_label.setPixmap(pix)

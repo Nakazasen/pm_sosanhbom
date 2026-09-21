@@ -224,6 +224,7 @@ class SSBOMMainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         self.lbl_status_msg = QLabel("Sẵn sàng làm việc")
+        self.lbl_status_msg.setStyleSheet("padding-left: 8px; font-weight: 500;")
         self.status_bar.addWidget(self.lbl_status_msg, 1)
 
         self.btn_toggle_log = QPushButton("📋 Nhật ký (Ctrl+L)")

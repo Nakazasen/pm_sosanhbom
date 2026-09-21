@@ -10,6 +10,9 @@
   "sap": {
     "system_id": "P1J(ERP60-AWS)-VN",
     "client": "100",
+    "username": "v130474",
+    "password": "0123456789",
+    "language": "EN",
     "plant": "2200",
     "bom_usage": "pp01",
     "alternative": "01",
@@ -19,7 +22,19 @@
     "base_dir": "D:\\Sandbox\\pm_sosanhbom",
     "fix_serial_path": "D:\\Sandbox\\pm_sosanhbom\\FIX_SERIAL_DLTOOL_VER010.xls",
     "reports_dir": "D:\\Sandbox\\pm_sosanhbom\\Reports",
+    "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
+    "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update",
     "default_model": "Virgo"
+  },
+  "email": {
+    "test_mode": true,
+    "test_recipient": "vinh.bd@dtvn.kyocera.com",
+    "default_sender": "vinh.bd@dtvn.kyocera.com"
+  },
+  "templates": {
+    "dict_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\file_loaimay_nhommail.xlsx",
+    "member_template": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\formnguoidung.xlsm",
+    "master_template": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\form_ssbom.xlsm"
   },
   "ui": {
     "theme": "system"
