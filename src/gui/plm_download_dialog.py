@@ -13,10 +13,10 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QDate, QObject, QThread, Qt, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QFont, QGuiApplication
+from PyQt6.QtGui import QFont, QGuiApplication, QTextCursor
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -42,9 +42,9 @@ from PyQt6.QtWidgets import (
 )
 
 from src.automation.tc2412.standardizer import (
-    CANONICAL_14_COLUMNS,
     standardize_plm_file,
 )
+from src.gui.styles import get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -337,11 +337,14 @@ class PLMDownloadDialog(QDialog):
         self.worker: UnifiedBOMDownloadWorker | None = None
         self.current_items: List[BOMDownloadItem] = []
 
-        self.setWindowTitle("📥 Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
+        self.setWindowTitle("Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
         self.resize(840, 720)
         self._init_ui()
 
     def _init_ui(self) -> None:
+        theme_mgr = get_theme_manager()
+        self.setWindowIcon(theme_mgr.get_styled_icon("download"))
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -360,7 +363,7 @@ class PLMDownloadDialog(QDialog):
         guide_lbl = QLabel(
             "<b>Bước 1:</b> Dán danh sách mã máy/BOM vào ô bên dưới.<br>"
             "<b>Bước 2:</b> Chọn ngày hiệu lực nếu cần tải từ SAP R3 <i>(Teamcenter TC24 tự động lấy BOM mới nhất, không cần ngày)</i>.<br>"
-            "<b>Bước 3:</b> Bấm nút màu xanh <b>'⚡ Tải đồng thời cả PLM & SAP R3'</b> để hệ thống tự động tải."
+            "<b>Bước 3:</b> Bấm nút màu xanh <b>'Tải đồng thời cả PLM & SAP R3'</b> để hệ thống tự động tải."
         )
         guide_lbl.setStyleSheet("color: #475569; font-size: 11.5px; line-height: 1.4;")
         hb_layout.addWidget(guide_lbl)
@@ -379,12 +382,14 @@ class PLMDownloadDialog(QDialog):
         tools_layout.addWidget(self.lbl_count)
         tools_layout.addStretch()
 
-        self.btn_paste = QPushButton("📋 Dán từ Clipboard")
+        self.btn_paste = QPushButton(" Dán từ Clipboard")
+        self.btn_paste.setIcon(theme_mgr.get_styled_icon("clipboard"))
         self.btn_paste.setStyleSheet("padding: 4px 10px; font-weight: bold;")
         self.btn_paste.clicked.connect(self._paste_clipboard)
         tools_layout.addWidget(self.btn_paste)
 
-        self.btn_clear = QPushButton("🧹 Xóa hết")
+        self.btn_clear = QPushButton(" Xóa hết")
+        self.btn_clear.setIcon(theme_mgr.get_styled_icon("trash-2"))
         self.btn_clear.setStyleSheet("padding: 4px 10px;")
         self.btn_clear.clicked.connect(self._clear_parts)
         tools_layout.addWidget(self.btn_clear)
@@ -437,7 +442,7 @@ class PLMDownloadDialog(QDialog):
         tc_layout.addLayout(tc_form)
 
         # Non-tech note for PLM
-        plm_note = QLabel("ℹ️ <b>Quy tắc Teamcenter (TC24):</b> Hệ thống luôn tự động tải cây cấu trúc BOM mới nhất. Bạn không cần thiết lập ngày hiệu lực cho PLM.")
+        plm_note = QLabel("<b>Quy tắc Teamcenter (TC24):</b> Hệ thống luôn tự động tải cây cấu trúc BOM mới nhất. Bạn không cần thiết lập ngày hiệu lực cho PLM.")
         plm_note.setStyleSheet("color: #0369a1; font-size: 11px; background-color: #f0f9ff; padding: 6px; border-radius: 4px; border: 1px solid #bae6fd;")
         tc_layout.addWidget(plm_note)
         tc_layout.addStretch()
@@ -469,7 +474,7 @@ class PLMDownloadDialog(QDialog):
         sap_layout.addLayout(sap_form)
 
         # Advanced Option: Checkbox to toggle per-BOM date table
-        self.chk_custom_dates = QCheckBox("⚙️ Nhập ngày hiệu lực riêng cho từng mã (Chỉ bật khi các mã cần ngày khác nhau)")
+        self.chk_custom_dates = QCheckBox("Nhập ngày hiệu lực riêng cho từng mã (Chỉ bật khi các mã cần ngày khác nhau)")
         self.chk_custom_dates.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.chk_custom_dates.setStyleSheet("color: #b45309; margin-top: 4px;")
         self.chk_custom_dates.toggled.connect(self._on_toggle_custom_dates)
@@ -477,6 +482,9 @@ class PLMDownloadDialog(QDialog):
 
         # Embedded Date Allocation Table (Hidden by default, shown when checked)
         self.date_table = QTableWidget(0, 3)
+        self.date_table.setShowGrid(True)
+        self.date_table.verticalHeader().setDefaultSectionSize(32)
+        self.date_table.setStyleSheet("QTableWidget { gridline-color: #CBD5E1; border: 1px solid #CBD5E1; }")
         self.date_table.setHorizontalHeaderLabels(["STT", "Mã máy / BOM", "Ngày hiệu lực SAP R3"])
         self.date_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.date_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -485,7 +493,7 @@ class PLMDownloadDialog(QDialog):
         self.date_table.setVisible(False)
         sap_layout.addWidget(self.date_table)
 
-        sap_note = QLabel("ℹ️ <b>Quy tắc SAP R3:</b> Ngày hiệu lực dùng để truy xuất cấu trúc BOM đa tầng theo mốc thời gian đã chọn.")
+        sap_note = QLabel("<b>Quy tắc SAP R3:</b> Ngày hiệu lực dùng để truy xuất cấu trúc BOM đa tầng theo mốc thời gian đã chọn.")
         sap_note.setStyleSheet("color: #4d7c0f; font-size: 11px; background-color: #f7fee7; padding: 6px; border-radius: 4px; border: 1px solid #d9f99d;")
         sap_layout.addWidget(sap_note)
 
@@ -500,7 +508,8 @@ class PLMDownloadDialog(QDialog):
 
         self.edit_dest = QLineEdit(str(self.dest_dir))
         self.edit_dest.setFont(QFont("Consolas", 9))
-        self.btn_browse = QPushButton("📂 Duyệt...")
+        self.btn_browse = QPushButton(" Duyệt...")
+        self.btn_browse.setIcon(theme_mgr.get_styled_icon("folder"))
         self.btn_browse.clicked.connect(self._browse_dest_dir)
         dest_layout.addWidget(self.edit_dest)
         dest_layout.addWidget(self.btn_browse)
@@ -515,25 +524,28 @@ class PLMDownloadDialog(QDialog):
         btn_layout = QHBoxLayout(btn_box)
 
         # Button 1: Download BOTH (Primary - Highly visible)
-        self.btn_both = QPushButton("⚡ Tải đồng thời cả PLM & SAP R3")
+        self.btn_both = QPushButton(" Tải đồng thời cả PLM & SAP R3")
+        self.btn_both.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_both.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
         self.btn_both.setStyleSheet(
-            "background-color: #0d6efd; color: white; padding: 10px 20px; border-radius: 5px;"
+            "background-color: #2563EB; color: white; padding: 10px 20px; border-radius: 5px;"
         )
         self.btn_both.clicked.connect(lambda: self._trigger_download(MODE_BOTH))
         btn_layout.addWidget(self.btn_both)
 
         # Button 2: PLM Only
-        self.btn_plm_only = QPushButton("📥 Chỉ tải BOM PLM (TC24)")
+        self.btn_plm_only = QPushButton(" Chỉ tải BOM PLM (TC24)")
+        self.btn_plm_only.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_plm_only.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_plm_only.setStyleSheet(
-            "background-color: #0284c7; color: white; padding: 10px 14px; border-radius: 5px;"
+            "background-color: #0284C7; color: white; padding: 10px 14px; border-radius: 5px;"
         )
         self.btn_plm_only.clicked.connect(lambda: self._trigger_download(MODE_PLM))
         btn_layout.addWidget(self.btn_plm_only)
 
         # Button 3: SAP R3 Only
-        self.btn_sap_only = QPushButton("📥 Chỉ tải BOM SAP R3")
+        self.btn_sap_only = QPushButton(" Chỉ tải BOM SAP R3")
+        self.btn_sap_only.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_sap_only.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_sap_only.setStyleSheet(
             "background-color: #059669; color: white; padding: 10px 14px; border-radius: 5px;"
@@ -558,28 +570,34 @@ class PLMDownloadDialog(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #ced4da;
+                border: 1px solid #CBD5E1;
                 border-radius: 4px;
                 text-align: center;
-                height: 20px;
+                height: 14px;
+                font-size: 10px;
                 font-weight: bold;
+                background-color: #F1F5F9;
             }
             QProgressBar::chunk {
-                background-color: #0d6efd;
+                background-color: #2563EB;
+                border-radius: 3px;
             }
         """)
         exec_layout.addWidget(self.progress_bar)
 
         self.lbl_status = QLabel("Trạng thái: Sẵn sàng")
-        self.lbl_status.setStyleSheet("font-style: italic; color: #495057;")
+        self.lbl_status.setStyleSheet("font-style: italic; color: #475569;")
         exec_layout.addWidget(self.lbl_status)
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
-        self.log_box.setFont(QFont("Consolas", 9))
-        self.log_box.setStyleSheet("background-color: #f8f9fa; border: 1px solid #e9ecef;")
+        self.log_box.setFont(QFont("Consolas", 10))
+        self.log_box.setStyleSheet("background-color: #F8FAFC; border: 1px solid #CBD5E1; color: #0F172A; font-family: Consolas, monospace;")
         self.log_box.setMaximumHeight(120)
         exec_layout.addWidget(self.log_box)
 
@@ -732,8 +750,10 @@ class PLMDownloadDialog(QDialog):
 
         # Lock UI
         self._set_ui_busy(True)
+        self._download_start_time = time.time()
         self.log_box.clear()
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("0%")
         self.lbl_status.setText(f"Đang chuẩn bị tải BOM (Chế độ: {mode})...")
 
         # Start background worker
@@ -764,10 +784,20 @@ class PLMDownloadDialog(QDialog):
 
     def _on_progress(self, pct: int, msg: str) -> None:
         self.progress_bar.setValue(pct)
-        self.lbl_status.setText(f"Trạng thái: {msg}")
+        rem_str = ""
+        if hasattr(self, "_download_start_time") and 0 < pct < 100:
+            elapsed = time.time() - self._download_start_time
+            total_est = elapsed / (pct / 100.0)
+            remaining = max(0, int(total_est - elapsed))
+            rem_str = f" (~{remaining}s còn lại)"
+        elif pct >= 100:
+            rem_str = " (Hoàn thành)"
+        self.progress_bar.setFormat(f"{pct}%{rem_str}")
+        self.lbl_status.setText(f"Trạng thái: {msg} | Tiến độ: {pct}%{rem_str}")
 
     def _on_log(self, text: str) -> None:
         self.log_box.append(text)
+        self.log_box.moveCursor(QTextCursor.MoveOperation.End)
 
     def _on_finished(self, success: bool, msg: str) -> None:
         self._set_ui_busy(False)

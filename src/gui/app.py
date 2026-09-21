@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
 from src.gui.leader_view import LeaderWorkspaceView
 from src.gui.member_view import MemberWorkspaceView
 from src.gui.settings_dialog import SettingsDialog
+from src.gui.styles import get_theme_manager
 from src.gui.update_dialog import UpdateDialog
 from src.services.app_updates import AppUpdateManager
 from src.services.update_delivery import UpdateDeliveryService
@@ -90,6 +91,10 @@ class SSBOMMainWindow(QMainWindow):
         self.resize(1200, 800)
         self.setMinimumSize(950, 650)
 
+        self.theme_mgr = get_theme_manager()
+        self.theme_mgr.apply_theme_to_app()
+        self.setWindowIcon(self.theme_mgr.get_styled_icon("layers"))
+
         self._setup_logging_dock()
         self._init_ui()
         self._setup_menus_and_toolbars()
@@ -112,11 +117,11 @@ class SSBOMMainWindow(QMainWindow):
 
         # View 1: Leader Workspace
         self.leader_view = LeaderWorkspaceView(parent=self, base_dir=self.base_dir)
-        self.tabs.addTab(self.leader_view, "👔 Trưởng Nhóm")
+        self.tabs.addTab(self.leader_view, self.theme_mgr.get_styled_icon("users"), "Trưởng Nhóm")
 
         # View 2: Member Workspace
         self.member_view = MemberWorkspaceView(parent=self, base_dir=self.base_dir)
-        self.tabs.addTab(self.member_view, "👷 Thành Viên Công Đoạn")
+        self.tabs.addTab(self.member_view, self.theme_mgr.get_styled_icon("user-check"), "Thành Viên Công Đoạn")
 
         # Ensure Leader Workspace is active by default
         self.tabs.setCurrentIndex(0)
@@ -128,22 +133,30 @@ class SSBOMMainWindow(QMainWindow):
         self.leader_view.batch_finished.connect(self._on_batch_finished)
 
     def _setup_menus_and_toolbars(self) -> None:
-        """Construct top MenuBar and Quick ToolBar."""
+        """Construct top MenuBar and Quick ToolBar with SVG icons."""
         menu_bar = self.menuBar()
 
         # Menu: Hệ thống (File)
         file_menu = menu_bar.addMenu("Hệ thống")
 
         # Action: Tải BOM từ Teamcenter PLM / SAP R3
-        action_download_plm = QAction("📥 Tải BOM Tự Động (PLM / SAP R3)...", self)
+        action_download_plm = QAction(" Tải BOM Tự Động (PLM / SAP R3)...", self)
+        action_download_plm.setIcon(self.theme_mgr.get_styled_icon("download"))
         action_download_plm.setShortcut("Ctrl+D")
         action_download_plm.triggered.connect(self.leader_view._open_plm_download_dialog)
         file_menu.addAction(action_download_plm)
 
-        action_settings = QAction("⚙ Cấu hình kết nối hệ thống...", self)
+        action_settings = QAction(" Cấu hình kết nối hệ thống...", self)
+        action_settings.setIcon(self.theme_mgr.get_styled_icon("settings"))
         action_settings.setShortcut("Ctrl+,")
         action_settings.triggered.connect(self.open_settings_dialog)
         file_menu.addAction(action_settings)
+
+        self.action_theme = QAction(" Đổi Giao Diện Sáng/Tối (Light/Dark)", self)
+        self.action_theme.setShortcut("Ctrl+T")
+        self.action_theme.triggered.connect(self._toggle_theme)
+        self._update_theme_action(self.theme_mgr.current_theme)
+        file_menu.addAction(self.action_theme)
 
         file_menu.addSeparator()
         action_exit = QAction("Đóng ứng dụng", self)
@@ -153,21 +166,25 @@ class SSBOMMainWindow(QMainWindow):
 
         # Menu: Không gian làm việc (Workspaces)
         mode_menu = menu_bar.addMenu("Không gian làm việc")
-        action_goto_leader = QAction("Chuyển sang Quản lý Trưởng nhóm", self)
+        action_goto_leader = QAction(" Quản lý Trưởng nhóm", self)
+        action_goto_leader.setIcon(self.theme_mgr.get_styled_icon("users"))
         action_goto_leader.triggered.connect(lambda: self.switch_view(0))
         mode_menu.addAction(action_goto_leader)
 
-        action_goto_member = QAction("Chuyển sang Nhập liệu Thành viên", self)
+        action_goto_member = QAction(" Nhập liệu Thành viên", self)
+        action_goto_member.setIcon(self.theme_mgr.get_styled_icon("user-check"))
         action_goto_member.triggered.connect(lambda: self.switch_view(1))
         mode_menu.addAction(action_goto_member)
 
         # Menu: Trợ giúp (Help)
         help_menu = menu_bar.addMenu("Trợ giúp")
-        action_check_updates = QAction("🔄 Kiểm tra cập nhật phần mềm...", self)
+        action_check_updates = QAction(" Kiểm tra cập nhật phần mềm...", self)
+        action_check_updates.setIcon(self.theme_mgr.get_styled_icon("refresh"))
         action_check_updates.triggered.connect(lambda: self.check_for_updates(interactive=True))
         help_menu.addAction(action_check_updates)
         help_menu.addSeparator()
-        action_about = QAction("Về chương trình...", self)
+        action_about = QAction(" Về chương trình...", self)
+        action_about.setIcon(self.theme_mgr.get_styled_icon("info"))
         action_about.triggered.connect(self._show_about_dialog)
         help_menu.addAction(action_about)
 
@@ -181,6 +198,7 @@ class SSBOMMainWindow(QMainWindow):
         toolbar.addAction(action_goto_leader)
         toolbar.addAction(action_goto_member)
         toolbar.addSeparator()
+        toolbar.addAction(self.action_theme)
         toolbar.addAction(action_settings)
 
     def _setup_status_bar(self) -> None:
@@ -193,7 +211,7 @@ class SSBOMMainWindow(QMainWindow):
 
         # Author Credit
         self.lbl_author = QLabel("Người viết: Bùi Đức Vinh - Phòng PTHT Chế Tạo")
-        self.lbl_author.setStyleSheet("color: #0078D4; font-weight: bold; margin-right: 16px;")
+        self.lbl_author.setStyleSheet("font-weight: bold; margin-right: 16px;")
         self.status_bar.addPermanentWidget(self.lbl_author)
 
         # Connection indicators
@@ -211,7 +229,7 @@ class SSBOMMainWindow(QMainWindow):
             active_ver = "1.0.0"
 
         self.lbl_version = QLabel(f"v{active_ver}")
-        self.lbl_version.setStyleSheet("color: #6c757d; margin-right: 8px; font-weight: bold;")
+        self.lbl_version.setStyleSheet("margin-right: 8px; font-weight: bold;")
         self.status_bar.addPermanentWidget(self.lbl_version)
 
     def _setup_logging_dock(self) -> None:
@@ -226,7 +244,7 @@ class SSBOMMainWindow(QMainWindow):
         self.log_text_edit = QPlainTextEdit()
         self.log_text_edit.setReadOnly(True)
         self.log_text_edit.setMaximumBlockCount(1000)
-        self.log_text_edit.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas, monospace; font-size: 11px;")
+        self.log_text_edit.setFont(QFont("Consolas", 11))
         dock_layout.addWidget(self.log_text_edit)
 
         self.log_dock.setWidget(dock_content)
@@ -251,6 +269,26 @@ class SSBOMMainWindow(QMainWindow):
         """Display configuration dialog."""
         dlg = SettingsDialog(parent=self, config_path=self.config_path)
         dlg.exec()
+
+    def _update_theme_action(self, theme: str) -> None:
+        """Update theme toggle action icon and tooltip based on active theme."""
+        effective = getattr(self.theme_mgr, "effective_theme", theme)
+        if effective == "dark":
+            self.action_theme.setIcon(self.theme_mgr.get_styled_icon("sun"))
+            self.action_theme.setText(" Chuyển sang Giao diện Sáng (Light)")
+            self.action_theme.setToolTip("Chuyển sang Giao diện Sáng (Slate Industrial) [Ctrl+T]")
+        else:
+            self.action_theme.setIcon(self.theme_mgr.get_styled_icon("moon"))
+            self.action_theme.setText(" Chuyển sang Giao diện Tối (Dark)")
+            self.action_theme.setToolTip("Chuyển sang Giao diện Tối (Industrial Dark Mode) [Ctrl+T]")
+
+    def _toggle_theme(self) -> None:
+        """Toggle between Light (Slate Industrial) and Dark (Industrial Dark Mode)."""
+        new_theme = "dark" if self.theme_mgr.current_theme == "light" else "light"
+        self.theme_mgr.set_theme(new_theme)
+        self._update_theme_action(new_theme)
+        self.lbl_status_msg.setText(f"Đã chuyển sang giao diện: {new_theme.upper()}")
+        logger.info("Switched theme to %s", new_theme)
 
     def _on_member_submitted(self, info: dict[str, Any]) -> None:
         """Handle event when a member submits their CTTT data."""

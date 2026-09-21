@@ -1,110 +1,81 @@
-# Project: Phần Mềm So Sánh BOM Tự Động (Kyocera Desktop App)
+# Project: Data-Dense Enterprise Dashboard UI/UX (`pm_sosanhbom`)
 
 ## Architecture
-- **GUI Layer** (`src/gui/`, `src/ui/`): PyQt6 desktop interface.
-  - `LeaderView` (`src/gui/leader_view.py`): 4-step sequential Wizard workflow (Setup & Staffing, Data Sourcing, Tracking & Consolidation, Comparison & Reporting).
-  - `MemberView` (`src/gui/member_view.py`): Member workspace conforming to `formnguoidung` (auto-load engineer/machine, 3 tables CTTT/MSI/7980, local self-check against BOM, Q2="OK" submission seal).
-- **Core Processing Engines** (`src/core/`):
-  - `BOMTreeParser`, `date_filter.py`, `model_pruner.py`: Recursive BOM PLM parsing, date effectivity pruning, and model-specific pruning (Virgo, Libra2, Iris2024, Sirius2, Mebius, Polaris) with backup to `backupTC14full/`.
-  - `reconciliation.py`: 3-way line-by-line reconciliation (CTTT vs PLM vs R3), station totals, reverse missing lookup.
-  - `msi_engine.py`: MSI deep cross-check against `FIX_SERIAL_DLTOOL_VER010.xls` (Unit 9-char & Machine 10-char matching, contrast styling).
-  - `jig_manager.py`: JIG master catalog loader from `List JIG thay doi, khi bo sung ma hang.xlsx` across 15 machine models & 4M assessment confirmation.
-  - `inheritance_engine.py` / `workbook_updater.py`: Legacy `ham_match_index_mix` algorithm, preserving Explanations, Responsible Person, Manager Check from `PLM_old` to `PLM`, archiving to `capnhat\old\`, and refreshing Pivot Tables.
-- **Reporting & Services** (`src/reporting/`, `src/automation/`):
-  - `excel_generator.py`: Generating `form_ssbom.xlsm` workbook with formula networks, formatting, Pivot Tables.
-  - `outlook_mailer.py`: 2-tier Outlook email generation (Member notification & Management reporting).
-  - `automation/sap/`: CS12 transaction automation with common or per-machine dates.
-  - `automation/tc2412/`: Teamcenter Active Workspace web download automation.
+- **Design Tokens & Styling Engine**: `src/gui/styles/` (`tokens.py`, `theme_manager.py`, `light_theme.qss`, `dark_theme.qss`). Single Source of Truth cho toàn bộ mã màu, font, độ cao dòng bảng, và quản lý hot-reload theme.
+- **Iconography**: `src/gui/assets/icons/` chứa 16+ vector SVG (Lucide/Fluent), hỗ trợ tinting/monochrome, không dùng emoji.
+- **Main Shell**: `src/gui/app.py` quản lý QMainWindow, khởi tạo ThemeManager, gắn SVG icons vào Menu/Tabs/Toolbar, tích hợp Log Dock và Status Bar.
+- **Workspaces**:
+  - `src/gui/leader_view.py`: Quản lý dự án tuần tự 4 bước, bổ sung 4 KPI cards, chuẩn hóa 4 bảng biểu 32px viền sắc nét, sửa logic checkmark file.
+  - `src/gui/member_view.py`: Không gian thành viên, Stepper 3 bước với icon SVG, 3 bảng nhập liệu 32px, khung Diff View trực quan chuẩn WCAG AAA.
+- **Dialogs**:
+  - `src/gui/plm_download_dialog.py`: Tải BOM PLM/R3 tự động, thanh tiến độ 14px tinh tế, log Consolas 11px.
+  - `src/gui/settings_dialog.py`: Cấu hình hệ thống, tích hợp Tab chọn Theme (Light/Dark/System) và hot-reload.
+- **Testing Architecture**:
+  - `tests/unit/test_ui_theme.py`: Tự động kiểm tra toán học WCAG contrast (AA >= 4.5:1, AAA >= 7:1), QSS syntax validity, SVG availability, và Theme persistence.
+  - Chế độ kiểm thử: `QT_QPA_PLATFORM=offscreen` trên Windows headless.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Leader Step 1: Project Setup | Select Model, Phase (maT for DMT/PMT, ma1 for PP+), input BOM codes | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Leader Step 1: Staffing Matrix | Staff assignment Cơ 1, 2, 3 (Sheet Lichsu) & auto-create machine folders + member packages | M1 | ORIGINAL_REQUEST §R1, VBA Lichsu |
-| 3 | Leader Step 2: PLM & SAP Sourcing | Integrated download of PLM TC24 & SAP R3 CS12 (common or individual dates), auto-routing to machine folders | M1 | ORIGINAL_REQUEST §R1 |
-| 4 | Leader Step 3: Real-time Q2 Tracking | Real-time scan of member submission packages via cell CTTT!Q2 = "OK", live status table | M1 | ORIGINAL_REQUEST §R1, VBA kt_trangthai |
-| 5 | Leader Step 3: Fail-Closed Consolidation | Enforce 100% OK check before consolidation, consolidate CTTT, MSI, 7980/7990, move member files to phutrach | M1 | ORIGINAL_REQUEST §R1, VBA tonghopdl |
-| 6 | Leader Step 4: BOM Compare & Pivot Refresh | Generate form_ssbom workbook, populate comparison sheets, refresh Pivot Tables | M1 | ORIGINAL_REQUEST §R1, form_ssbom.xlsm |
-| 7 | Leader Step 4: 2-Tier Outlook Email | Preview and send 2-tier Outlook emails (to members and to managers) with attachments | M1 | ORIGINAL_REQUEST §R1, VBA Mail |
-| 8 | PLM BOM Tree Parsing | Parse Teamcenter multi-level BOM export into structured hierarchical tree | M2 | ORIGINAL_REQUEST §R2 |
-| 9 | Occurrence Effectivities Date Filter | Scan column I (from...to...), compare against current date, eliminate expired items | M2 | ORIGINAL_REQUEST §R2, VBA locbomfull |
-| 10 | Recursive Child Subtree Deletion | Delete all descendant child nodes (Level 1..6) when parent is expired or pruned | M2 | ORIGINAL_REQUEST §R2, VBA locbomfull |
-| 11 | Model-Specific Pruner (BolocBom) | Apply BolocBom rules for Virgo, Libra2, Iris2024, Sirius2, Mebius, Polaris (exact Full_name, partial Part_name, unexpanded parts) | M2 | ORIGINAL_REQUEST §R2, VBA BolocBom |
-| 12 | Backup to backupTC14full | Automatic backup of raw TC BOM export to backupTC14full folder before filtering | M2 | ORIGINAL_REQUEST §R2 |
-| 13 | Multi-Version Sheet Archiving | Backup current PLM sheet as PLM_old upon new BOM ingestion | M3 | ORIGINAL_REQUEST §R3, VBA capnhat_PLM_R3 |
-| 14 | ham_match_index_mix Inheritance | Match unchanged parts by Item ID and carry over Explanations (Col O), Responsible Person (Col P), Manager Check (Col Q) | M3 | ORIGINAL_REQUEST §R3, VBA capnhat_PLM_R3 |
-| 15 | File Archive to capnhat\old\ | Move superseded PLM/R3 raw files into capnhat\old\ archive folder | M3 | ORIGINAL_REQUEST §R3 |
-| 16 | Workbook Pivot Table Refresh | Refresh data cache and Pivot Tables in form_ssbom after updating BOM data | M3 | ORIGINAL_REQUEST §R3 |
-| 17 | FIX_SERIAL Master Loader | Load FIX_SERIAL_DLTOOL_VER010.xls (Sheet UNIT and Sheet MACHINE) | M4 | ORIGINAL_REQUEST §R4, VBA msi |
-| 18 | MSI Unit & Machine 3-Char Cross-Check | Match 9-char Unit MSI & Label Comment, match 10-char Machine HONTAI, evaluate OK/NG | M4 | ORIGINAL_REQUEST §R4, VBA msi |
-| 19 | MSI Contrast Visual Styling | Contrasting color styling: Red (255) for NG/Missing, Green (6750054) for OK | M4 | ORIGINAL_REQUEST §R4 |
-| 20 | List JIG Master Loader | Link with 'List JIG thay doi, khi bo sung ma hang.xlsx', filter and load 15 machine series | M5 | ORIGINAL_REQUEST §R5, VBA uf_jig |
-| 21 | List JIG Formula & Format Preservation | Preserve formulas and cell styles in Sheet List JIG | M5 | ORIGINAL_REQUEST §R5 |
-| 22 | 4M Assessment & KTSX Confirmation | Interactive checkboxes / fields to assess 4M changes and record confirmation with KTSX | M5 | ORIGINAL_REQUEST §R5 |
-| 23 | Member Assignment Auto-Loading | Auto-populate engineer name, machine code, department from assignment package, eliminate sample text boxes | M6 | ORIGINAL_REQUEST §R6, formnguoidung.xlsm |
-| 24 | Member 3-Table Input & Validation | Input and validation for 3 tables: CTTT, MSI, Label 7980/7990 | M6 | ORIGINAL_REQUEST §R6, formnguoidung.xlsm |
-| 25 | Member Preliminary Self-Check | Auto-load machine BOMs (PLM & R3) for engineer self-check before submission | M6 | ORIGINAL_REQUEST §R6 |
-| 26 | Member Submission Seal (Q2 = OK) | "Xác nhận Nộp" button to stamp CTTT!Q2 = "OK" green status seal for Leader tracking | M6 | ORIGINAL_REQUEST §R6, VBA uf_ssbnpt |
-| 27 | E2E Testing Suite (Tiers 1-4) | Comprehensive 81+ test case opaque-box test suite covering all features and boundaries | E2E | ORIGINAL_REQUEST §Acceptance Criteria |
-| 28 | Final Hardening & App Packaging | Tier 5 adversarial testing, package_app.py build verification, launcher health check | M7 | ORIGINAL_REQUEST §Acceptance Criteria |
+| 1 | Design Tokens (`tokens.py`) | Định nghĩa màu sắc Light/Dark, font size, row-height 32px, padding, hàm toán học WCAG | M1 | SPEC §3.1, §3.2, §3.3 |
+| 2 | ThemeManager (`theme_manager.py`) | Quản lý chuyển đổi theme, hot-reload không restart app, persistence config.json | M1 | SPEC §1.2, §4.4 |
+| 3 | Light QSS (`light_theme.qss`) | Stylesheet hoàn chỉnh cho Slate Industrial, viền ô #CBD5E1, row-height 32px, hover #F1F5F9 | M1 | SPEC §3.1, §3.5 |
+| 4 | Dark QSS (`dark_theme.qss`) | Stylesheet hoàn chỉnh cho Industrial Dark Mode, viền ô #2A374A, hover #1A2436 | M1 | SPEC §3.2, §3.5 |
+| 5 | SVG Icons Library (No Emoji) | 16 tệp SVG vector chuẩn Lucide/Fluent tại `src/gui/assets/icons/`, hàm tinting | M1 | SPEC §5, RES-UI-04 |
+| 6 | Leader View: 4 KPI Cards | 4 thẻ thống kê tinh gọn: Tổng Model, Model đủ BOM, Tiến độ CTTT, Trạng thái đối soát | M2 | SPEC §4.1, R2 |
+| 7 | Leader View: Table Grid 32px | 4 bảng (machine, staff, sourcing, submission) cao 32px, viền 1px, setShowGrid(True) | M2 | SPEC §3.5, RES-UI-01 |
+| 8 | Leader View: Fix Checkmark Bug | Sửa logic L1349/L1371 từ chuỗi "✓" sang kiểm tra file m.plm_file.exists() | M2 | Explorer 1 forensic |
+| 9 | Member View: Stepper 3 Bước | Thanh tiến trình quy trình 3 bước với icon SVG chỉ báo trạng thái | M2 | SPEC §4.2, R2 |
+| 10 | Member View: Table Grid 32px | 3 bảng (cttt, msi, label) cao 32px, padding 4px 8px, viền sắc nét | M2 | SPEC §3.5, RES-UI-01 |
+| 11 | Member View: WCAG Diff View | Tô màu tương phản cao cho dòng lệch (#FEE2E2/#7F1D1D) và khớp (#DCFCE7/#064E3B) | M2 | SPEC §4.2, §3.3 |
+| 12 | PLM Download Dialog Modern | Thanh tiến độ 14px bo góc, log Consolas 11px auto-scroll, loại bỏ emoji | M3 | SPEC §4.3, R2 |
+| 13 | Settings Dialog Theme Tab | Thêm tab chọn Theme (Light/Dark/System), lưu cấu hình, hot-reload tức thời | M3 | SPEC §4.4, R2 |
+| 14 | App Shell Integration | Khởi tạo ThemeManager, gắn icon SVG vào menu/tabs/toolbar, xóa emoji | M3 | SPEC §1.2, R1 |
+| 15 | Automated UI Theme Tests | tests/unit/test_ui_theme.py kiểm tra WCAG, QSS, SVG, Theme persistence | M4 | SPEC §7.1, R5 |
+| 16 | Zero Regression Verification | Chạy toàn bộ test suite (426+ unit/e2e tests) đảm bảo 100% PASS | M4 | SPEC §7.1, R5 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Independent requirement-driven test suite (Tiers 1-4) & TEST_READY.md | none | DONE (81/81 pass) |
-| M1 | Leader Workspace 4-Step Wizard | Refactor Leader Workspace into sequential 4-step wizard with full automation | none | DONE (62/62 pass) |
-| M2 | BOM Filter Engine Level 1..6 | Recursive date effectivity & BolocBom model pruner with backupTC14full | none | DONE (verified) |
-| M3 | Explanation Inheritance Pipeline | ham_match_index_mix algorithm, PLM_old archiving, capnhat\old\, Pivot refresh | M2 | DONE (16/16 pass) |
-| M4 | MSI Deep Cross-Check Engine | FIX_SERIAL_DLTOOL_VER010.xls 3-char match, contrast styling, UI integration | M1 | DONE (verified) |
-| M5 | JIG Master Catalog & 4M Assessment | Load List JIG master for 15 series, preserve formulas, 4M evaluation with KTSX | M1 | DONE (11/11 pass) |
-| M6 | Member Workspace (formnguoidung) | Auto-load assignments, 3 tables, self-check, Q2="OK" submission seal | M1 | DONE (28/28 pass) |
-| M7 | Final E2E Pass, Hardening & Packaging | Pass 100% E2E tests, Tier 5 adversarial tests, package_app.py build | E2E, M1..M6 | DONE (741/741 pass) |
+| M1 | Theme Architecture, Tokens & SVG Assets | `src/gui/styles/tokens.py`, `theme_manager.py`, `light_theme.qss`, `dark_theme.qss`, `src/gui/assets/icons/*.svg` | None | DONE |
+| M2 | Leader View & Member View Data-Dense Upgrade | `src/gui/leader_view.py`, `src/gui/member_view.py` (KPI cards, 32px tables, Stepper, Diff View, fix L1349 bug, no emoji) | M1 | DONE |
+| M3 | Dialogs & App Shell Theme Integration | `src/gui/plm_download_dialog.py`, `src/gui/settings_dialog.py`, `src/gui/app.py`, `src/gui/update_dialog.py` | M1, M2 | IN_PROGRESS |
+| M4 | UI Theme Test Suite & Zero Regression Gate | `tests/unit/test_ui_theme.py`, `tests/unit/test_leader_view_ui.py`, full suite execution | M1, M2, M3 | PLANNED |
 
 ## Interface Contracts
-### Leader Wizard ↔ Sourcing & File System
-- Step 1 creates directory structure: `<Project_Dir>/<Machine_Code>/` and `<Project_Dir>/<Machine_Code>/<Engineer_Name>.xlsm` (or .xlsx) copied from template `formnguoidung.xlsm`.
-- Step 2 downloads or copies:
-  * PLM: `<Project_Dir>/<Machine_Code>/PLM_<Machine_Code>.xlsx`
-  * SAP R3: `<Project_Dir>/<Machine_Code>/R3_<Machine_Code>.xlsx`
-- Step 3 scans: `<Project_Dir>/<Machine_Code>/*` for sheet `CTTT`, cell `Q2`. Returns `Status: OK` if `Q2 == "OK"`, otherwise `Pending`.
-  * Consolidation moves submitted files to `<Project_Dir>/phutrach/<Machine_Code>/`.
-- Step 4 outputs: `<Project_Dir>/form_ssbom_<Machine_Code>.xlsm`.
+### `src/gui/styles/tokens.py` ↔ Consumers
+- Cung cấp:
+  - Bảng màu: `COLOR_LIGHT_*`, `COLOR_DARK_*`
+  - Kích thước: `TABLE_ROW_HEIGHT = 32`, `CELL_PADDING = (4, 8)`, `PROGRESS_BAR_HEIGHT = 14`, `BORDER_WIDTH = 1`
+  - Tiện ích: `calculate_contrast_ratio(fg, bg) -> float`, `is_wcag_aa(fg, bg) -> bool`, `is_wcag_aaa(fg, bg) -> bool`
 
-### Member Workspace ↔ Submission File
-- Member opens `<Machine_Code>/<Engineer_Name>.xlsm`.
-- Auto-populates: `Engineer Name`, `Machine Code`, `Department` into header cells.
-- Tables: `CTTT` (Cols A:N), `MSI` (Cols A:H), `Label_7980_7990` (Cols A:F).
-- "Xác nhận Nộp" action writes `"OK"` into `CTTT!Q2`, applies green background, and saves file.
+### `src/gui/styles/theme_manager.py` ↔ Consumers
+- Cung cấp:
+  - `ThemeManager(QObject)` với signal `theme_changed = pyqtSignal(str)`
+  - `get_theme_manager() -> ThemeManager` (Singleton)
+  - `set_theme(theme_name: str, save_preference: bool = True)`
+  - `get_styled_icon(icon_name: str, color: str = None) -> QIcon`
+  - `get_icon_path(icon_name: str) -> Path`
 
-### BOM Filter Engine ↔ Output
-- Input: Raw TC14/TC24 Excel/CSV export.
-- Output: Standardized PLM BOM dataframe / Excel sheet with expired dates pruned and children (Level 1..6) deleted recursively. Raw file backed up to `backupTC14full/`.
+### `LeaderWorkspaceView` ↔ Unit Tests
+- BẮT BUỘC giữ nguyên vẹn các delegation:
+  - `view.model_combo`, `view.stage_combo`, `view.submission_table`
+  - `view.create_project_folder_structure()`, `view.scan_member_submissions()`, `view.get_sub_unit_statuses()`
+  - `view.trigger_batch_reconciliation()`, `view._open_plm_download_dialog()`
 
-### Explanation Inheritance (`ham_match_index_mix`)
-- Input: `PLM_old` sheet (Cols C: Item ID, O: Explanation, P: Person, Q: Manager Check), new `PLM` sheet.
-- Output: Updated `PLM` sheet preserving O, P, Q for matching Item IDs. Old file moved to `capnhat\old\`. Pivot Table cache refreshed.
-
-### MSI Engine ↔ FIX_SERIAL Master
-- Input: `FIX_SERIAL_DLTOOL_VER010.xls`, `Sheet PLM` and `Sheet MSI`.
-- Logic: Match 9 chars on `UNIT!A`, 10 chars on `MACHINE!A`.
-- Output: Verdict `OK` / `NG`, styling Red `Color=255`, Green `Color=6750054`.
-
-### JIG Manager ↔ Master Catalog & 4M
-- Input: `List JIG thay doi, khi bo sung ma hang.xlsx`.
-- Output: Populated Sheet `List JIG` for selected machine model with preserved Excel formulas and 4M checklist (Có/Không, OK/NG).
+### `MemberWorkspaceView` ↔ Unit Tests
+- BẮT BUỘC giữ nguyên vẹn:
+  - `view.cttt_table`, `view.msi_table`, `view.label_table`
+  - `view.add_cttt_row()`, `view.clear_cttt_table()`, `view.get_cttt_table_data()`
+  - `view.set_reference_data()`, `view.run_preliminary_self_check()`, `view.submit_data()`, `view.unlock_submission()`
+  - Signal `submission_completed`
 
 ## Code Layout
-- `src/gui/leader_view.py`: Leader 4-Step Wizard UI & Controller.
-- `src/gui/member_view.py`: Member Workspace UI & Controller.
-- `src/core/models.py`: Data models for Staffing, BOM, MSI, JIG, 4M.
-- `src/core/tree_parser.py`: BOM hierarchical parser.
-- `src/core/date_filter.py`: Column I date effectivity filter.
-- `src/core/model_pruner.py`: BolocBom rule-based pruner.
-- `src/core/reconciliation.py`: 3-way reconciliation engine.
-- `src/core/msi_engine.py`: MSI deep cross-check engine.
-- `src/core/jig_manager.py`: JIG catalog loader & 4M assessment manager.
-- `src/core/inheritance_engine.py`: ham_match_index_mix & multi-version updater.
-- `src/reporting/excel_generator.py`: form_ssbom workbook generator.
-- `src/reporting/outlook_mailer.py`: 2-tier Outlook mailer.
-- `tests/e2e/`: E2E test suite (Tiers 1-4).
-- `scripts/package_app.py`: Application packager.
+- `src/gui/styles/`: Theme tokens, manager, QSS files (Owned by M1)
+- `src/gui/assets/icons/`: Vector SVG icons (Owned by M1)
+- `src/gui/leader_view.py`: Leader Workspace (Owned by M2)
+- `src/gui/member_view.py`: Member Workspace (Owned by M2)
+- `src/gui/plm_download_dialog.py`: PLM Download Dialog (Owned by M3)
+- `src/gui/settings_dialog.py`: Settings Dialog (Owned by M3)
+- `src/gui/app.py`: Main Window Shell (Owned by M3)
+- `tests/unit/test_ui_theme.py`: UI Theme unit tests (Owned by M1 & M4)

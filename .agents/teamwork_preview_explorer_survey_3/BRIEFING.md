@@ -18,38 +18,32 @@ Comprehensive exploration of the Python/PyQt6 codebase, test suite, and packagin
 - Zero placeholders, evidence-based citations with file paths and line numbers
 
 ## Current Parent
-- Conversation ID: 22da2373-db5b-4534-b31e-1769761ef87c
-- Updated: 2026-09-19T09:53:30Z
+- Conversation ID: 6014734f-cacb-4480-97ab-1fc3957409fb
+- Updated: 2026-09-21T01:52:00Z
 
 ## Investigation State
 - **Explored paths**:
-  - `src/gui/`: `app.py`, `leader_view.py`, `member_view.py`, `plm_download_dialog.py`, `settings_dialog.py`
-  - `src/ui/`: `i18n.py`, `main_window.py`
-  - `src/core/`: `models.py`, `tree_parser.py`, `date_filter.py`, `model_pruner.py`, `default_rules.py`, `unit_resolver.py`, `reconciliation.py`, `msi_engine.py`, `adapters.py`, `tc2412_bridge.py`
-  - `src/automation/`: `tc2412/`, `tc14/`, `sap/`
-  - `src/reporting/`: `excel_generator.py`, `outlook_mailer.py`
-  - `scripts/`: `package_app.py`, `run_virgo_filter.py`, `fast_virgo_filter.py`
-  - `installer/`: `SSBOM_Manager.iss`, `SSBOM_Launcher.py`, `Khoi_Dong_SSBOM.bat`
-  - `tests/`: 572 tests across 6 directories
+  - `tests/`: `conftest.py`, `e2e/`, `unit/`, `tier1_features/`, `tier2_boundaries/`, `tier3_combinations/`, `tier4_real_world/`, `tier5_adversarial/`
+  - `src/gui/`: `app.py`, `leader_view.py`, `member_view.py`, `plm_download_dialog.py`, `settings_dialog.py`, `update_dialog.py`
+  - `assets/`: `README.md`
+  - `specs/`: `SPEC_UI_UX_ENTERPRISE_DASHBOARD.md`, `SPEC_PLM_AUTO_DOWNLOAD.md`
 - **Key findings**:
-  - Test suite status: 572 tests total, 569 passed (99.48%), 3 failed.
-  - Failures: 1 missing HTML snapshot fixture in `test_spec_m1_contract.py`, 1 DOS reserved name (`CON/NUL`) sanitization in `credentials.py`, 1 Windows file lock race in concurrent DPAPI write stress.
-  - Packaging & Launcher: `package_app.py` and `SSBOM_Launcher.py --health-check` pass 100%.
-  - Leader Workspace: Flat layout with 3 groupboxes, needs transformation into 4-step sequential wizard with assignment matrix (Cơ 1, 2, 3), CS12 download integration, `Q2=OK` gating, and 2-tier email.
-  - Member Workspace: Needs auto-loading of assignments and BOMs, multi-row MSI/Label tables, and `Q2=OK` stamping.
-  - Core engines: Computationally sound; needs `JIGManager` module + 4M evaluation, and full workbook automation for `capnhat_PLM`/`capnhat_R3`.
-- **Unexplored areas**: None for codebase survey scope; ready for planning and implementation.
+  - **Hạ tầng kiểm thử**: Tổng cộng 776 test cases phân bổ trên 7 thư mục (e2e: 81, unit: 345, tier1: 141, tier2: 43, tier3: 14, tier4: 10, tier5: 136).
+  - **Tình trạng kiểm thử hiện tại**: 764 passed, 1 failed (`test_verify_survey_failure_2_dos_device_names_credentials`), 1 file import error (`test_f28_standalone_packaging.py` do `APP_VERSION` chưa export trong `scripts/package_app.py`). Riêng `tests/unit/` (345 tests) và `tests/e2e/` (81 tests) đạt **100% PASS**.
+  - **Assets & Styles**: Chưa tồn tại `src/gui/styles/` và `src/gui/assets/icons/`. Giao diện hiện tại dùng màu cứng inline (`setStyleSheet`) và emoji ký tự Unicode thô (`▶`, `✓`, `🔒`).
+  - **PyQt6 Headless Testing**: Đã probe và xác thực `QT_QPA_PLATFORM=offscreen` hoạt động trơn tru trên Windows (QApplication, QWidget, QSvgRenderer, QPixmap, QSS styling). Không cần cài đặt `pytest-qt`, dùng fixture `qapp` chuẩn như `test_leader_view.py` và `test_member_view.py`.
+- **Unexplored areas**: None. Hạ tầng và yêu cầu kiểm thử cho UI Theme đã được khảo sát toàn diện.
 
 ## Key Decisions Made
-- Confirmed core computational engines (`tree_parser`, `date_filter`, `model_pruner`, `reconciliation`, `msi_engine`) do not need rewriting.
-- Scoped implementation into 4 actionable packages: (1) Core & Workbook services, (2) Leader 4-Step Wizard, (3) Member Workspace enhancements, (4) Verification & Packaging.
+- Kiến trúc kiểm thử cho UI Theme (`tests/unit/test_ui_theme.py`) sẽ dùng fixture `qapp` tiêu chuẩn với `QT_QPA_PLATFORM=offscreen`, không đòi hỏi dependencies bên ngoài như `pytest-qt`.
+- Bộ test `test_ui_theme.py` sẽ thực thi 5 bài test theo Spec Chapter 7: Contrast WCAG 2.1 (toán học), QSS Syntax validity, Data-Dense metrics, Theme toggle hot-reload, và SVG renderability.
+- Danh mục Zero Regression gồm 345 unit tests và 81 e2e tests đã được định danh chính xác.
 
 ## Artifact Index
 - `DISPATCH.md` — Assignment instructions
 - `progress.md` — Liveness & progress heartbeat
-- `codebase_report.md` — Comprehensive architectural & gap assessment report
-- `handoff.md` — 5-component handoff report
-- `check_sap_version.py` — SAP verification script
-- `check_sap_landscape.py` — SAP landscape XML verification script
-- `find_r3_refs.py` — R3 references extraction script
+- `probe_pyqt_offscreen.py` — Script probe xác thực PyQt6 offscreen và SVG
+- `codebase_report.md` — Báo cáo kiến trúc trước đó
+- `handoff.md` — 5-component handoff report khảo sát hạ tầng test & assets
+
 

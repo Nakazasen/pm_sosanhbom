@@ -7,14 +7,12 @@ downloading, and installing application updates from LAN sources.
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
-from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -27,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.styles import get_theme_manager
 from src.services.app_updates import AppUpdateManager
 from src.services.update_delivery import UpdateCandidate, UpdateDeliveryService
 
@@ -103,6 +102,9 @@ class UpdateDialog(QDialog):
         self._init_ui()
 
     def _init_ui(self) -> None:
+        theme_mgr = get_theme_manager()
+        self.setWindowIcon(theme_mgr.get_styled_icon("refresh"))
+
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
@@ -114,7 +116,7 @@ class UpdateDialog(QDialog):
         card_layout = QVBoxLayout(header_card)
         card_layout.setContentsMargins(8, 8, 8, 8)
 
-        title_lbl = QLabel("🚀 Có Phiên Bản Mới Sẵn Sàng!")
+        title_lbl = QLabel("Có Phiên Bản Mới Sẵn Sàng!")
         title_font = QFont()
         title_font.setPointSize(12)
         title_font.setBold(True)
@@ -167,10 +169,12 @@ class UpdateDialog(QDialog):
         btn_layout.addStretch()
 
         self.btn_cancel = QPushButton("Để sau")
+        self.btn_cancel.setIcon(theme_mgr.get_styled_icon("x-circle"))
         self.btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(self.btn_cancel)
 
         self.btn_action = QPushButton("Tải & Cập Nhật Ngay")
+        self.btn_action.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_action.setStyleSheet(
             "background-color: #0d6efd; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px;"
         )
@@ -209,11 +213,13 @@ class UpdateDialog(QDialog):
     @pyqtSlot(bool, str)
     def _on_finished(self, success: bool, message: str) -> None:
         self.btn_cancel.setEnabled(True)
+        theme_mgr = get_theme_manager()
         if success:
             self.progress_bar.setValue(100)
             self.status_lbl.setText("✓ " + message)
             self.status_lbl.setStyleSheet("color: #198754; font-weight: bold;")
             self.btn_action.setText("Khởi Động Lại Ngay")
+            self.btn_action.setIcon(theme_mgr.get_styled_icon("refresh", color="#FFFFFF"))
             self.btn_action.setEnabled(True)
             self.btn_action.setStyleSheet(
                 "background-color: #198754; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px;"
@@ -224,6 +230,7 @@ class UpdateDialog(QDialog):
             self.status_lbl.setText("✗ " + message)
             self.status_lbl.setStyleSheet("color: #dc3545; font-weight: bold;")
             self.btn_action.setText("Thử lại")
+            self.btn_action.setIcon(theme_mgr.get_styled_icon("rotate-ccw", color="#FFFFFF"))
             self.btn_action.setEnabled(True)
             self.btn_action.clicked.disconnect()
             self.btn_action.clicked.connect(self._start_update)

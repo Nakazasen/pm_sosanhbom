@@ -1,170 +1,212 @@
-# HANDOFF REPORT — CODEBASE & ARCHITECTURE EXPLORER SURVEY
+# BÁO CÁO KHẢO SÁT HẠ TẦNG KIỂM THỬ VÀ ASSETS/STYLES (HANDOFF REPORT)
 
-- **Agent**: Codebase & Architecture Explorer (Survey Agent 3)
+- **Agent**: Explorer 3 (Survey Test Infrastructure & Assets)
 - **Target Folder**: `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3`
-- **Parent Conversation ID**: `22da2373-db5b-4534-b31e-1769761ef87c`
-- **Date**: 2026-09-19
+- **Parent Conversation ID**: `6014734f-cacb-4480-97ab-1fc3957409fb`
+- **Target Spec**: `specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md` & `specs/SPEC_PLM_AUTO_DOWNLOAD.md`
+- **Date**: 2026-09-21
 - **Handoff Type**: Hard (Task Complete)
 
 ---
 
-## 1. OBSERVATION
+## 1. OBSERVATION (QUAN SÁT THỰC TẾ ĐẦU VÀO & MÃ NGUỒN)
 
-### 1.1 Architecture & Directory Layout
-- Project root: `D:\Sandbox\pm_sosanhbom`
-- Core code organized under `src/`:
-  * `src/gui/`: `app.py` (282 lines), `leader_view.py` (737 lines), `member_view.py` (720 lines), `plm_download_dialog.py` (738 lines), `settings_dialog.py` (377 lines).
-  * `src/ui/`: `i18n.py` (116 lines), `main_window.py` (477 lines).
-  * `src/core/`: `models.py` (310 lines), `tree_parser.py` (340 lines), `date_filter.py` (252 lines), `model_pruner.py` (305 lines), `default_rules.py` (795 lines), `unit_resolver.py` (152 lines), `reconciliation.py` (749 lines), `msi_engine.py` (525 lines), `adapters.py` (378 lines), `tc2412_bridge.py` (366 lines).
-  * `src/automation/`: `tc2412/` (Selenium Web client, selectors, session, standardizer), `tc14/` (legacy support), `sap/` (win32com.client CS12 automation, parser).
-  * `src/reporting/`: `excel_generator.py` (920 lines), `outlook_mailer.py` (358 lines).
-  * `src/security/`: `credentials.py` (567 lines), `dpapi.py` (176 lines).
-  * `src/services/`: `excel_exporter.py` (160 lines).
-- Supporting utilities & distribution:
-  * `scripts/package_app.py` (179 lines), `scripts/run_virgo_filter.py` (296 lines), `scripts/fast_virgo_filter.py` (143 lines).
-  * `SSBOM_Launcher.py` (112 lines), `Khoi_Dong_SSBOM.bat` (71 lines), `Khoi_Dong_Portable.bat` (29 lines), `installer/SSBOM_Manager.iss` (59 lines).
+### 1.1 Cấu Trúc Thư Mục Kiểm Thử (`tests/`) & Cơ Chế Fixtures (`conftest.py`)
+Thư mục kiểm thử `tests/` tại `D:\Sandbox\pm_sosanhbom\tests` được phân tầng chặt chẽ thành 7 cụm thư mục với 73 tệp kiểm thử:
 
-### 1.2 Test Suite Execution & Results
-Command executed: `pytest -q`  
-Execution log: `task-83.log`  
-Duration: 84.45s  
-Summary output:
 ```
-3 failed, 569 passed, 4 warnings in 84.45s (0:01:24)
+tests/
+├── conftest.py                       # 531 dòng: Fixtures dùng chung (workspaces, synthetic PLM/CS12, mocks Selenium/SAP)
+├── e2e/                              # 4 tệp: End-to-End suites (81 tests)
+│   ├── test_tier1_feature_coverage.py      (40 tests: R1..R6)
+│   ├── test_tier2_boundary_corner.py       (30 tests: Edge/Boundary)
+│   ├── test_tier3_pairwise_combinations.py (6 tests: Pipelines)
+│   └── test_tier4_production_scenarios.py  (5 tests: Real-world workflows)
+├── unit/                             # 18 tệp: Unit test các module lõi và GUI (345 tests)
+│   ├── test_adapters.py                    (16 tests)
+│   ├── test_app_updates.py                 (5 tests)
+│   ├── test_core_tree.py                   (28 tests)
+│   ├── test_credentials_security.py       (47 tests)
+│   ├── test_gui_and_reporting.py           (30 tests)
+│   ├── test_inheritance_engine.py          (16 tests)
+│   ├── test_jig_manager.py                 (11 tests)
+│   ├── test_leader_view.py                 (18 tests)
+│   ├── test_member_view.py                 (8 tests)
+│   ├── test_reconciliation_msi.py          (40 tests)
+│   ├── test_sap_automation.py              (32 tests)
+│   ├── test_spec_m1_contract.py            (3 tests)
+│   ├── test_tc14_automation.py             (47 tests)
+│   ├── test_tc2412_automation.py           (19 tests)
+│   ├── test_ui_i18n.py                     (5 tests)
+│   ├── test_update_delivery.py             (7 tests)
+│   ├── test_update_launcher.py             (3 tests)
+│   └── test_update_security.py             (10 tests)
+├── tier1_features/                   # 28 tệp: Kiểm thử đơn lẻ tính năng F01..F28 (141 tests)
+├── tier2_boundaries/                 # 5 tệp: Biên và trường hợp góc (43 tests)
+├── tier3_combinations/               # 3 tệp: Tích hợp chéo đường ống xử lý (14 tests)
+├── tier4_real_world/                 # 2 tệp: Dữ liệu thực tế và form_ssbom kế thừa (10 tests)
+└── tier5_adversarial/                # 13 tệp: Tải nặng, stress, tấn công cấu trúc (136 tests)
 ```
-Exact verbatim test failures:
-1. `tests/unit/test_spec_m1_contract.py:124`:
-   ```
-   login_html = (WORKSPACE / "tc14_login_page_dom.html").read_text(encoding="utf-8", errors="replace")
-   ...
-   FileNotFoundError: [Errno 2] No such file or directory: 'D:\\Sandbox\\pm_sosanhbom\\tc14_login_page_dom.html'
-   ```
-2. `tests/tier5_adversarial/test_credentials_stress.py:137` (`test_service_name_path_traversal_and_forbidden_chars`):
-   Attempted to create files for DOS reserved device names (`CON`, `PRN`, `AUX`, `NUL`), causing `AssertionError` under Windows.
-3. `tests/tier5_adversarial/test_credentials_stress.py:270` (`test_concurrent_readers_during_continuous_writes`):
-   ```
-   [WinError 5] Access is denied: '...\\stress_creds\\CONCURRENT_READER_WRITER_SVC.tmp' -> '...\\stress_creds\\CONCURRENT_READER_WRITER_SVC.dpapi'
-   ```
-   High-concurrency atomic rename conflict under Windows file-locking semantics.
 
-### 1.3 Packaging & Launcher Execution
-1. Command: `py scripts/package_app.py`  
-   Exit code: 0  
-   Output:
-   ```
-   [OK] SSBOM Packaging and LAN Auto-Update Artifacts Built!
-   [OK] Apps Bundle: D:\Sandbox\pm_sosanhbom\apps\1.0.0
-   [OK] Update Package: D:\Sandbox\pm_sosanhbom\release_update\SSBOM_Manager-1.0.0.mpupdate
-   [OK] Catalog Manifest: D:\Sandbox\pm_sosanhbom\release_update\latest.json
-   ```
-2. Command: `py SSBOM_Launcher.py --health-check`  
-   Exit code: 0  
-   Output:
-   ```
-   SSBOM Health Check: OK
-   ```
-
-### 1.4 Code Inspections on Core Features vs R1..R6
-- **Leader Workspace (`src/gui/leader_view.py:270-388`)**:
-  Layout consists of 3 vertical `QGroupBox` widgets on a single scrollable pane. No 4-step sequential wizard (QStackedWidget/QWizard).
-  * Line 276-289: Model combo and Stage combo exist, but no list of machine BOM codes input.
-  * Line 326-340: `submission_table` tracks submission status, but line 473 only checks whether any `.xlsx` file exists in `CTTT/<sub_unit>`. It does NOT inspect cell `Q2 == "OK"`.
-  * Line 407-422: `create_project_folder_structure` creates static directories (`PLM`, `R3`, `Reports`, `capnhat/old`, `CTTT/<sub_unit>`). It does NOT read personnel from `Sheet Lichsu` (Cơ 1, 2, 3) and does NOT generate individualized engineer assignment workbooks (`BOM_<machine>_<engineer>.xlsx`).
-  * Line 541-616: `trigger_batch_reconciliation` runs without checking if all members confirmed OK; fallback baseline data is used if empty (line 570-576).
-  * Line 706-736: `trigger_outlook_preview` displays a single email template. No 2-tier email workflow (Tier 1: Member reminder + 18 check points; Tier 2: Manager verification).
-- **Member Workspace (`src/gui/member_view.py:84-112, 590-716`)**:
-  * Line 94: `self.author_edit = QLineEdit("Nguyen Van A")` — manual text box, no auto-loading of engineer identity or assignment.
-  * Line 104-111: `btn_load_refs` requires manual browsing to PLM/R3 files via QFileDialog; no automatic detection from machine folder.
-  * Line 178-214: MSI inputs are single QLineEdit/QComboBox controls (not a multi-row table).
-  * Line 226-242: Label 7980/7990 inputs are single controls (not a table).
-  * Line 620-716: `submit_data` creates `formnguoidung_{sub_unit}_{timestamp}.xlsx` in `CTTT/<sub_unit>`. **It does NOT set cell Q2 to "OK"**.
-- **BOM Filter Engine (`src/core/date_filter.py`, `src/core/model_pruner.py`, `scripts/run_virgo_filter.py`)**:
-  * Date filtering (`extract_expiry_date`, `is_effectivity_expired` in `date_filter.py:37-130`): Properly evaluates `to <date>`, retains `UP`, prunes leaves and subtrees.
-  * Model pruner (`ModelPruner` in `model_pruner.py:47-240`): 4 Action Rules implemented for Virgo, Libra2, Iris2024, Sirius2, Mebius, Polaris.
-  * Missing: Automatic backup to `backupTC14full` folder in the main pipeline, dynamic external loading of `BolocBom` from workbook, and UI trigger in Leader Workspace.
-- **Explanation Inheritance (`src/core/reconciliation.py:550-622`, `vba_extracted_tonghop_new12052026_ma1/capnhat_PLM_R3.bas.bas:1-350`)**:
-  * `migrate_annotations()` in `reconciliation.py` merges `giai_thich`, `phu_trach`, `quan_ly_check` in memory.
-  * Missing: Full workbook update pipeline (`capnhat_PLM`, `capnhat_R3`): saving current sheet as `PLM_old`, injecting new data into `PLM`, moving old files to `capnhat\old\`, and refreshing Excel Pivot Tables.
-- **MSI Deep Cross-Check (`src/core/msi_engine.py:68-340`)**:
-  * `evaluate_msi_branch` implements all 9 branches verbatim from `msi.bas`.
-  * `FixSerialMaster` reads both `UNIT` (Col A, F, H) and `MACHINE` (Col A, F, H) sheets from `FIX_SERIAL_DLTOOL_VER010.xls`.
-  * Missing: Automated wiring in Leader batch pipeline (`msi_results=None` currently passed in `leader_view.py:705`), and live multi-row MSI grid in Member Workspace.
-- **JIG Master Manager & 4M Evaluation (`vba_extracted_form_ssbom/uf_jig.frm.bas:1-117`, `src/reporting/excel_generator.py:340-390`)**:
-  * Legacy VBA: opens `List JIG thay doi, khi bo sung ma hang.xlsx` from cell `V24` of `List JIG`, reads machine sheet list `V3:V17`, copies `A3:G50`, and maintains 4M evaluation at `V37:V40`.
-  * Python current: `excel_generator.py` only writes dummy sample rows (`JIG-001`, `JIG-002`) if `df_jig` is empty. No `JIGManager` module exists in `src/`. No 4M assessment UI exists.
+**Khảo sát `tests/conftest.py`**:
+- Định nghĩa 11 fixtures chính: `temp_workspace`, `sample_14col_plm_records`, `sample_14col_plm_df`, `sample_plm_excel_file`, `sample_cs12_html_content`, `sample_cs12_file`, `sample_cttt_df`, `sample_msi_df`, `sample_bolocbom_rules`, `mock_tc14_driver`, `mock_sap_session`.
+- Hiện tại `tests/conftest.py` **chưa có fixture `qapp` toàn cục**. Các tệp GUI (`test_leader_view.py`, `test_member_view.py`, `test_tier1_feature_coverage.py`...) đang tự khai báo fixture `qapp` cục bộ trong từng tệp:
+  ```python
+  @pytest.fixture
+  def qapp() -> QApplication:
+      app = QApplication.instance()
+      if app is None:
+          app = QApplication([])
+      return app
+  ```
 
 ---
 
-## 2. LOGIC CHAIN
+### 1.2 Kết Quả Chạy Kiểm Thử Thực Tế Từng Phân Hệ
+Đã thực thi toàn diện lệnh kiểm thử qua `py -m pytest` trên môi trường Python 3.13.14 Windows:
 
-1. **Premise 1 (Observed in `src/gui/leader_view.py` and `src/gui/member_view.py`)**:
-   The current PyQt6 interface was constructed as a general-purpose prototype before the Kyocera-specific business rules were fully detailed. Leader Workspace uses 3 vertical groupboxes; Member Workspace uses manual line edits and single-record inputs.
-2. **Premise 2 (Observed in `vba_extracted_tonghop_new12052026_ma1` and `ORIGINAL_REQUEST.md` R1..R6)**:
-   The Kyocera closed-loop workflow demands specific coordination mechanisms:
-   - Leader establishes project, assigns engineers by department (Cơ 1, 2, 3 via Sheet Lichsu), generates personalized workbooks.
-   - Members open their assigned workbook, self-check against local PLM/R3, and confirm by setting `Q2 = OK`.
-   - Leader's system polls `Q2 == "OK"` across all sub-units before unlocking the "Consolidate" button.
-   - Consolidation gathers CTTT, MSI, and 7980/7990, archives member workbooks into `phutrach`, produces `form_ssbom`, integrates JIG master + 4M evaluation, and provides 2-tier Outlook emails.
-3. **Premise 3 (Observed in `src/core/`)**:
-   The underlying algorithms (`tree_parser.py`, `date_filter.py`, `model_pruner.py`, `reconciliation.py`, `msi_engine.py`, `tc2412_bridge.py`) are highly mature, correct, and well-tested (569 tests passing out of 572).
-4. **Deduction (Conclusion)**:
-   The core computational engines do not need to be rewritten. The development effort must focus on:
-   - Re-architecting `leader_view.py` into a 4-step wizard.
-   - Connecting the existing algorithms to file-based operations (generating engineer files, stamping/checking `Q2 = OK`, archiving to `phutrach` and `capnhat/old`).
-   - Implementing `JIGManager` and the 4M evaluation component.
-   - Upgrading `member_view.py` to auto-detect assignments, auto-load BOMs, support multi-row tables for MSI and Label 7980/7990, and stamp `Q2 = OK`.
-   - Fixing the 3 minor edge-case test failures.
+| Phân Hệ Test | Số Test | Passed | Failed | Error | Thời Gian | Tỷ Lệ Pass | Ghi Chú |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`tests/e2e/`** | 81 | 81 | 0 | 0 | 64.60s | **100%** | Toàn bộ 4 tier E2E hoạt động hoàn hảo |
+| **`tests/unit/`** | 345 | 345 | 0 | 0 | 59.36s | **100%** | Toàn bộ unit tests (bao gồm GUI leader & member) PASS |
+| **`tests/tier1_features/`** | 141 | 136 | 0 | 1 | 22.61s | 99.27% | 1 lỗi import tại `test_f28_standalone_packaging.py` |
+| **`tests/tier2_boundaries/`** | 43 | 43 | 0 | 0 | 32.49s | **100%** | Pass toàn bộ boundary/corner cases |
+| **`tests/tier3_combinations/`** | 14 | 14 | 0 | 0 | 4.43s | **100%** | Pass toàn bộ integration pipelines |
+| **`tests/tier4_real_world/`** | 10 | 10 | 0 | 0 | 2.15s | **100%** | Pass toàn bộ form_ssbom legacy checks |
+| **`tests/tier5_adversarial/`** | 136 | 135 | 1 | 0 | 121.05s | 99.26% | 1 test probe thất bại do hành vi Win11 FS |
+| **TỔNG CỘNG** | **770** | **764** | **1** | **1** | **~5.1 phút** | **99.74%** | **764 test cases đang PASS** |
 
----
-
-## 3. CAVEATS
-
-- **Live SAP GUI and TC2412 Web availability**: The survey ran in a local sandbox without an active VPN connection to the Kyocera live SAP server (`P1J(ERP60-AWS)-VN`) or Teamcenter Active Workspace server (`http://tcmp3gwb:3000/`). All SAP and TC2412 tests passed using the comprehensive mock adapters and offline fixtures.
-- **Legacy file availability on disk**: `List JIG thay doi, khi bo sung ma hang.xlsx` and `FIX_SERIAL_DLTOOL_VER010.xls` are located on the departmental network share (`\\fstvn01\Data\...`). In the local sandbox, tests rely on local mock fixtures in `tests/`.
-- **Openpyxl print area warnings**: 4 warnings during test execution regarding `Print area cannot be set to Defined name: PLM!$499:$499` in legacy `form_ssbom.xlsm`. These are benign openpyxl metadata warnings and do not affect data integrity or formula calculation.
+**Chi tiết 2 điểm ngoại lệ đã ghi nhận**:
+1. **Lỗi thu thập (Collection Error)** tại `tests/tier1_features/test_f28_standalone_packaging.py`:
+   - Dòng 19: `from scripts.package_app import APP_NAME, APP_VERSION, PackageBuilder, compute_sha256`
+   - Nguyên nhân: Trong `scripts/package_app.py`, biến phiên bản được đặt tên là `DEFAULT_MIN_APP_VERSION = "1.0.0"`, không có hằng số `APP_VERSION`.
+2. **Lỗi kiểm thử (Failure)** tại `tests/tier5_adversarial/test_core_engines_stress.py:675`:
+   - `TestSurveyEdgeCasesVerification.test_verify_survey_failure_2_dos_device_names_credentials`
+   - Nguyên nhân: Đây là test case được viết nhằm xác minh lỗi thiết bị DOS Windows (`CON.tmp`), nhưng trên Windows 11 / Python 3.13 thao tác tạo tệp `CON.tmp` thành công nên câu lệnh `assert failed` kích hoạt AssertionError.
 
 ---
 
-## 4. CONCLUSION
-
-The codebase is in an **advanced, high-integrity state** (99.48% test pass rate, strict PEP8 compliance, zero placeholders, established MP2027 packaging pipeline).
-
-The exact gaps against R1..R6 are:
-- **R1 (Leader Workspace)**: Transform layout into a 4-step Wizard; implement Step 1 assignment matrix (Cơ 1, 2, 3) and auto-creation of engineer folders/files; implement Step 2 SAP CS12 integration and file routing; implement Step 3 `Q2 = OK` gating and member consolidation into `phutrach`; implement Step 4 2-tier email and report preview.
-- **R2 (BOM Filter)**: Add automatic `backupTC14full` backup, external `BolocBom` workbook loading, and UI action trigger.
-- **R3 (Inheritance)**: Wrap DataFrame `migrate_annotations` into full workbook update service (`capnhat_PLM` / `capnhat_R3`) with `PLM_old` sheet archiving, `capnhat\old\` file relocation, and Pivot Table refresh.
-- **R4 (MSI Checker)**: Wire `FixSerialMaster` into Leader batch pipeline; add multi-row MSI table and master auto-load in Member Workspace.
-- **R5 (JIG & 4M)**: Create `JIGManager` module; implement JIG loading and 4M evaluation interface/storage.
-- **R6 (Member Workspace)**: Auto-load engineer assignments (eliminate manual text inputs); auto-load PLM/R3 for self-check; multi-row tables for MSI & Label; stamp `Q2 = OK` upon submission.
+### 1.3 Khảo Sát Thư Mục Assets & Styles Hiện Tại Trong `src/gui/`
+- Kiểm tra danh mục `src/gui/`:
+  * Hiện tại **CHƯA TỒN TẠI** thư mục `src/gui/styles/` (chưa có `tokens.py`, `theme_manager.py`, `light_theme.qss`, `dark_theme.qss`).
+  * Hiện tại **CHƯA TỒN TẠI** thư mục `src/gui/assets/` hoặc `src/gui/assets/icons/` (chưa có bộ SVG icons).
+  * Thư mục `assets/` tại thư mục gốc chỉ chứa duy nhất 1 file `README.md` (213 bytes).
+- Hiện trạng Styling trong mã nguồn GUI hiện có (`src/gui/leader_view.py`, `src/gui/member_view.py`, `src/gui/app.py`, `src/gui/plm_download_dialog.py`):
+  * Toàn bộ màu sắc và style đang được thiết lập phân tán qua hơn 85 vị trí gọi inline `setStyleSheet("...")` (ví dụ: `background-color: #0078D4; color: white; padding: 6px 14px;`).
+  * Biểu tượng trên giao diện đang dùng Emoji và ký tự Unicode trực tiếp trong chuỗi text (ví dụ `btn.setText("▶ Lập Dự Án & Phân Công")`, `btn.setText("✓ Tải & Xử Lý")`, `btn.setText("🔒 Theo Dõi")`), vi phạm nguyên tắc thiết kế chuyên nghiệp trong Spec `SPEC_UI_UX_ENTERPRISE_DASHBOARD.md`.
 
 ---
 
-## 5. VERIFICATION METHOD
+### 1.4 Đánh Giá Khả Năng Kiểm Thử PyQt6 Headless / Offscreen Trên Windows
+- Kiểm tra module `pytest-qt`:
+  * Kết quả probe: `pytest-qt` **chưa được cài đặt** trong môi trường Python hiện tại (`No module named 'pytestqt'`).
+- Kiểm tra chế độ Headless / Offscreen Native của PyQt6:
+  * Đã tạo và chạy script probe `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\probe_pyqt_offscreen.py` với biến môi trường `QT_QPA_PLATFORM=offscreen`.
+  * Kết quả chạy thực tế:
+    ```
+    Platform name: offscreen
+    QSvgRenderer valid: True
+    Pixmap rendered isNull: False
+    StyleSheet applied successfully without crash.
+    ```
+  * Xác nhận: PyQt6 trên Windows hỗ trợ hoàn hảo chế độ `offscreen`. Không cần màn hình vật lý, không sinh cửa sổ đồ họa popup, không bị treo tiến trình (hang), và hoàn toàn hỗ trợ render SVG qua `QSvgRenderer` / `QPixmap` / `QIcon` cũng như nạp/kiểm tra cú pháp QSS qua `app.setStyleSheet(...)`.
+  * Cách thức triển khai: Dùng fixture `qapp` có `os.environ["QT_QPA_PLATFORM"] = "offscreen"` (tương tự như cách 345 unit tests hiện tại đang chạy ổn định).
 
-### 5.1 Independent Test Commands
-Execute the complete test suite:
-```powershell
-py -m pytest -q
+---
+
+## 2. LOGIC CHAIN (CHUỖI LẬP LUẬN TỪ QUAN SÁT ĐẾN KẾT LUẬN)
+
+1. **Từ Quan sát 1.1 & 1.2**:
+   - `tests/unit/` (345 tests) và `tests/e2e/` (81 tests) đạt tỷ lệ Pass 100.00%. Điều này chứng minh toàn bộ logic nghiệp vụ (BOM comparison, date filter, model pruner, unit resolver, MSI engine, JIG manager, Excel generation, trilingual i18n) và giao diện Leader/Member hiện có đang hoạt động chuẩn xác.
+   - Do đó, bất kỳ thay đổi nào liên quan đến UI/UX, Theme, hay Stylesheet đều phải giữ nguyên tỷ lệ Pass của 426 tests này để bảo đảm tiêu chí **Zero Regression**.
+
+2. **Từ Quan sát 1.3**:
+   - Việc thiếu vắng hoàn toàn `src/gui/styles/` và `src/gui/assets/icons/` đồng nghĩa với việc toàn bộ kiến trúc Theming quy định trong `SPEC_UI_UX_ENTERPRISE_DASHBOARD.md` sẽ được khởi tạo mới một cách độc lập mà không bị xung đột với các file stylesheet cũ.
+   - Các màn hình `leader_view.py`, `member_view.py`, `app.py`, `settings_dialog.py` cần được tái cấu trúc để gỡ bỏ các đoạn `setStyleSheet` inline phân tán và thay thế bằng các objectName/class selector tiêu chuẩn được điều phối bởi `ThemeManager`.
+
+3. **Từ Quan sát 1.4**:
+   - Không cần phụ thuộc vào thư viện bên ngoài `pytest-qt` (vốn chưa được cài và có thể gây phức tạp khi phân phối).
+   - Tệp test mới `tests/unit/test_ui_theme.py` có thể được xây dựng hoàn toàn dựa trên thư viện chuẩn của dự án: `pytest`, `PyQt6.QtWidgets.QApplication`, `PyQt6.QtSvg.QSvgRenderer`, và công thức toán học tính Relative Luminance / Contrast Ratio chuẩn WCAG 2.1.
+   - Khi đặt `os.environ["QT_QPA_PLATFORM"] = "offscreen"` ở đầu tệp test, toàn bộ quá trình test Theme, QSS, SVG, and View widgets sẽ chạy ngầm với tốc độ cực nhanh (< 2 giây), không làm nháy màn hình của kỹ sư.
+
+---
+
+## 3. CAVEATS (GIỚI HẠN & GIẢ ĐỊNH)
+
+1. **Lỗi import `test_f28_standalone_packaging.py`**:
+   - Thuộc phạm vi packaging script (`scripts/package_app.py`), không ảnh hưởng đến tầng GUI / Theme. Tuy nhiên, khi lập trình viên sửa `package_app.py` bổ sung alias `APP_VERSION = DEFAULT_MIN_APP_VERSION`, tệp này sẽ tự động pass.
+2. **Không có `pytest-qt`**:
+   - Mọi tương tác giao diện trong test suite phải được kích hoạt trực tiếp thông qua API của Qt (ví dụ `widget.click()`, `widget.setChecked()`, `widget.setCurrentText()`, hoặc gọi trực tiếp signal/slot) thay vì dùng `qtbot.mouseClick`. Đây là cách tiếp cận đang được dùng rất thành công ở 18 test cases trong `test_leader_view.py`.
+3. **Môi trường CI / Docker (nếu có sau này)**:
+   - Trên Linux/CI không có X11, biến `QT_QPA_PLATFORM=offscreen` hoặc gói `libgl1-mesa-glx` là bắt buộc. Trên Windows hiện tại, `offscreen` hoạt động out-of-the-box mà không cần driver phụ.
+
+---
+
+## 4. CONCLUSION (KẾT LUẬN & ĐỀ XUẤT KIẾN TRÚC CHO UI THEME)
+
+### 4.1 Đề xuất Cấu trúc Module Assets & Styles Cần Xây Dựng
+Theo đúng đặc tả tại Mục 1.2 của `SPEC_UI_UX_ENTERPRISE_DASHBOARD.md`:
 ```
-Expected output: 569 passed, 3 failed in ~85s.
-
-Execute packaging and launcher health check:
-```powershell
-py scripts/package_app.py
-py SSBOM_Launcher.py --health-check
+src/gui/
+├── styles/
+│   ├── __init__.py            # Export ThemeManager, Tokens, get_theme_manager
+│   ├── tokens.py              # Design Tokens: Palette, Typography, Spacing, WCAG Helpers
+│   ├── theme_manager.py       # ThemeManager (Singleton): switch_theme, apply_theme, listen_system
+│   ├── light_theme.qss        # QSS cho Slate Industrial (Data-Dense table, sharp 1px borders)
+│   └── dark_theme.qss         # QSS cho Industrial Charcoal/Navy
+├── assets/
+│   └── icons/                 # 10 icons SVG chuẩn Lucide:
+│       ├── download.svg
+│       ├── refresh.svg
+│       ├── check-circle.svg
+│       ├── alert-triangle.svg
+│       ├── x-circle.svg
+│       ├── settings.svg
+│       ├── search.svg
+│       ├── filter.svg
+│       ├── file-spreadsheet.svg
+│       ├── moon.svg
+│       └── sun.svg
 ```
-Expected output: `[OK] SSBOM Packaging and LAN Auto-Update Artifacts Built!` and `SSBOM Health Check: OK`.
 
-### 5.2 Files to Inspect
-- Detailed survey report: `D:\Sandbox\pm_sosanhbom\.agents\teamwork_preview_explorer_survey_3\codebase_report.md`
-- Leader view layout: `D:\Sandbox\pm_sosanhbom\src\gui\leader_view.py`
-- Member view layout: `D:\Sandbox\pm_sosanhbom\src\gui\member_view.py`
-- Reconciliation & inheritance: `D:\Sandbox\pm_sosanhbom\src\core\reconciliation.py`
-- MSI decision engine: `D:\Sandbox\pm_sosanhbom\src\core\msi_engine.py`
-- Excel report generator: `D:\Sandbox\pm_sosanhbom\src\reporting\excel_generator.py`
+### 4.2 Thiết Kế Chi Tiết Bộ Test `tests/unit/test_ui_theme.py`
+Bộ test này sẽ bao phủ 5 yêu cầu kiểm định cốt lõi:
+1. `test_wcag_contrast_ratios()`:
+   - Tính toán tỷ lệ tương phản toán học giữa màu chữ và màu nền của tất cả các semantic tokens trong `tokens.py`.
+   - Xác thực: Chữ chính trên nền card >= 7.0:1 (AAA), chữ phụ / nhãn >= 4.5:1 (AA), badge trạng thái >= 4.5:1.
+2. `test_qss_syntax_validity(qapp)`:
+   - Nạp cả `light_theme.qss` và `dark_theme.qss` vào `QApplication.setStyleSheet()`.
+   - Xác thực không phát sinh lỗi ngoại lệ hoặc crash tiến trình.
+3. `test_theme_manager_state_persistence(tmp_path)`:
+   - Kiểm tra khởi tạo ThemeManager, đổi theme từ Light sang Dark và ngược lại.
+   - Xác thực việc lưu và đọc trạng thái theme từ tệp cấu hình JSON.
+4. `test_svg_icons_integrity()`:
+   - Duyệt qua toàn bộ danh sách 11 tệp SVG trong `src/gui/assets/icons/`.
+   - Dùng `QSvgRenderer` để xác thực cú pháp vector XML hợp lệ (`renderer.isValid() is True`).
+   - Dùng `QIcon` để xác thực icon tải thành công và có thể kết xuất ra QPixmap (`icon.isNull() is False`).
+5. `test_table_view_data_dense_metrics(qapp)`:
+   - Khởi tạo QTableWidget với style của Theme, đo lường row-height (mục tiêu 30-34px) và kiểm tra gridline hiển thị sắc nét.
 
-### 5.3 Invalidation Conditions
-This assessment will be invalidated if:
-- Source code in `src/` is modified without updating the gap analysis.
-- The 3 failing tests are resolved or new tests fail.
-- New legacy requirements are discovered that alter the R1..R6 specification.
+---
+
+## 5. VERIFICATION METHOD & ZERO REGRESSION CATALOG
+
+### 5.1 Danh Sách Kiểm Thử Bắt Buộc Để Đảm Bảo Zero Regression (426 Tests Nòng Cốt)
+Trước và sau khi áp dụng UI Theme, bắt buộc phải chạy và xác nhận 100% PASS cho các lệnh sau:
+
+```bash
+# 1. Toàn bộ Unit Tests (345 tests - Core Logic + Leader/Member GUI)
+py -m pytest tests/unit/ -v
+
+# 2. Toàn bộ E2E Test Suite (81 tests - Phủ kín 4 Tier R1..R6)
+py -m pytest tests/e2e/ -v
+
+# 3. Test Suite cho Theme mới (khi đã hoàn thành code)
+py -m pytest tests/unit/test_ui_theme.py -v
+```
+
+### 5.2 Điều Kiện Hủy Bỏ Kết Quả (Invalidation Conditions)
+Báo cáo và kế hoạch triển khai sẽ bị hủy bỏ nếu:
+- Bất kỳ test case nào trong số 345 unit tests hoặc 81 e2e tests chuyển từ PASSED sang FAILED sau khi áp dụng Theme.
+- Việc tải icon SVG hoặc đổi Theme làm chậm thời gian khởi động ứng dụng thêm quá 150ms.
+- Ứng dụng PyQt6 phát sinh lỗi không hiển thị được giao diện khi chạy trên máy trạm Windows thực tế.

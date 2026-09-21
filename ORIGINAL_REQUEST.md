@@ -259,3 +259,68 @@ Hệ thống vận hành theo chu trình khép kín giữa Trưởng nhóm (Lead
 - Nạp đúng bảng JIG và có trường xác nhận đánh giá 4M.
 - Toàn bộ test suite tự động (Pytest) đạt 100% PASS.
 - Chạy lệnh package_app.py thành công, các file .bat khởi chạy ứng dụng mượt mà không lỗi.
+
+## 2026-09-21T01:40:20Z
+
+Tái cấu trúc và nâng cấp toàn diện hệ thống giao diện người dùng (PyQt6 Desktop) của công cụ Quản Lý & So Sánh BOM (pm_sosanhbom) theo phong cách Data-Dense Enterprise Dashboard chuyên biệt cho kỹ sư Khối Sản Xuất Kỹ Thuật (PE Dept - Manufacturing & Production Engineering), tuân thủ nghiêm ngặt bộ quy chuẩn ui-ux-pro-max và tài liệu đặc tả chuẩn hóa specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md.
+
+Working directory: d:\Sandbox\pm_sosanhbom
+Integrity mode: development
+Authoritative Spec: specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md
+
+## 1. Bối cảnh & Hiện trạng Đặc tả (Spec-Kit Baseline)
+- Đã xác thực thư mục specs/: Trước đó chỉ có SPEC_PLM_AUTO_DOWNLOAD.md (chuyên trách tải tự động từ TC2412).
+- Đã tạo mới tài liệu đặc tả chuẩn hóa: specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md bao gồm 7 chương đặc tả chi tiết về Design Tokens, bảng màu WCAG 4.5:1 / 7:1, kích thước Typography, độ cao dòng bảng 32px, viền bảng sắc nét (#CBD5E1 / #2A374A), và ma trận kiểm thử tự động.
+
+## 2. Các yêu cầu cốt lõi (Requirements)
+
+### R1. Kiến trúc Quản lý Giao diện Tập trung (ThemeManager & Design Tokens)
+- Xây dựng hệ thống quản lý theme tại src/gui/styles/:
+  - tokens.py: Tập trung định nghĩa bảng mã màu, font chữ, độ cao dòng bảng, kích thước viền và padding chuẩn Data-Dense.
+  - theme_manager.py: Điều phối chuyển đổi tức thời giữa Light Theme (Slate Industrial) và Dark Theme (Industrial Dark Mode) không cần khởi động lại app.
+  - light_theme.qss & dark_theme.qss: Bộ stylesheet tối ưu cho PyQt6, không có lỗi phân giải cú pháp.
+
+### R2. Nâng cấp Toàn diện các Màn hình theo Phong cách Data-Dense
+- Leader View (src/gui/leader_view.py):
+  - Bổ sung 4 thẻ KPI Cards tinh gọn: Tổng số Model, Model đã khớp BOM, Model lệch số lượng, Sẵn sàng CTTT.
+  - Bảng Sourcing & Kế thừa BOM: Viền lưới ô sắc nét 1px, độ cao dòng chuẩn 32px, padding ô 4px 8px, zebra striping nhẹ nhàng, hiệu ứng hover dòng rõ ràng (#F1F5F9 / #1A2436).
+- Member View (src/gui/member_view.py):
+  - Tinh chỉnh Stepper 3 bước với icon SVG chỉ báo trạng thái (đang làm, hoàn thành, cảnh báo).
+  - Khung Diff View hiển thị kết quả so sánh BOM nổi bật các dòng lệch màu đỏ nhạt (#FEE2E2 / #7F1D1D), dòng khớp màu xanh (#DCFCE7 / #064E3B).
+- Hộp thoại Tải BOM PLM (src/gui/plm_download_dialog.py):
+  - Layout hiện đại, thanh tiến độ 14px tinh tế kèm % số lượng, khung log Consolas sắc nét.
+- Hộp thoại Cài đặt (src/gui/settings_dialog.py):
+  - Tích hợp bộ chọn giao diện (Light / Dark / Theo Windows) và lưu cấu hình bền vững.
+
+### R3. Hệ thống Biểu Tượng SVG Chuẩn Hóa (No Emoji)
+- Thay thế toàn bộ ký tự emoji thô bằng bộ icon SVG vector sắc nét đặt tại src/gui/assets/icons/ (Lucide / Fluent design).
+- Hỗ trợ đổi màu icon theo Theme (tinting/monochrome) để luôn đạt độ tương phản chuẩn.
+
+### R4. Bảo đảm Khả năng Tiếp cận & Độ tương phản (WCAG 2.1 Contrast)
+- Văn bản chính đạt tỷ lệ tương phản tối thiểu 7:1 (AAA) so với nền bảng biểu (#0F172A trên #FFFFFF; #F1F5F9 trên #151D2A).
+- Văn bản phụ / nhãn ghi chú đạt tối thiểu 4.5:1 (AA) (#475569 trên #FFFFFF; #94A3B8 trên #151D2A).
+- Không dùng màu xám trên nền xám (gray-on-gray), không dùng chữ mờ gây mỏi mắt.
+
+### R5. Bộ Kiểm thử Tự Động Hóa & Đo Lường Hợp đồng Giao diện
+- Xây dựng bộ test tự động tại tests/unit/test_ui_theme.py:
+  - Kiểm tra độ tương phản màu sắc đạt chuẩn WCAG toán học.
+  - Kiểm tra tính hợp lệ của cú pháp QSS (không có cảnh báo QSS parse error từ Qt).
+  - Kiểm tra sự tồn tại và tải thành công của 100% tệp icon SVG.
+  - Kiểm tra khả năng chuyển đổi qua lại giữa 2 theme mà không gây memory leak hay sập giao diện.
+- Đảm bảo 100% các bài test hiện có của hệ thống vẫn PASS (Regression Zero).
+
+## 3. Tiêu chí nghiệm thu (Acceptance Criteria)
+
+### A. Độ tương phản & Thẩm mỹ Data-Dense
+- [ ] 100% các cặp màu chữ và nền đạt tỷ lệ tương phản >= 4.5:1 (WCAG AA) và >= 7.0:1 cho văn bản bảng biểu chính (WCAG AAA).
+- [ ] Tất cả các bảng biểu (Sourcing Table, BOM Diff Table, Log Table) có đường viền ô rõ ràng, dòng chẵn lẻ phân biệt nhẹ, chiều cao dòng tối ưu từ 30–34px.
+- [ ] Không xuất hiện emoji làm icon giao diện; 100% nút bấm dùng icon SVG chuẩn Lucide/Fluent.
+
+### B. Chức năng Chuyển đổi Theme (Light & Dark)
+- [ ] Người dùng có thể chuyển đổi mượt mà giữa Light Theme và Dark Theme trong Cài đặt hoặc phím tắt/menu.
+- [ ] Trạng thái theme được lưu lại và tự động tải đúng trong phiên làm việc tiếp theo.
+
+### C. Độ ổn định & Không làm hỏng chức năng cũ (Zero Regression)
+- [ ] Ứng dụng PyQt6 mở lên bình thường, các luồng nghiệp vụ (Download BOM PLM TC2412, Lọc cơ khí, Đối soát CTTT, Xuất Excel) hoạt động trơn tru 100%.
+- [ ] Lệnh kiểm thử toàn diện pytest tests/ vượt qua 100% bài kiểm thử.
+

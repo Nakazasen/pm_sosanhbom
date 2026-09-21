@@ -1,38 +1,27 @@
-# Final Handoff Report — Sentinel
+# Sentinel Handoff Report
 
 ## Observation
-- Yêu cầu nâng cấp toàn diện và khôi phục 100% tính năng Phần mềm So Sánh BOM Tự Động (Kyocera Desktop App) bằng Python/PyQt6 đã được hoàn thành trọn vẹn.
-- Bao gồm đầy đủ 6 nhóm yêu cầu R1..R6:
-  1. R1: Leader Workspace Wizard 4 bước tuần tự (Lập dự án & phân công ma trận 38 nhân sự Cơ 1, 2, 3; Tải & phân tuyến dữ liệu PLM/R3 ngày chung/riêng; Quét real-time Q2=OK & tổng hợp fail-closed gom CTTT/MSI/7980 vào phutrach; So sánh BOM tổng form_ssbom, Pivot Table, Master JIG/4M, Outlook 2 tầng).
-  2. R2: BOM Filter Engine Level 1..6 (quét hiệu lực Cột I from..to.., xóa đệ quy linh kiện con, luật BolocBom cho 6 model, sao lưu backupTC14full/).
-  3. R3: Kế thừa giải trình khi cập nhật BOM mới (`ham_match_index_mix` giữ 100% Giải thích, Phụ trách, Quản lý check, điền rỗng sạch không NaN, đa phiên bản PLM_old_N, lưu trữ capnhat\old\).
-  4. R4: Đối soát MSI chuyên sâu với `FIX_SERIAL_DLTOOL_VER010.xls` (Unit 9 ký tự, Machine 10 ký tự, 9 nhánh logic, tô màu trực quan).
-  5. R5: Quản lý Master JIG 15 dòng máy & Đánh giá 4M (bảo toàn công thức openpyxl, định dạng, ký duyệt KTSX).
-  6. R6: Member Workspace chuẩn `formnguoidung` (tự nạp phân công, 3 bảng CTTT/MSI/7980, đối soát sơ bộ tại chỗ, đóng dấu nộp Q2="OK").
+- Yêu cầu người dùng mới nhận: Tái cấu trúc và nâng cấp toàn diện hệ thống giao diện người dùng (PyQt6 Desktop) của công cụ Quản Lý & So Sánh BOM (pm_sosanhbom) theo phong cách Data-Dense Enterprise Dashboard chuẩn ui-ux-pro-max và đặc tả specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md.
+- Đã ghi nhận đầy đủ yêu cầu vào D:\Sandbox\pm_sosanhbom\.agents\ORIGINAL_REQUEST.md và D:\Sandbox\pm_sosanhbom\ORIGINAL_REQUEST.md tại mục `## 2026-09-21T01:40:20Z`.
+- Phân tích tuyến định tuyến: Yêu cầu thuộc nhóm tác vụ tái cấu trúc hệ thống phức tạp toàn diện (General Path) -> Định tuyến tới `teamwork_preview_orchestrator`.
 
 ## Logic Chain
-1. Project Orchestrator điều phối thành công toàn bộ vòng đời phát triển Dual-Track: Survey -> Decompose (PROJECT.md 28 features) -> Blueprints -> Implementation (3 Workers) -> E2E Testing Track (81 tests) -> Verification (2 Reviewers, 2 Challengers, 1 Auditor) -> Remediation (10 hardening points) -> Gate PASS.
-2. Independent Victory Auditor (`21dd4c3f-67b2-42d2-ba61-421ab3179f49`) thực hiện kiểm toán độc lập 3 giai đoạn:
-   - Phase A: Timeline nhất quán 100%.
-   - Phase B: Integrity sạch 100% (0 TODO/FIXME/XXX, 0 mock trá hình, 0 hardcode).
-   - Phase C: Test runner thực tế chạy độc lập:
-     * Full Workspace: 741 / 741 tests PASSED (100%) trong 119.38s.
-     * E2E Suite: 81 / 81 tests PASSED (100%) trong 15.15s.
-     * Tier 5 Adversarial: 136 / 136 tests PASSED (100%) trong 47.34s.
-     * Launcher Health Check: Exit code 0 ("SSBOM Health Check: OK").
-     * Packaging: Exit code 0 (apps/1.0.0, .mpupdate, latest.json, current.json).
-3. Auditor ban hành phán quyết: **VICTORY CONFIRMED**.
-4. Sentinel đã thực thi dọn dẹp bắt buộc: Hủy bỏ 2 cron nền (`task-48`, `task-51`) và kill toàn bộ subagents (`kill_all`).
+1. Tiếp nhận và lưu trữ yêu cầu gốc chuẩn xác, không suy diễn hay can thiệp kỹ thuật.
+2. Kiểm tra tài liệu đặc tả chuẩn hóa `specs/SPEC_UI_UX_ENTERPRISE_DASHBOARD.md` hiện hữu đầy đủ 7 chương.
+3. Điều phối khởi tạo Project Orchestrator (teamwork_preview_orchestrator_3, conversationId: `6014734f-cacb-4480-97ab-1fc3957409fb`) với thư mục làm việc riêng biệt `.agents/teamwork_preview_orchestrator_3`.
+4. Thiết lập 2 tiến trình giám sát tự động:
+   - Cron 1 (task-44, `*/8 * * * *`): Báo cáo định kỳ tiến độ công việc dựa trên `progress.md` và các tệp thay đổi.
+   - Cron 2 (task-46, `*/10 * * * *`): Kiểm tra liveness và mtime của `progress.md`, cảnh báo/nudge/re-spawn nếu phát hiện bế tắc.
 
 ## Caveats
-- Các kịch bản Outlook email tự động sử dụng giao thức MAPI nền Windows (`win32com.client`), có sẵn chế độ mô phỏng an toàn (headless fallback) khi môi trường không có Outlook.
-- Hệ thống hỗ trợ đa nền tảng cho core engine và giao diện PyQt6 hoàn toàn độc lập với Microsoft Excel (dùng `openpyxl` và `pandas`), chỉ kích hoạt Excel COM khi cần làm mới bộ nhớ đệm Pivot Table trực tiếp.
+- Sentinel không can thiệp viết code hay ra quyết định kỹ thuật; toàn bộ quá trình triển khai do Project Orchestrator và các subagent phụ trách.
+- Quy trình nghiệm thu: Khi Orchestrator báo cáo hoàn tất (Victory Claim), Sentinel bắt buộc phải spawn độc lập `teamwork_preview_victory_auditor` để kiểm tra chéo toàn bộ kết quả trước khi báo cáo hoàn thành cho người dùng.
 
 ## Conclusion
-- Dự án đã hoàn thành 100% và được kiểm chứng độc lập với phán quyết **VICTORY CONFIRMED**.
-- Sẵn sàng bàn giao cho người dùng đưa vào vận hành thực tế.
+- Quá trình khởi tạo và điều phối đã hoàn tất thành công.
+- Orchestrator đang trong giai đoạn tiếp nhận nhiệm vụ và phân rã kế hoạch thực thi.
 
 ## Verification Method
-- Kiểm chứng kết quả qua báo cáo của Victory Auditor tại `.agents/teamwork_preview_victory_auditor_2/handoff.md`.
-- Kiểm chứng tệp tín hiệu `TEST_READY.md` và `PROJECT.md`.
-- Kiểm chứng terminal thực tế: 741/741 tests PASS (100%).
+- Kiểm tra active subagents: `manage_subagents(Action="list")` ghi nhận 1 orchestrator đang chạy.
+- Kiểm tra cron tasks: `manage_task(Action="list")` ghi nhận 2 tasks hoạt động.
+- Kiểm tra tệp ghi nhận: `ORIGINAL_REQUEST.md` và `BRIEFING.md` đồng bộ.

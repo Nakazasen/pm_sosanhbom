@@ -528,3 +528,15 @@ def mock_sap_session() -> MagicMock:
 
     session.findById.side_effect = find_by_id_mock
     return session
+
+
+@pytest.fixture(scope="session")
+def qapp() -> Any:
+    """Session-scoped QApplication fixture ensuring headless offscreen execution."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
