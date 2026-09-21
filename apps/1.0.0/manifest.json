@@ -6,7 +6,7 @@
   "min_app_version": "1.0.0",
   "database_schema": 1,
   "health_check": "--health-check",
-  "created_at": "2026-09-21T12:41:09.518924+00:00",
+  "created_at": "2026-09-21T12:48:04.623074+00:00",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "config/settings.json": {
@@ -262,8 +262,8 @@
       "size": 25209
     },
     "src/gui/plm_download_dialog.py": {
-      "sha256": "34594bc8d253efa621380c49d4ca0d0426d5a2061ffda6e4fe77393bf1f9ee8f",
-      "size": 36290
+      "sha256": "7db498b2e6bfa4fc761cec6e5afd110915214320bad895a154833460f542181e",
+      "size": 37777
     },
     "src/gui/settings_dialog.py": {
       "sha256": "e4929d2cc18444b760973f4fc834aa03245d92a439576b0d6ed230f8ef7b89a0",

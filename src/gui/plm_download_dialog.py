@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -33,6 +34,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -338,22 +340,37 @@ class PLMDownloadDialog(QDialog):
         self.current_items: List[BOMDownloadItem] = []
 
         self.setWindowTitle("Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
-        self.resize(840, 720)
+        self.resize(860, 620)
+        self.setMinimumSize(780, 480)
         self._init_ui()
 
     def _init_ui(self) -> None:
         theme_mgr = get_theme_manager()
         self.setWindowIcon(theme_mgr.get_styled_icon("download"))
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(8)
+
+        # ---------------------------------------------------------------------
+        # Scroll Area: Chứa Hướng dẫn, Ô nhập BOM, Cấu hình & Nhật ký
+        # Giúp co giãn linh hoạt trên mọi độ phân giải màn hình mà không bị che khuất
+        # ---------------------------------------------------------------------
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
+        layout.setContentsMargins(2, 2, 6, 2)
+        layout.setSpacing(10)
 
         # Header with non-tech explanation
         header_box = QGroupBox()
         header_box.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;")
         hb_layout = QVBoxLayout(header_box)
-        hb_layout.setContentsMargins(12, 10, 12, 10)
+        hb_layout.setContentsMargins(12, 8, 12, 8)
         hb_layout.setSpacing(4)
 
         title_lbl = QLabel("<b>HƯỚNG DẪN 3 BƯỚC TẢI BOM TỰ ĐỘNG</b>")
@@ -363,7 +380,7 @@ class PLMDownloadDialog(QDialog):
         guide_lbl = QLabel(
             "<b>Bước 1:</b> Dán danh sách mã máy/BOM vào ô bên dưới.<br>"
             "<b>Bước 2:</b> Chọn ngày hiệu lực nếu cần tải từ SAP R3 <i>(Teamcenter TC24 tự động lấy BOM mới nhất, không cần ngày)</i>.<br>"
-            "<b>Bước 3:</b> Bấm nút màu xanh <b>'Tải đồng thời cả PLM & SAP R3'</b> để hệ thống tự động tải."
+            "<b>Bước 3:</b> Bấm nút màu xanh <b>'Tải đồng thời cả PLM & SAP R3'</b> ở thanh cố định phía dưới để tải."
         )
         guide_lbl.setStyleSheet("color: #475569; font-size: 11.5px; line-height: 1.4;")
         hb_layout.addWidget(guide_lbl)
@@ -406,8 +423,8 @@ class PLMDownloadDialog(QDialog):
             "110C132NL0"
         )
         self.txt_parts.setFont(QFont("Consolas", 10))
-        self.txt_parts.setMinimumHeight(100)
-        self.txt_parts.setMaximumHeight(130)
+        self.txt_parts.setMinimumHeight(75)
+        self.txt_parts.setMaximumHeight(110)
         self.txt_parts.textChanged.connect(self._on_text_changed)
         part_layout.addWidget(self.txt_parts)
 
@@ -517,14 +534,68 @@ class PLMDownloadDialog(QDialog):
 
         layout.addWidget(config_group)
 
+        # Nhật ký hoạt động chi tiết
+        exec_group = QGroupBox("Nhật ký chi tiết hoạt động")
+        exec_layout = QVBoxLayout(exec_group)
+
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setFont(QFont("Consolas", 10))
+        self.log_box.setStyleSheet("background-color: #F8FAFC; border: 1px solid #CBD5E1; color: #0F172A; font-family: Consolas, monospace;")
+        self.log_box.setMinimumHeight(65)
+        self.log_box.setMaximumHeight(95)
+        exec_layout.addWidget(self.log_box)
+
+        layout.addWidget(exec_group)
+
+        scroll_area.setWidget(scroll_content)
+        main_layout.addWidget(scroll_area, stretch=1)
+
         # ---------------------------------------------------------------------
+        # THANH CỐ ĐỊNH PHÍA ĐÁY CỬA SỔ (PINNED FOOTER):
+        # Luôn hiển thị 100% trên mọi độ phân giải màn hình (không bao giờ bị che khuất)
+        # ---------------------------------------------------------------------
+        bottom_dock = QWidget()
+        bottom_dock_layout = QVBoxLayout(bottom_dock)
+        bottom_dock_layout.setContentsMargins(0, 2, 0, 0)
+        bottom_dock_layout.setSpacing(4)
+
+        # Thanh tiến độ và nhãn trạng thái trực quan
+        status_prog_layout = QHBoxLayout()
+        self.lbl_status = QLabel("Trạng thái: Sẵn sàng")
+        self.lbl_status.setStyleSheet("font-style: italic; color: #475569; font-size: 11px;")
+        status_prog_layout.addWidget(self.lbl_status, stretch=1)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #CBD5E1;
+                border-radius: 4px;
+                text-align: center;
+                height: 14px;
+                font-size: 10px;
+                font-weight: bold;
+                background-color: #F1F5F9;
+            }
+            QProgressBar::chunk {
+                background-color: #2563EB;
+                border-radius: 3px;
+            }
+        """)
+        status_prog_layout.addWidget(self.progress_bar, stretch=1)
+        bottom_dock_layout.addLayout(status_prog_layout)
+
         # Bước 3: Nút bấm thực thi
-        # ---------------------------------------------------------------------
         btn_box = QGroupBox("Bước 3: Chọn lệnh tải tự động")
         btn_layout = QHBoxLayout(btn_box)
 
         # Button 1: Download BOTH (Primary - Highly visible)
-        self.btn_both = QPushButton(" Tải đồng thời cả PLM & SAP R3")
+        self.btn_both = QPushButton(" Tải đồng thời cả PLM && SAP R3")
         self.btn_both.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_both.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
         self.btn_both.setStyleSheet(
@@ -559,49 +630,8 @@ class PLMDownloadDialog(QDialog):
         self.btn_close.clicked.connect(self.close)
         btn_layout.addWidget(self.btn_close)
 
-        layout.addWidget(btn_box)
-
-        # ---------------------------------------------------------------------
-        # Tiến trình & Nhật ký
-        # ---------------------------------------------------------------------
-        exec_group = QGroupBox("Tiến trình & Nhật ký hoạt động")
-        exec_layout = QVBoxLayout(exec_group)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFixedHeight(14)
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setFormat("%p%")
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #CBD5E1;
-                border-radius: 4px;
-                text-align: center;
-                height: 14px;
-                font-size: 10px;
-                font-weight: bold;
-                background-color: #F1F5F9;
-            }
-            QProgressBar::chunk {
-                background-color: #2563EB;
-                border-radius: 3px;
-            }
-        """)
-        exec_layout.addWidget(self.progress_bar)
-
-        self.lbl_status = QLabel("Trạng thái: Sẵn sàng")
-        self.lbl_status.setStyleSheet("font-style: italic; color: #475569;")
-        exec_layout.addWidget(self.lbl_status)
-
-        self.log_box = QTextEdit()
-        self.log_box.setReadOnly(True)
-        self.log_box.setFont(QFont("Consolas", 10))
-        self.log_box.setStyleSheet("background-color: #F8FAFC; border: 1px solid #CBD5E1; color: #0F172A; font-family: Consolas, monospace;")
-        self.log_box.setMaximumHeight(120)
-        exec_layout.addWidget(self.log_box)
-
-        layout.addWidget(exec_group)
+        bottom_dock_layout.addWidget(btn_box)
+        main_layout.addWidget(bottom_dock)
 
     # -------------------------------------------------------------------------
     # Helper & Event Handlers

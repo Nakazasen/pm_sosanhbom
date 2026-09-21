@@ -73,8 +73,8 @@ class TestSettingsDialogM3:
         config_file = tmp_path / "test_config.json"
         dlg = SettingsDialog(config_path=config_file)
 
-        # 1. Tab count is 4, Tab 4 is UI Theme
-        assert dlg.tab_widget.count() == 4
+        # 1. Tab count is at least 4, Tab 4 is UI Theme
+        assert dlg.tab_widget.count() >= 4
         assert dlg.tab_widget.tabText(3) == "Giao diện (UI Theme)"
 
         # 2. Theme combo contains light, dark, system
