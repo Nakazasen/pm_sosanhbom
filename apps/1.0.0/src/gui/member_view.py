@@ -365,7 +365,16 @@ class MemberWorkspaceView(QWidget):
         row_c.addWidget(QLabel("Người phụ trách:"))
         self.author_edit = QLineEdit()
         self.author_edit.setPlaceholderText("Gõ tên người phụ trách (VD: Son_mecha1, Duy_mecha1...)")
-        completer = QCompleter(ROSTER_MECHA_1 + ROSTER_MECHA_2 + ROSTER_MECHA_3, self)
+        author_names: list[str] = []
+        try:
+            from src.core.member_database import MemberDatabaseManager
+            db = MemberDatabaseManager(base_dir=self.base_dir)
+            author_names = db.get_all_account_names()
+        except Exception as e:
+            logger.warning(f"Could not load author names from DB: {e}")
+        if not author_names:
+            author_names = ROSTER_MECHA_1 + ROSTER_MECHA_2 + ROSTER_MECHA_3
+        completer = QCompleter(author_names, self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.author_edit.setCompleter(completer)
         self.author_edit.textChanged.connect(self._on_author_text_changed)

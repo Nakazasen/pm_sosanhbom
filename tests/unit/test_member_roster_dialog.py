@@ -1,0 +1,75 @@
+"""Unit tests for MemberRosterDialog GUI component."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+import pytest
+from PyQt6.QtWidgets import QApplication
+
+from src.gui.member_roster_dialog import MemberRosterDialog
+from src.core.member_database import MemberRecord
+
+
+class TestMemberRosterDialog:
+    """Test suite for MemberRosterDialog."""
+
+    def test_dialog_loads_roster_and_filters(self, qapp: QApplication, tmp_path: Path) -> None:
+        """Verify dialog populates table and filters correctly."""
+        local_dir = tmp_path / "app"
+        remote_file = tmp_path / "remote" / "ssbom_master.db"
+
+        dlg = MemberRosterDialog(base_dir=local_dir, remote_db_path=remote_file)
+
+        # Initially loaded 38 canonical engineers
+        assert dlg.member_table.rowCount() == 38
+
+        # Filter by department "Cơ 1"
+        dlg.combo_dept_filter.setCurrentText("Cơ 1")
+        assert dlg.member_table.rowCount() == 12
+
+        # Search filter
+        dlg.search_edit.setText("Son_mecha1")
+        assert dlg.member_table.rowCount() == 1
+
+        # Clear search
+        dlg.search_edit.clear()
+        dlg.combo_dept_filter.setCurrentText("Tất cả")
+        assert dlg.member_table.rowCount() == 38
+
+    def test_dialog_add_and_delete_member_flow(self, qapp: QApplication, tmp_path: Path) -> None:
+        """Verify adding and deleting a member via dialog methods."""
+        local_dir = tmp_path / "app"
+        remote_file = tmp_path / "remote" / "ssbom_master.db"
+
+        dlg = MemberRosterDialog(base_dir=local_dir, remote_db_path=remote_file)
+
+        # Set form data
+        dlg.txt_account_id.setText("Test_NewMember")
+        dlg.txt_full_name.setText("Kỹ sư Kiểm thử")
+        dlg.combo_dept.setCurrentText("Cơ 1")
+        dlg.combo_sub_unit.setCurrentText("DRUM")
+
+        # Mock QMessageBox to prevent popups during test
+        with patch("src.gui.member_roster_dialog.QMessageBox.information"):
+            dlg._on_add_member()
+
+        assert dlg.member_table.rowCount() == 39
+
+        # Find and select the row containing Test_NewMember
+        target_row = -1
+        for r in range(dlg.member_table.rowCount()):
+            if dlg.member_table.item(r, 1).text() == "Test_NewMember":
+                target_row = r
+                break
+        assert target_row >= 0
+        dlg.member_table.selectRow(target_row)
+        assert dlg.txt_account_id.text() == "Test_NewMember"
+        assert dlg.txt_full_name.text() == "Kỹ sư Kiểm thử"
+
+        # Delete the member
+        with patch("src.gui.member_roster_dialog.QMessageBox.question", return_value=16384):  # StandardButton.Yes
+            with patch("src.gui.member_roster_dialog.QMessageBox.information"):
+                dlg._on_delete_member()
+
+        assert dlg.member_table.rowCount() == 38

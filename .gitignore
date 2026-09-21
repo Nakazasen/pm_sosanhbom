@@ -43,4 +43,7 @@ Thumbs.db
 .agents/
 2024.12/
 2025.02/
+data/*.db
+*.db
+
 

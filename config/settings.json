@@ -1,3 +1,7 @@
 {
-  "theme": "light"
+  "theme": "light",
+  "paths": {
+    "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
+    "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update"
+  }
 }

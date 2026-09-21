@@ -32,6 +32,7 @@ hidden_imports = [
     "src.gui",
     "src.services",
     "src.reporting",
+    "sqlite3",
 ]
 
 datas = [

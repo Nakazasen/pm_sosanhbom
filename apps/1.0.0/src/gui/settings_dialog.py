@@ -62,6 +62,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "fix_serial_path": r"D:\Sandbox\pm_sosanhbom\FIX_SERIAL_DLTOOL_VER010.xls",
         "reports_dir": r"D:\Sandbox\pm_sosanhbom\Reports",
         "default_model": "Virgo",
+        "shared_db_path": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\ssbom_master.db",
+        "update_dir": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\release_update",
     },
     "ui": {
         "theme": "light",
@@ -218,12 +220,32 @@ class SettingsDialog(QDialog):
         rep_layout.addWidget(self.reports_dir_edit)
         rep_layout.addWidget(btn_browse_rep)
 
+        # Shared Database path (SQLite LAN)
+        shared_db_layout = QHBoxLayout()
+        self.shared_db_edit = QLineEdit()
+        btn_browse_db = QPushButton(" Chọn...")
+        btn_browse_db.setIcon(theme_mgr.get_styled_icon("folder"))
+        btn_browse_db.clicked.connect(self._browse_shared_db)
+        shared_db_layout.addWidget(self.shared_db_edit)
+        shared_db_layout.addWidget(btn_browse_db)
+
+        # Update LAN Directory (.ssbupdate)
+        update_dir_layout = QHBoxLayout()
+        self.update_dir_edit = QLineEdit()
+        btn_browse_update = QPushButton(" Chọn...")
+        btn_browse_update.setIcon(theme_mgr.get_styled_icon("folder"))
+        btn_browse_update.clicked.connect(lambda: self._browse_dir(self.update_dir_edit, "Chọn thư mục phát hành cập nhật LAN"))
+        update_dir_layout.addWidget(self.update_dir_edit)
+        update_dir_layout.addWidget(btn_browse_update)
+
         self.default_model_combo = QComboBox()
         self.default_model_combo.addItems(["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"])
 
         path_form.addRow("Thư mục gốc dự án:", base_layout)
         path_form.addRow("Tệp Master Fix Serial Tool:", fs_layout)
         path_form.addRow("Thư mục xuất Báo cáo:", rep_layout)
+        path_form.addRow("CSDL Nhân sự chung (SQLite):", shared_db_layout)
+        path_form.addRow("Thư mục cập nhật LAN (.ssbupdate):", update_dir_layout)
         path_form.addRow("Model máy mặc định:", self.default_model_combo)
 
         path_layout.addWidget(path_group)
@@ -303,6 +325,8 @@ class SettingsDialog(QDialog):
         self.base_dir_edit.setText(paths.get("base_dir", DEFAULT_SETTINGS["paths"]["base_dir"]))
         self.fs_path_edit.setText(paths.get("fix_serial_path", DEFAULT_SETTINGS["paths"]["fix_serial_path"]))
         self.reports_dir_edit.setText(paths.get("reports_dir", DEFAULT_SETTINGS["paths"]["reports_dir"]))
+        self.shared_db_edit.setText(paths.get("shared_db_path", DEFAULT_SETTINGS["paths"]["shared_db_path"]))
+        self.update_dir_edit.setText(paths.get("update_dir", DEFAULT_SETTINGS["paths"]["update_dir"]))
         model = paths.get("default_model", "Virgo")
         idx = self.default_model_combo.findText(model)
         if idx >= 0:
@@ -345,6 +369,8 @@ class SettingsDialog(QDialog):
                 "base_dir": self.base_dir_edit.text().strip(),
                 "fix_serial_path": self.fs_path_edit.text().strip(),
                 "reports_dir": self.reports_dir_edit.text().strip(),
+                "shared_db_path": self.shared_db_edit.text().strip(),
+                "update_dir": self.update_dir_edit.text().strip(),
                 "default_model": self.default_model_combo.currentText().strip(),
             },
             "ui": {
@@ -409,6 +435,16 @@ class SettingsDialog(QDialog):
         path, _ = QFileDialog.getOpenFileName(self, "Chọn FIX_SERIAL_DLTOOL.xls", "", "Excel Files (*.xls *.xlsx);;All Files (*)")
         if path:
             self.fs_path_edit.setText(path)
+
+    def _browse_shared_db(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn tệp CSDL Nhân sự SQLite (ssbom_master.db)",
+            self.shared_db_edit.text(),
+            "SQLite Database (*.db *.sqlite *.sqlite3);;All Files (*.*)",
+        )
+        if path:
+            self.shared_db_edit.setText(path)
 
     def _browse_dir(self, line_edit: QLineEdit, title: str) -> None:
         folder = QFileDialog.getExistingDirectory(self, title, line_edit.text() or "")

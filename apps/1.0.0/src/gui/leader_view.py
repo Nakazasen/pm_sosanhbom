@@ -26,6 +26,7 @@ import pandas as pd
 from PyQt6.QtCore import QDate, QObject, QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -557,7 +558,8 @@ class Step1ProjectSetupWidget(QWidget):
         self.machine_table.verticalHeader().setDefaultSectionSize(32)
         self.machine_table.verticalHeader().setMinimumSectionSize(28)
         self.machine_table.setShowGrid(True)
-        self.machine_table.setMinimumHeight(180)
+        self.machine_table.setMinimumHeight(320)
+        self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
@@ -577,7 +579,7 @@ class Step1ProjectSetupWidget(QWidget):
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
 
-        mach_group.setMinimumHeight(240)
+        mach_group.setMinimumHeight(380)
         tables_layout.addWidget(mach_group, stretch=1)
 
         # Right: Staffing Table (Sheet Lichsu)
@@ -598,9 +600,15 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_auto_assign = QPushButton("Tự động gán công đoạn")
         self.btn_auto_assign.clicked.connect(self._auto_assign_subunits)
 
+        self.btn_manage_roster = QPushButton("Quản lý nhân sự...")
+        self.btn_manage_roster.setIcon(get_theme_manager().get_styled_icon("settings"))
+        self.btn_manage_roster.setToolTip("Thêm, sửa, xóa thành viên và kết nối CSDL chung LAN (ssbom_master.db)")
+        self.btn_manage_roster.clicked.connect(self._open_manage_roster_dialog)
+
         filter_layout.addWidget(self.btn_select_all_staff)
         filter_layout.addWidget(self.btn_deselect_all_staff)
         filter_layout.addWidget(self.btn_auto_assign)
+        filter_layout.addWidget(self.btn_manage_roster)
         staff_layout.addLayout(filter_layout)
 
         self.staff_table = QTableWidget(0, 5)
@@ -610,17 +618,19 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
         self.staff_table.setShowGrid(True)
-        self.staff_table.setMinimumHeight(200)
+        self.staff_table.setMinimumHeight(340)
+        self.staff_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         h_staff = self.staff_table.horizontalHeader()
         h_staff.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         staff_layout.addWidget(self.staff_table)
 
-        staff_group.setMinimumHeight(240)
+        staff_group.setMinimumHeight(380)
         tables_layout.addWidget(staff_group, stretch=2)
         layout.addLayout(tables_layout, stretch=1)
 
         # 3. Action button
         action_layout = QHBoxLayout()
+        action_layout.setContentsMargins(0, 10, 0, 10)
         self.btn_create_folders = QPushButton("Khởi tạo Cây Thư Mục & Sinh Gói Nộp Thành Viên")
         self.btn_create_folders.setIcon(get_theme_manager().get_styled_icon("folder"))
         self.btn_create_folders.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
@@ -637,8 +647,127 @@ class Step1ProjectSetupWidget(QWidget):
 
         layout.addLayout(action_layout)
 
+    def _open_manage_roster_dialog(self) -> None:
+        """Open the Member Roster Management Dialog."""
+        from src.gui.member_roster_dialog import MemberRosterDialog
+        base_dir = getattr(self.state, "base_dir", None)
+        dlg = MemberRosterDialog(parent=self, base_dir=base_dir)
+        dlg.roster_changed.connect(self._reload_roster_from_db)
+        dlg.exec()
+        self._reload_roster_from_db()
+
+    def _reload_roster_from_db(self) -> None:
+        """Reload roster from database and update staff table while preserving assignments."""
+        base_dir = getattr(self.state, "base_dir", None)
+        try:
+            from src.core.member_database import MemberDatabaseManager
+            db = MemberDatabaseManager(base_dir=base_dir)
+            members = db.get_members(active_only=True)
+            if not members:
+                return
+            roster_data = [(m.account_id, m.department, m.default_sub_unit) for m in members]
+            depts = db.get_departments()
+        except Exception as e:
+            logger.warning(f"Could not load roster from database: {e}")
+            return
+
+        # Update department filter options
+        current_dept = self.combo_dept_filter.currentText()
+        self.combo_dept_filter.blockSignals(True)
+        self.combo_dept_filter.clear()
+        self.combo_dept_filter.addItem("Tất cả")
+        for d in depts:
+            self.combo_dept_filter.addItem(d)
+        idx = self.combo_dept_filter.findText(current_dept)
+        if idx >= 0:
+            self.combo_dept_filter.setCurrentIndex(idx)
+        else:
+            self.combo_dept_filter.setCurrentIndex(0)
+        self.combo_dept_filter.blockSignals(False)
+
+        # Cache existing row states
+        existing_assignments: dict[str, tuple[bool, str, str]] = {}
+        for r in range(self.staff_table.rowCount()):
+            eng_item = self.staff_table.item(r, 1)
+            if not eng_item:
+                continue
+            eng = eng_item.text().strip()
+            chk_w = self.staff_table.cellWidget(r, 0)
+            is_app = True
+            if chk_w:
+                chk = chk_w.findChild(QCheckBox)
+                if chk:
+                    is_app = chk.isChecked()
+
+            combo_mach = self.staff_table.cellWidget(r, 3)
+            mach_item = self.staff_table.item(r, 3)
+            mach = combo_mach.currentText() if isinstance(combo_mach, QComboBox) else (mach_item.text() if mach_item else "")
+
+            combo_sub = self.staff_table.cellWidget(r, 4)
+            sub_item = self.staff_table.item(r, 4)
+            sub = combo_sub.currentText() if isinstance(combo_sub, QComboBox) else (sub_item.text() if sub_item else "")
+            existing_assignments[eng] = (is_app, mach, sub)
+
+        self.staff_table.setRowCount(0)
+        self.state.staff_roster.clear()
+
+        sub_unit_cycle = list(STANDARD_SUB_UNITS)
+        active_machines = self.get_active_machine_codes() or ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
+
+        for idx, (eng, dept, def_sub) in enumerate(roster_data):
+            if eng in existing_assignments:
+                is_app, assigned_mach, assigned_unit = existing_assignments[eng]
+            else:
+                is_app = True
+                assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
+                assigned_mach = active_machines[idx % len(active_machines)]
+
+            assignment = StaffAssignment(
+                engineer_name=eng,
+                department=dept,
+                is_applied=is_app,
+                machine_code=assigned_mach,
+                sub_unit=assigned_unit,
+            )
+            self.state.staff_roster.append(assignment)
+
+            r = self.staff_table.rowCount()
+            self.staff_table.insertRow(r)
+
+            chk = QCheckBox()
+            chk.setChecked(is_app)
+            chk_widget = QWidget()
+            chk_layout = QHBoxLayout(chk_widget)
+            chk_layout.addWidget(chk)
+            chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            chk_layout.setContentsMargins(0, 0, 0, 0)
+            self.staff_table.setCellWidget(r, 0, chk_widget)
+
+            self.staff_table.setItem(r, 1, QTableWidgetItem(eng))
+            self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
+            self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
+            self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
+
+            combo_sub = QComboBox()
+            combo_sub.setStyleSheet(
+                "QComboBox { padding: 2px 4px; font-size: 11px; border: 1px solid #D0D0D0; border-radius: 3px; background-color: #FFFFFF; }"
+                "QComboBox:focus { border: 1px solid #0078D4; }"
+            )
+            for u in STANDARD_SUB_UNITS:
+                combo_sub.addItem(u)
+            if assigned_unit in STANDARD_SUB_UNITS:
+                combo_sub.setCurrentText(assigned_unit)
+            else:
+                combo_sub.addItem(assigned_unit)
+                combo_sub.setCurrentText(assigned_unit)
+            self.staff_table.setCellWidget(r, 4, combo_sub)
+            combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
+
+        self._sync_staff_machine_options()
+        self._filter_staff_table(self.combo_dept_filter.currentText())
+
     def _populate_defaults(self) -> None:
-        """Populate initial machine codes and 38 engineers."""
+        """Populate initial machine codes and roster."""
         was_updating = self._is_updating_machine_table
         self._is_updating_machine_table = True
         try:
@@ -649,14 +778,33 @@ class Step1ProjectSetupWidget(QWidget):
         finally:
             self._is_updating_machine_table = was_updating
 
-        # Populate roster
-        roster_data = [
-            (eng, "Cơ 1") for eng in ROSTER_MECHA_1
-        ] + [
-            (eng, "Cơ 2") for eng in ROSTER_MECHA_2
-        ] + [
-            (eng, "Cơ 3") for eng in ROSTER_MECHA_3
-        ]
+        # Try loading roster from MemberDatabaseManager
+        base_dir = getattr(self.state, "base_dir", None)
+        roster_data: list[tuple[str, str, str]] = []
+        try:
+            from src.core.member_database import MemberDatabaseManager
+            db = MemberDatabaseManager(base_dir=base_dir)
+            members = db.get_members(active_only=True)
+            if members:
+                roster_data = [(m.account_id, m.department, m.default_sub_unit) for m in members]
+                depts = db.get_departments()
+                self.combo_dept_filter.blockSignals(True)
+                self.combo_dept_filter.clear()
+                self.combo_dept_filter.addItem("Tất cả")
+                for d in depts:
+                    self.combo_dept_filter.addItem(d)
+                self.combo_dept_filter.blockSignals(False)
+        except Exception as e:
+            logger.warning(f"Could not load roster from database, using static fallback: {e}")
+
+        if not roster_data:
+            roster_data = [
+                (eng, "Cơ 1", "") for eng in ROSTER_MECHA_1
+            ] + [
+                (eng, "Cơ 2", "") for eng in ROSTER_MECHA_2
+            ] + [
+                (eng, "Cơ 3", "") for eng in ROSTER_MECHA_3
+            ]
 
         self.staff_table.setRowCount(0)
         self.state.staff_roster.clear()
@@ -664,8 +812,8 @@ class Step1ProjectSetupWidget(QWidget):
         sub_unit_cycle = list(STANDARD_SUB_UNITS)
         active_machines = self.get_active_machine_codes() or default_machines
 
-        for idx, (eng, dept) in enumerate(roster_data):
-            assigned_unit = sub_unit_cycle[idx % len(sub_unit_cycle)]
+        for idx, (eng, dept, def_sub) in enumerate(roster_data):
+            assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
             assigned_mach = active_machines[idx % len(active_machines)]
             assignment = StaffAssignment(
                 engineer_name=eng,
