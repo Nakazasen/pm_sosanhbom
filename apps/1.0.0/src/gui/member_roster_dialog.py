@@ -9,6 +9,7 @@ Adheres to Data-Dense Enterprise Dashboard standard:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,23 @@ from src.core.member_database import MemberDatabaseManager, MemberRecord
 from src.gui.styles import get_theme_manager
 from src.reporting.excel_generator import STANDARD_SUB_UNITS
 from src.services.machine_dict_service import MachineDictService
+
+
+def normalize_machine_tokens(raw_text: str) -> str:
+    """Normalize comma-separated machine model names by removing all internal spaces.
+
+    e.g. 'Virgo, Iris 2024, 6th Next' -> 'Virgo, Iris2024, 6thNext'
+    """
+    if not raw_text:
+        return ""
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for item in raw_text.split(","):
+        cleaned = re.sub(r"\s+", "", item.strip())
+        if cleaned and cleaned.lower() not in seen:
+            tokens.append(cleaned)
+            seen.add(cleaned.lower())
+    return ", ".join(tokens)
 
 
 class MultiTokenLineEdit(QLineEdit):
@@ -100,8 +118,19 @@ class SelectMachinesDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Chọn Dòng Máy Phụ Trách")
         self.resize(380, 480)
-        self.available_models = available_models
-        self.selected_models = {m.strip().lower() for m in current_models if m.strip()}
+
+        # Normalize and deduplicate available models
+        cleaned_avail = []
+        seen_avail = set()
+        for m in available_models:
+            c = re.sub(r"\s+", "", m.strip())
+            if c and c.lower() not in seen_avail:
+                cleaned_avail.append(c)
+                seen_avail.add(c.lower())
+        self.available_models = sorted(cleaned_avail, key=lambda s: s.lower())
+
+        # Normalize selected models
+        self.selected_models = {re.sub(r"\s+", "", m.strip()).lower() for m in current_models if m.strip()}
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -122,7 +151,8 @@ class SelectMachinesDialog(QDialog):
         for model in self.available_models:
             item = QListWidgetItem(model)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            check_state = Qt.CheckState.Checked if model.strip().lower() in self.selected_models else Qt.CheckState.Unchecked
+            clean_m = re.sub(r"\s+", "", model.strip()).lower()
+            check_state = Qt.CheckState.Checked if clean_m in self.selected_models else Qt.CheckState.Unchecked
             item.setCheckState(check_state)
             self.list_widget.addItem(item)
 
@@ -148,10 +178,11 @@ class SelectMachinesDialog(QDialog):
         layout.addLayout(actions)
 
     def _filter_list(self, text: str) -> None:
-        kw = text.strip().lower()
+        kw = re.sub(r"\s+", "", text.strip()).lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            item.setHidden(bool(kw and kw not in item.text().lower()))
+            item_clean = re.sub(r"\s+", "", item.text().strip()).lower()
+            item.setHidden(bool(kw and kw not in item_clean))
 
     def _select_all(self) -> None:
         for i in range(self.list_widget.count()):
@@ -170,7 +201,7 @@ class SelectMachinesDialog(QDialog):
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             if item.checkState() == Qt.CheckState.Checked:
-                selected.append(item.text())
+                selected.append(re.sub(r"\s+", "", item.text().strip()))
         return selected
 
 
@@ -406,13 +437,13 @@ class MemberRosterDialog(QDialog):
     def _open_machine_selector(self) -> None:
         """Open modal dialog to check/select multiple machine models."""
         current_text = self.txt_machine_names.text()
-        current_tokens = [t.strip() for t in current_text.split(",") if t.strip()]
+        current_tokens = [re.sub(r"\s+", "", t.strip()) for t in current_text.split(",") if t.strip()]
         if not self.known_models:
             self.known_models = self.dict_service.get_model_names()
         dlg = SelectMachinesDialog(self.known_models, current_tokens, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             selected = dlg.get_selected()
-            self.txt_machine_names.setText(", ".join(selected))
+            self.txt_machine_names.setText(normalize_machine_tokens(", ".join(selected)))
 
     def _load_roster_data(self) -> None:
         """Fetch records from SQLite and render onto table."""
@@ -568,7 +599,7 @@ class MemberRosterDialog(QDialog):
             full_name=self.txt_full_name.text().strip() or acc_id,
             department=dept,
             default_sub_unit=self.combo_sub_unit.currentText().strip(),
-            machine_names=self.txt_machine_names.text().strip(),
+            machine_names=normalize_machine_tokens(self.txt_machine_names.text()),
             is_active=self.chk_is_active.isChecked(),
             notes=self.txt_notes.text().strip(),
         )
@@ -615,7 +646,7 @@ class MemberRosterDialog(QDialog):
             full_name=self.txt_full_name.text().strip() or acc_id,
             department=dept,
             default_sub_unit=self.combo_sub_unit.currentText().strip(),
-            machine_names=self.txt_machine_names.text().strip(),
+            machine_names=normalize_machine_tokens(self.txt_machine_names.text()),
             is_active=self.chk_is_active.isChecked(),
             notes=self.txt_notes.text().strip(),
         )

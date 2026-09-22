@@ -74,7 +74,7 @@ class TC2412Selectors:
     )
     USERNAME_INPUT: Tuple[str, str] = (
         By.CSS_SELECTOR,
-        "input[name='username']",
+        "input[name='userName'], input[name='username'], input[type='text']",
     )
     USERNAME_FALLBACK: Tuple[str, str] = (
         By.CSS_SELECTOR,
@@ -148,7 +148,7 @@ class TC2412Selectors:
     )
     CONTENT_TAB_XPATH: Tuple[str, str] = (
         By.XPATH,
-        "//span[@title='Content' or normalize-space()='Content'] | //a[@data-locator='tab-tc_xrt_Content'] | //*[contains(@class,'sw-tab') and (.//span[normalize-space()='Content'] or contains(.,'Content'))]",
+        "//a[normalize-space()='Content' or @title='Content' or @data-locator='tab-tc_xrt_Content'] | //span[normalize-space()='Content' or @title='Content'] | //li[contains(@class,'sw-tab')]//a[normalize-space()='Content']",
     )
     ACTIVE_CONTENT_TAB: Tuple[str, str] = (
         By.CSS_SELECTOR,
@@ -174,7 +174,7 @@ class TC2412Selectors:
     )
     EXPAND_BELOW_CMD: Tuple[str, str] = (
         By.CSS_SELECTOR,
-        "div[command-id='Awb0ExpandBelow'], div.aw-widgets-cellListItem[title*='Expand Below'], [command-id='Awb0ExpandBelow']",
+        "div[command-id='Awb0ExpandBelow'], div.aw-widgets-cellListItem[title*='Expand Below'], [command-id='Awb0ExpandBelow'], li[command-id='Awb0ExpandBelow']",
     )
     EXPAND_LEVEL_INPUT: Tuple[str, str] = (
         By.CSS_SELECTOR,

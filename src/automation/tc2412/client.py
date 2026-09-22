@@ -483,7 +483,7 @@ class TC2412AutomationClient:
         if not items:
             raise ItemNotFoundError(f"No result rows returned for '{clean_item_id}'.")
 
-        # Match revision
+        # Match revision or select target item
         target_item = None
         resolved_rev = part_rev or "Latest"
 
@@ -497,15 +497,45 @@ class TC2412AutomationClient:
                     break
 
         if target_item is None:
-            target_item = items[0]
+            # Prioritize Machine Body / Main Item (MBC_) over sub-boards (PBA-, RBA-)
+            for item in items:
+                txt = (item.text or "").lower()
+                if "mbc" in txt:
+                    target_item = item
+                    break
 
-        # Click to open
+            if target_item is None:
+                for item in items:
+                    txt = (item.text or "").lower()
+                    if "pba" not in txt and "rba" not in txt:
+                        target_item = item
+                        break
+
+            if target_item is None:
+                target_item = items[-1] if len(items) > 1 else items[0]
+
+        # Click to open into showObject
         by_title, val_title = TC2412Selectors.SEARCH_ITEM_TITLE
+        by_open, val_open = TC2412Selectors.SEARCH_ITEM_OPEN_BTN
         try:
             link = target_item.find_element(by_title, val_title)
             link.click()
         except NoSuchElementException:
+            try:
+                open_btns = target_item.find_elements(by_open, val_open)
+                if open_btns:
+                    open_btns[0].click()
+                else:
+                    target_item.click()
+            except Exception:
+                target_item.click()
+        except Exception:
             target_item.click()
+
+        try:
+            wait.until(lambda d: "showObject" in d.current_url)
+        except Exception:
+            pass
 
         self.session.touch()
         return resolved_rev
@@ -524,6 +554,9 @@ class TC2412AutomationClient:
         """
         driver = self.driver
         wait = WebDriverWait(driver, timeout)
+
+        if "page=Content" in driver.current_url:
+            return True
 
         try:
             by_xpath, val_xpath = TC2412Selectors.CONTENT_TAB_XPATH
@@ -580,8 +613,16 @@ class TC2412AutomationClient:
             wait.until(EC.presence_of_element_located((by_tree, val_tree)))
             root_elem = wait.until(EC.element_to_be_clickable((by_root, val_root)))
             root_elem.click()
-        except TimeoutException as exc:
-            raise RootNodeSelectionError("Could not find or click root BOM line (data-indexnumber='0').") from exc
+        except TimeoutException:
+            try:
+                root_cell = wait.until(
+                    EC.element_to_be_clickable(
+                        (By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText, div.aw-splm-tableRow")
+                    )
+                )
+                root_cell.click()
+            except Exception as exc:
+                raise RootNodeSelectionError("Could not find or click root BOM line.") from exc
 
         # 2. Click Expand toolbar dropdown
         by_exp_btn, val_exp_btn = TC2412Selectors.EXPAND_TOOLBAR_BTN
@@ -596,22 +637,35 @@ class TC2412AutomationClient:
         try:
             below_btn = wait.until(EC.element_to_be_clickable((by_below, val_below)))
             below_btn.click()
-        except TimeoutException as exc:
-            raise ExpandMenuNotOpenError(f"Expand Below item not found in dropdown: {exc}") from exc
+        except TimeoutException:
+            menu_items = driver.find_elements(
+                By.CSS_SELECTOR,
+                "div.aw-popup div.aw-widgets-cellListItem, div.aw-popup [command-id], div.sw-popup div",
+            )
+            exp_below = [
+                m for m in menu_items
+                if "expand below" in (m.text or "").lower() or m.get_attribute("command-id") == "Awb0ExpandBelow"
+            ]
+            if exp_below:
+                exp_below[0].click()
+            else:
+                raise ExpandMenuNotOpenError("Expand Below item not found in dropdown.")
 
-        # 4. Fill target level (7) in dialog and confirm
+        # 4. Fill target level in dialog and confirm if dialog appears
         by_lvl_input, val_lvl_input = TC2412Selectors.EXPAND_LEVEL_INPUT
         by_confirm, val_confirm = TC2412Selectors.EXPAND_CONFIRM_BTN
 
         try:
-            lvl_input = wait.until(EC.element_to_be_clickable((by_lvl_input, val_lvl_input)))
+            short_wait = WebDriverWait(driver, 2)
+            lvl_input = short_wait.until(EC.element_to_be_clickable((by_lvl_input, val_lvl_input)))
             lvl_input.clear()
             lvl_input.send_keys(str(target_level))
 
             confirm_btn = driver.find_element(by_confirm, val_confirm)
             confirm_btn.click()
-        except Exception as exc:
-            raise ExpandMenuNotOpenError(f"Failed to enter level or confirm expand dialog: {exc}") from exc
+        except Exception:
+            # If no dialog appears, Expand Below directly triggers expansion
+            pass
 
         # 5. Dynamic wait for completion (Virtual DOM resilient)
         start_time = time.time()

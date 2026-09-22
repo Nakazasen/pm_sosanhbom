@@ -291,14 +291,30 @@ def standardize_plm_file(
     src_file = Path(src_file).resolve()
     dest_file = Path(dest_file).resolve()
 
-    wb_in = openpyxl.load_workbook(src_file, data_only=True)
-    ws_in = wb_in.active
-    raw_rows = [list(row) for row in ws_in.iter_rows(values_only=True)]
-    wb_in.close()
+    temp_created = None
+    if src_file.suffix.lower() not in (".xlsx", ".xlsm", ".xltx", ".xltm"):
+        temp_created = src_file.with_suffix(".xlsx")
+        import shutil
+        shutil.copy2(src_file, temp_created)
+        actual_src = temp_created
+    else:
+        actual_src = src_file
 
-    rows_14 = transform_24_to_14_columns(raw_rows, prune_electrical=prune_electrical)
-    write_14_column_workbook(rows_14, dest_file)
+    try:
+        wb_in = openpyxl.load_workbook(actual_src, data_only=True)
+        ws_in = wb_in.active
+        raw_rows = [list(row) for row in ws_in.iter_rows(values_only=True)]
+        wb_in.close()
 
-    orig_count = len(raw_rows)
-    final_count = len(rows_14)
-    return orig_count, final_count
+        rows_14 = transform_24_to_14_columns(raw_rows, prune_electrical=prune_electrical)
+        write_14_column_workbook(rows_14, dest_file)
+
+        orig_count = len(raw_rows)
+        final_count = len(rows_14)
+        return orig_count, final_count
+    finally:
+        if temp_created and temp_created.exists():
+            try:
+                temp_created.unlink()
+            except Exception:
+                pass

@@ -13,6 +13,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 from typing import Any
@@ -232,11 +233,11 @@ class BOMFilterManager:
                 cursor = conn.execute(
                     "SELECT DISTINCT model_name FROM bolocbom_rules ORDER BY model_name COLLATE NOCASE;"
                 )
-                models = [row[0] for row in cursor.fetchall() if row[0]]
+                models = sorted(list({re.sub(r"\s+", "", row[0]) for row in cursor.fetchall() if row[0]}), key=lambda s: s.lower())
                 return models
         except Exception as ex:
             logger.error("Error fetching models from DB: %s", ex)
-            return list(DEFAULT_MODEL_RULES.keys())
+            return [re.sub(r"\s+", "", k) for k in DEFAULT_MODEL_RULES.keys()]
 
     def get_rules_for_model(self, model_name: str, active_only: bool = True) -> list[BOMRuleRecord]:
         """Fetch all BOM filter rules for a given machine model (case-insensitive)."""
@@ -244,10 +245,10 @@ class BOMFilterManager:
         if not model_name:
             return []
 
-        clean_name = model_name.strip()
+        clean_name = re.sub(r"\s+", "", model_name.strip())
         try:
             with self._get_connection(target_path) as conn:
-                query = "SELECT * FROM bolocbom_rules WHERE LOWER(model_name) = LOWER(?)"
+                query = "SELECT * FROM bolocbom_rules WHERE REPLACE(LOWER(model_name), ' ', '') = LOWER(?)"
                 params: list[Any] = [clean_name]
                 if active_only:
                     query += " AND is_active = 1"
@@ -258,7 +259,7 @@ class BOMFilterManager:
 
                 # If no direct match, check if prefix matches
                 if not rows:
-                    query_prefix = "SELECT * FROM bolocbom_rules WHERE LOWER(?) LIKE LOWER(model_name) || '%'"
+                    query_prefix = "SELECT * FROM bolocbom_rules WHERE LOWER(?) LIKE REPLACE(LOWER(model_name), ' ', '') || '%'"
                     if active_only:
                         query_prefix += " AND is_active = 1"
                     query_prefix += " ORDER BY id ASC;"

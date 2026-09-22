@@ -93,7 +93,9 @@ class MachineDictService:
 
                 # Parse Machine Info (Cols A - E)
                 if col_a or col_d:
-                    machine_name = str(col_a).strip() if col_a else ""
+                    raw_name = str(col_a).strip() if col_a else ""
+                    # Strip all whitespace from machine name: "Iris 2024" -> "Iris2024", "Polaris Next" -> "PolarisNext"
+                    machine_name = re.sub(r"\s+", "", raw_name)
                     variant = str(col_b).strip() if col_b else ""
                     brand_segment = str(col_c).strip() if col_c else ""
                     raw_codes = str(col_d).strip() if col_d else ""
@@ -171,15 +173,22 @@ class MachineDictService:
     def get_model_names(self) -> list[str]:
         """Return sorted list of all unique machine/model names from Excel dictionary.
 
-        Includes all machine models from Column A in file_loaimay_nhommail.xlsx,
+        Includes all machine models from Column A in file_loaimay_nhommail.xlsx with all
+        whitespace removed (e.g. 'Iris 2024' -> 'Iris2024', 'Polaris Next' -> 'PolarisNext'),
         plus baseline models for complete backward compatibility.
         """
         if not self._is_loaded:
             self.load()
-        names = {m.machine_name.strip() for m in self._machines if m.machine_name and m.machine_name.strip()}
+        names: set[str] = set()
+        for m in self._machines:
+            if m.machine_name:
+                cleaned = re.sub(r"\s+", "", m.machine_name.strip())
+                if cleaned:
+                    names.add(cleaned)
         legacy_defaults = ["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"]
-        names.update(legacy_defaults)
-        return sorted(names)
+        for leg in legacy_defaults:
+            names.add(re.sub(r"\s+", "", leg))
+        return sorted(names, key=lambda s: s.lower())
 
     def add_or_update_machine_code(
         self,
@@ -214,11 +223,12 @@ class MachineDictService:
             found_existing = False
 
             # Search if machine_name already exists in Column A
+            clean_search_name = re.sub(r"\s+", "", machine_name).lower()
             for r_idx in range(2, ws.max_row + 1):
                 val_a = ws.cell(row=r_idx, column=1).value
                 val_b = ws.cell(row=r_idx, column=2).value
 
-                if val_a and str(val_a).strip().lower() == machine_name.strip().lower():
+                if val_a and re.sub(r"\s+", "", str(val_a)).lower() == clean_search_name:
                     # If variant is specified, try to match variant as well
                     if variant and val_b and str(val_b).strip().lower() != variant.strip().lower():
                         continue
@@ -235,9 +245,9 @@ class MachineDictService:
                     current_codes.append(cleaned_code)
                     ws.cell(row=target_row, column=4, value="; ".join(current_codes))
             else:
-                # Append a new row at the end
+                # Append a new row at the end with whitespace-free machine name
                 target_row = ws.max_row + 1
-                ws.cell(row=target_row, column=1, value=machine_name.strip())
+                ws.cell(row=target_row, column=1, value=re.sub(r"\s+", "", machine_name.strip()))
                 ws.cell(row=target_row, column=2, value=variant.strip())
                 ws.cell(row=target_row, column=3, value=brand_segment.strip())
                 ws.cell(row=target_row, column=4, value=cleaned_code)

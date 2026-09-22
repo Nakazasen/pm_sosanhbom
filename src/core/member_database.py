@@ -15,6 +15,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 from typing import Any
@@ -329,7 +330,7 @@ class MemberDatabaseManager:
 
         Matches comma-separated machine_names (case-insensitive, exact or substring).
         """
-        clean_target = machine_name.strip().lower()
+        clean_target = re.sub(r"\s+", "", machine_name.strip()).lower()
         all_active = self.get_members(active_only=True)
         if not clean_target:
             return all_active
@@ -337,7 +338,7 @@ class MemberDatabaseManager:
         matched = []
         for m in all_active:
             raw_models = getattr(m, "machine_names", "") or ""
-            m_models = [mod.strip().lower() for mod in raw_models.split(",") if mod.strip()]
+            m_models = [re.sub(r"\s+", "", mod.strip()).lower() for mod in raw_models.split(",") if mod.strip()]
             if any(clean_target == mod or clean_target in mod or mod in clean_target for mod in m_models):
                 matched.append(m)
 
@@ -354,6 +355,9 @@ class MemberDatabaseManager:
         full_name = member.full_name.strip() if member.full_name else member.account_id.strip()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        raw_mach = getattr(member, "machine_names", "") or ""
+        clean_mach = ", ".join([re.sub(r"\s+", "", t.strip()) for t in raw_mach.split(",") if t.strip()])
+
         db_path, is_remote = self.get_active_db_path()
         try:
             with self._get_connection(db_path) as conn:
@@ -369,7 +373,7 @@ class MemberDatabaseManager:
                         full_name,
                         member.department.strip(),
                         member.default_sub_unit.strip(),
-                        getattr(member, "machine_names", "").strip(),
+                        clean_mach,
                         1 if member.is_active else 0,
                         member.notes.strip(),
                         now_str,
@@ -395,6 +399,9 @@ class MemberDatabaseManager:
 
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         db_path, is_remote = self.get_active_db_path()
+
+        raw_mach = getattr(member, "machine_names", "") or ""
+        clean_mach = ", ".join([re.sub(r"\s+", "", t.strip()) for t in raw_mach.split(",") if t.strip()])
 
         try:
             with self._get_connection(db_path) as conn:
@@ -427,7 +434,7 @@ class MemberDatabaseManager:
                             member.full_name.strip() if member.full_name else new_acc_id,
                             member.department.strip(),
                             member.default_sub_unit.strip(),
-                            getattr(member, "machine_names", "").strip(),
+                            clean_mach,
                             1 if member.is_active else 0,
                             member.notes.strip(),
                             now_str,
@@ -451,7 +458,7 @@ class MemberDatabaseManager:
                             member.full_name.strip() if member.full_name else new_acc_id,
                             member.department.strip(),
                             member.default_sub_unit.strip(),
-                            getattr(member, "machine_names", "").strip(),
+                            clean_mach,
                             1 if member.is_active else 0,
                             member.notes.strip(),
                             now_str,

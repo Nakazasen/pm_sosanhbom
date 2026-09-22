@@ -133,11 +133,11 @@ class TestMemberRosterDialog:
         with patch("src.gui.member_roster_dialog.QMessageBox.information"):
             dlg._on_update_member()
 
-        # Check that table updated column 5
-        assert dlg.member_table.item(0, 5).text() == "Virgo, 6th Next"
+        # Check that table updated column 5 with normalized name
+        assert dlg.member_table.item(0, 5).text() == "Virgo, 6thNext"
 
         # Test searching by machine model name
-        dlg.search_edit.setText("6th Next")
+        dlg.search_edit.setText("6thNext")
         assert dlg.member_table.rowCount() == 1
         assert dlg.member_table.item(0, 1).text() == acc_id
 
@@ -148,6 +148,8 @@ class TestMemberRosterDialog:
 
         selector._select_all()
         assert len(selector.get_selected()) == 3
+        assert "Iris2024" in selector.get_selected()
+        assert "6thNext" in selector.get_selected()
 
         selector._deselect_all()
         assert len(selector.get_selected()) == 0

@@ -64,11 +64,11 @@ class TestMachineDictService:
         # Test lookup by 4-char code
         m1 = svc.lookup_machine_code("0C0T")
         assert m1 is not None
-        assert m1.machine_name == "6th Next"
+        assert m1.machine_name == "6thNext"
 
         m2 = svc.lookup_machine_code("0C15")
         assert m2 is not None
-        assert m2.machine_name == "Libra 2"
+        assert m2.machine_name == "Libra2"
 
         # Non-existing code
         assert svc.lookup_machine_code("XXXX") is None
@@ -80,32 +80,32 @@ class TestMachineDictService:
         # Material with T1 prefix
         m1 = svc.extract_and_lookup_material("T10C0TZUS0")
         assert m1 is not None
-        assert m1.machine_name == "6th Next"
+        assert m1.machine_name == "6thNext"
 
         # Material with 11 prefix
         m2 = svc.extract_and_lookup_material("110C153NL0")
         assert m2 is not None
-        assert m2.machine_name == "Libra 2"
+        assert m2.machine_name == "Libra2"
 
     def test_2way_write_back(self, mock_dict_excel: Path):
         svc = MachineDictService(excel_path=mock_dict_excel)
         svc.load()
 
-        # Append new code '0C0Z' to existing model '6th Next'
+        # Append new code '0C0Z' to existing model '6th Next' (matches regardless of spaces)
         success = svc.add_or_update_machine_code(machine_name="6th Next", new_code="0C0Z")
         assert success is True
 
         # Verify in memory
         m = svc.lookup_machine_code("0C0Z")
         assert m is not None
-        assert m.machine_name == "6th Next"
+        assert m.machine_name == "6thNext"
 
         # Append entirely new model
         success2 = svc.add_or_update_machine_code(machine_name="Polaris Next", new_code="0C0V", variant="Polaris Next")
         assert success2 is True
         m_new = svc.lookup_machine_code("0C0V")
         assert m_new is not None
-        assert m_new.machine_name == "Polaris Next"
+        assert m_new.machine_name == "PolarisNext"
 
 
 class TestPCDPlanService:
@@ -121,14 +121,14 @@ class TestPCDPlanService:
         assert item1.material_code == "T10C0TZUS0"
         assert item1.is_trial is True
         assert item1.machine_code_4char == "0C0T"
-        assert item1.machine_name == "6th Next"
+        assert item1.machine_name == "6thNext"
         assert item1.suggested_phase == "DMT/PMT"
 
         item2 = res.items[1]
         assert item2.material_code == "110C153NL0"
         assert item2.is_trial is False
         assert item2.machine_code_4char == "0C15"
-        assert item2.machine_name == "Libra 2"
+        assert item2.machine_name == "Libra2"
         assert item2.suggested_phase == "MP"
 
 

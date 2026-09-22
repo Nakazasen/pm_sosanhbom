@@ -134,16 +134,18 @@ def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
             return True
 
         arr_btns = panel.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
+        if not arr_btns:
+            arr_btns = driver.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
         if arr_btns:
             arr_btns[0].click()
-            time.sleep(1.5)
+            time.sleep(2)
 
             menu_items = driver.find_elements(
                 By.CSS_SELECTOR,
                 "div.aw-popup div.aw-widgets-cellListItem, div.aw-popup li, div.sw-popup li, div.sw-popup div",
             )
             for m in menu_items:
-                if (m.text or "").strip() == "KTCT_Trong":
+                if "KTCT_Trong" in (m.text or ""):
                     m.click()
                     time.sleep(2)
                     return True
@@ -363,35 +365,53 @@ class UnifiedBOMDownloadWorker(QObject):
                                 except Exception:
                                     pass
 
-                            # 1. Search item
-                            tc_client.search_item(part)
+                            # 1. Search item (allow up to 45s for heavy BOM queries)
+                            self.log_message.emit(f"[*] [TC24] Tìm kiếm mã {part} trên hệ thống...")
+                            tc_client.search_item(part, timeout=45)
                             time.sleep(2.5)
 
                             # 2. Content tab
-                            content_tab = wait.until(
-                                EC.element_to_be_clickable(
-                                    (By.XPATH, "//a[contains(@class, 'sw-tab-title') and normalize-space()='Content']")
-                                )
-                            )
-                            content_tab.click()
-                            time.sleep(3.5)
+                            if "page=Content" not in driver.current_url:
+                                try:
+                                    content_tab = wait.until(
+                                        EC.element_to_be_clickable(
+                                            (
+                                                By.XPATH,
+                                                "//a[normalize-space()='Content' or @title='Content' or @data-locator='tab-tc_xrt_Content']"
+                                                " | //span[normalize-space()='Content' or @title='Content']"
+                                                " | //li[contains(@class,'sw-tab')]//a[normalize-space()='Content']",
+                                            )
+                                        )
+                                    )
+                                    content_tab.click()
+                                    time.sleep(3.5)
+                                except Exception:
+                                    tc_client.navigate_to_content_tab(timeout=15)
+                            else:
+                                self.log_message.emit("   [+] Tab Content đã mở sẵn.")
 
                             # 3. Select root row and Expand Below
-                            root_cells = driver.find_elements(
-                                By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText"
-                            )
-                            if root_cells:
-                                root_cells[0].click()
+                            try:
+                                root_cell = wait.until(
+                                    EC.element_to_be_clickable(
+                                        (By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText, div.aw-splm-tableRow")
+                                    )
+                                )
+                                root_cell.click()
                                 time.sleep(1)
+                            except Exception:
+                                pass
 
-                            workarea_tb = driver.find_element(
-                                By.CSS_SELECTOR, "div.aw-layout-workareaCommandbar, div.aw-commands-toolbar"
+                            exp_btn = wait.until(
+                                EC.element_to_be_clickable(
+                                    (By.CSS_SELECTOR, "button[command-id='Awb0Expand'], [command-id='Awb0Expand']")
+                                )
                             )
-                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Awb0Expand']").click()
+                            exp_btn.click()
                             time.sleep(1.5)
 
                             cmds = driver.find_elements(
-                                By.CSS_SELECTOR, "div.aw-widgets-cellListItem, [command-id='Awb0ExpandBelow']"
+                                By.CSS_SELECTOR, "div.aw-widgets-cellListItem, [command-id='Awb0ExpandBelow'], div.sw-popup div, li[command-id='Awb0ExpandBelow']"
                             )
                             exp_below = [
                                 c for c in cmds if "expand below" in (c.text or "").lower() or c.get_attribute("command-id") == "Awb0ExpandBelow"
@@ -399,17 +419,24 @@ class UnifiedBOMDownloadWorker(QObject):
                             if exp_below:
                                 exp_below[0].click()
                                 self.log_message.emit("   [*] Đang mở rộng toàn bộ cây BOM...")
-                                time.sleep(10)
+                                time.sleep(15)
 
                             # 4. Select all rows
-                            workarea_tb = driver.find_element(
-                                By.CSS_SELECTOR, "div.aw-layout-workareaCommandbar, div.aw-commands-toolbar"
+                            sel_all_btn = wait.until(
+                                EC.element_to_be_clickable(
+                                    (By.CSS_SELECTOR, "button[command-id='Awp0SelectAll'], [command-id='Awp0SelectAll']")
+                                )
                             )
-                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Awp0SelectAll']").click()
+                            sel_all_btn.click()
                             time.sleep(2)
 
                             # 5. Open Export to Excel
-                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Arm0ExportImport']").click()
+                            exp_imp_btn = wait.until(
+                                EC.element_to_be_clickable(
+                                    (By.CSS_SELECTOR, "button[command-id='Arm0ExportImport'], [command-id='Arm0ExportImport']")
+                                )
+                            )
+                            exp_imp_btn.click()
                             time.sleep(2)
 
                             popup = wait.until(
@@ -422,12 +449,12 @@ class UnifiedBOMDownloadWorker(QObject):
                                 if "export to excel" in txt and "import" not in txt:
                                     it.click()
                                     break
-                            time.sleep(3)
+                            time.sleep(4)
 
                             # 6. Panel configuration
                             panel = wait.until(
                                 EC.presence_of_element_located(
-                                    (By.CSS_SELECTOR, "form.sw-command-panel, div.sw-right-dialog form")
+                                    (By.CSS_SELECTOR, "form.sw-command-panel, div.sw-right-dialog form, form")
                                 )
                             )
                             if tc_user == "vn_pe02":
@@ -506,6 +533,13 @@ class UnifiedBOMDownloadWorker(QObject):
 
                             if not downloaded_path:
                                 raise TimeoutError(f"Quá thời gian chờ tải file BOM cho {part}!")
+
+                            # Ensure downloaded file has .xlsx extension for openpyxl compatibility
+                            if downloaded_path.suffix.lower() not in (".xlsx", ".xlsm", ".xltx", ".xltm"):
+                                ext_path = downloaded_path.with_suffix(".xlsx")
+                                import shutil
+                                shutil.move(downloaded_path, ext_path)
+                                downloaded_path = ext_path
 
                             # Convert macro-enabled Excel export to pure .xlsx
                             clean_xlsx = download_scratch / f"PLM_{part}.pure.xlsx"
