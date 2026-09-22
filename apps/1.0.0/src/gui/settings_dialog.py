@@ -56,8 +56,8 @@ DEFAULT_MASTER_TEMPLATE = (
 DEFAULT_SETTINGS: dict[str, Any] = {
     "tc14": {
         "base_url": "http://tcmp3gwb:3000/",
-        "username": "vn_pe03",
-        "password": "vn_pe03",
+        "username": "vn_pe02",
+        "password": "vn_pe02",
         "browser": "edge",
         "headless": True,
         "timeout": 30,

@@ -132,16 +132,16 @@ class TC14AutomationClient:
 
     def login(
         self,
-        username: str = "vn_pe03",
-        password: str = "vn_pe03",
+        username: str = "vn_pe02",
+        password: str = "vn_pe02",
         force: bool = False,
         timeout: Optional[float] = None,
     ) -> bool:
         """Authenticate with Teamcenter Active Workspace.
 
         Args:
-            username: Login user account (default 'vn_pe03').
-            password: Login password (default 'vn_pe03').
+            username: Login user account (default 'vn_pe02').
+            password: Login password (default 'vn_pe02').
             force: Force fresh login even if session appears active.
             timeout: Optional timeout override in seconds.
 
@@ -223,7 +223,7 @@ class TC14AutomationClient:
             raise TC14AuthenticationError(f"Unexpected login error: {exc}") from exc
 
     def ensure_authenticated(
-        self, username: str = "vn_pe03", password: str = "vn_pe03"
+        self, username: str = "vn_pe02", password: str = "vn_pe02"
     ) -> bool:
         """Verify session is alive and valid; re-login automatically if expired."""
         if self.session.is_session_alive():

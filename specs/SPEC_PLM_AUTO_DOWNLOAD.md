@@ -1271,4 +1271,44 @@ Khi ghi dữ liệu đã tải về vào Sheet `PLM` của tệp `BOM_*.xlsm`, m
 4. **Không Phá Vỡ VBA / Macros Cũ**: Đảm bảo tệp sau khi cập nhật Sheet `PLM` có thể mở lại bình thường trong Microsoft Excel mà không phát sinh cảnh báo `"Circular Reference"` hoặc `#REF!`.
 
 ---
+
+## 14. ĐẶC TẢ TÀI KHOẢN MẶC ĐỊNH & THIẾT LẬP TẢI CHẠY ẨN TOÀN TRÌNH (HEADLESS BACKGROUND EXECUTION CONTRACT)
+
+### 14.1. Cấu Hình Tài Khoản Mặc Định: 製造技術2課 → vn_pe02 / vn_pe02 (Luật KTCT_Trọng)
+- **Tài khoản mặc định toàn hệ thống**: `vn_pe02 : 製造技術2課 (KTCT_Trọng)`.
+- **Mật khẩu khởi tạo**: `vn_pe02` (Hỗ trợ lưu trữ bảo mật qua Windows DPAPI / OS Keyring với service ID `PM_SOSANHBOM_TC2412`).
+- **Cơ sở kỹ thuật & Lý do áp dụng**:
+  - Tài khoản `vn_pe02` trực thuộc Phòng Kỹ thuật chế tạo 2 (製造技術2課) đã được kỹ sư Trọng (`KTCT_Trọng`) cấu hình sẵn định dạng hiển thị và bố cục xuất Excel 24 cột chuẩn mực (`KTCT_Trong`).
+  - Khi tải cây cấu trúc BOM thông qua tài khoản này kết hợp preset `KTCT_Trong`, hệ thống nhận diện đầy đủ 24 trường dữ liệu kỹ thuật thực tế (thay vì bố cục mặc định 10 cột của Active Workspace), triệt tiêu hoàn toàn hiện tượng lệch cột (Column Drift) hoặc thiếu trường thuộc tính khi chuyển giao sang 14 cột tiêu chuẩn.
+- **Tích hợp giao diện**:
+  - Tại `PLMDownloadDialog`: `combo_account` định tuyến `vn_pe02 : 製造技術2課 (KTCT_Trọng)` tại chỉ số đầu tiên (`index = 0`), luôn được kích hoạt mặc định khi mở hộp thoại tải BOM.
+  - Tại `SettingsDialog` & `config/settings.json`: Thiết lập cấu hình mặc định mục `tc14.username` và `tc14.password` thành `vn_pe02`.
+
+### 14.2. Phân Tích Nguyên Nhân Gốc Rễ (RCA) Lỗi Tải Tự Động & Giải Pháp Khắc Phục
+- **Nguyên nhân lỗi tự động tải PLM**:
+  1. Thiếu bước đăng nhập xác thực chủ động: Luồng thực thi ngầm trước đây chuyển thẳng sang tìm kiếm Item ID khi phiên duyệt web chưa được xác thực, dẫn đến việc máy chủ TC2412 chuyển hướng (redirect) về màn hình đăng nhập và gây timeout tìm kiếm element.
+  2. Lỗi tham chiếu phương thức chưa hoàn thiện: Luồng gọi phương thức không tồn tại (`trigger_export_download`), gây lỗi `AttributeError` khi không có tệp sao lưu có sẵn.
+  3. Khởi tạo phiên trình duyệt trùng lặp: Mỗi mã BOM trong vòng lặp trước đây khởi tạo một phiên WebDriver mới, tiêu tốn tài nguyên và tăng nguy cơ xung đột tiến trình.
+- **Nguyên nhân lỗi và gián đoạn khi tải SAP R/3**:
+  1. Cửa sổ SAP GUI bật nổi (Foreground Pop-up): Khi giao dịch `CS12` thực thi, cửa sổ SAP GUI tự động kích hoạt chiếm focus chuột và bàn phím, làm gián đoạn người dùng khi đang thao tác tài liệu, nhập văn bản hoặc đối soát Excel.
+  2. Chưa xử lý mượt mà trạng thái không có kết nối `saplogon.exe`, khiến luồng xử lý bị chặn.
+- **Biện pháp khắc phục triệt để**:
+  1. Tích hợp chu trình tải chuẩn hóa đơn phiên (Single-Session Lifecycle): Mở phiên Chromium headless một lần duy nhất cho toàn bộ danh sách BOM, đăng nhập tự động bằng `vn_pe02`, mở rộng cây BOM, áp dụng cấu hình `KTCT_Trong`, xuất Excel, chuyển đổi sang pure `.xlsx` và đóng phiên an toàn trong khối `finally`.
+  2. Kích hoạt cơ chế chống cướp focus (Focus-Stealing Prevention) cho cả PLM và SAP R/3.
+
+### 14.3. Hợp Đồng Tải Chạy Ẩn Toàn Trình (Headless & Background Contract)
+Để đảm bảo người dùng có thể tiếp tục làm việc bình thường trên máy tính trong suốt thời gian tải dữ liệu (thậm chí với các BOM lớn gồm hàng nghìn linh kiện), hệ thống áp dụng hợp đồng tải chạy ngầm 100%:
+
+1. **Siemens Teamcenter (TC2412 / Active Workspace)**:
+   - Chế độ thực thi: Headless hiện đại (`--headless=new`).
+   - Tọa độ cửa sổ ảo: `--window-position=-32000,-32000` (đảm bảo hoàn toàn nằm ngoài không gian hiển thị của màn hình thực).
+   - Tham số bảo vệ môi trường ngầm: `--disable-gpu`, `--no-sandbox`, `--no-first-run`, `--disable-notifications`, `--disable-popup-blocking`.
+   - Cơ chế bắt tệp: Lắng nghe tệp sinh tự động tại thư mục tạm (`scratch/downloads`), hoàn toàn độc lập với clipboard hoặc tiêu điểm cửa sổ hệ điều hành.
+
+2. **SAP R3 CS12 Multilevel BOM**:
+   - Thu nhỏ cửa sổ SAP GUI ngay khi kết nối: Gọi phương thức COM `session.findById("wnd[0]").iconify()` để đưa cửa sổ chính về thanh tác vụ (Taskbar).
+   - Cơ chế Windows API phi kích hoạt: Sử dụng lệnh Win32 API `ShowWindow(hwnd, SW_SHOWMINNOACTIVE = 7)` cho tất cả các cửa sổ thuộc tiến trình SAP GUI trong quá trình thực thi, ngăn chặn tuyệt đối việc cửa sổ SAP nhảy lên đè màn hình làm việc của người dùng.
+   - Thao tác dữ liệu hoàn toàn thông qua SAP GUI Scripting COM Object trong luồng nền (`QThread`), không phụ thuộc vào vị trí trỏ chuột của người dùng.
+
+---
 *Tài liệu này là đặc tả kỹ thuật tối cao cho Milestone M1 của dự án `pm_sosanhbom`. Mọi thay đổi về cấu trúc giao diện hoặc hành vi của các phân hệ M2..M5 phải được đối chiếu và cập nhật đồng bộ với văn bản này.*

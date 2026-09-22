@@ -380,8 +380,8 @@ class TC2412AutomationClient:
             if creds is not None:
                 username, password = creds.username, creds.password
             else:
-                username = username or "vn_pe03"
-                password = password or ""
+                username = username or "vn_pe02"
+                password = password or "vn_pe02"
 
         driver = self.driver
         home_url = TC2412URLs.get_home_url(self.base_url)

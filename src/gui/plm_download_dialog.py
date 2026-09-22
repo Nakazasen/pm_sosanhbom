@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
+import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -77,6 +78,55 @@ def try_parse_date(date_str: str) -> Optional[date]:
         except ValueError:
             continue
     return None
+
+
+def convert_to_pure_xlsx(src_file: Path, dest_xlsx: Path) -> bool:
+    """Lossless conversion from TC2412 export to pure .xlsx, preserving 100% of formatting."""
+    try:
+        with zipfile.ZipFile(src_file, "r") as zin:
+            with zipfile.ZipFile(dest_xlsx, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    if item.filename.endswith("vbaProject.bin"):
+                        continue
+                    data = zin.read(item.filename)
+                    if item.filename == "[Content_Types].xml":
+                        data = data.replace(
+                            b"application/vnd.ms-excel.sheet.macroEnabled.main+xml",
+                            b"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+                        )
+                    zout.writestr(item, data)
+        return True
+    except Exception as exc:
+        logger.warning("Error converting to pure xlsx: %s", exc)
+        return False
+
+
+def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
+    """Ensure that the 'KTCT_Trong' column arrangement is selected in the Export panel."""
+    try:
+        from selenium.webdriver.common.by import By
+        panel_text = getattr(panel, "text", "")
+        if "KTCT_Trong" in panel_text:
+            return True
+
+        arr_btns = panel.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
+        if arr_btns:
+            arr_btns[0].click()
+            time.sleep(1.5)
+
+            menu_items = driver.find_elements(
+                By.CSS_SELECTOR,
+                "div.aw-popup div.aw-widgets-cellListItem, div.aw-popup li, div.sw-popup li, div.sw-popup div",
+            )
+            for m in menu_items:
+                if (m.text or "").strip() == "KTCT_Trong":
+                    m.click()
+                    time.sleep(2)
+                    return True
+        return False
+    except Exception as exc:
+        logger.warning("Failed selecting KTCT_Trong arrangement: %s", exc)
+        return False
 
 
 @dataclass
@@ -190,70 +240,230 @@ class UnifiedBOMDownloadWorker(QObject):
             self.log_message.emit(f"\n>> BƯỚC 1: TẢI TỪ SIEMENS TEAMCENTER (TC24) [Tài khoản: {self.tc_account}]")
             self.log_message.emit("   (Lưu ý: TC24 luôn tự động tải cây cấu trúc BOM mới nhất)")
 
-            for idx, item in enumerate(self.items, 1):
-                part = item.part_number
-                current_step += 1
-                pct = int((current_step - 1) / total_steps * 95) + 2
-                self.progress.emit(pct, f"[{current_step}/{total_steps}] TC24: Đang tải mã {part}...")
-                self.log_message.emit(f"\n--- [TC24] Xử lý mã ({idx}/{total_parts}): {part} ---")
+            tc_client = None
+            try:
+                from selenium.webdriver.common.by import By
+                from selenium.webdriver.support import expected_conditions as EC
+                from selenium.webdriver.support.ui import WebDriverWait
 
+                from src.automation.tc2412.client import TC2412AutomationClient
+                from src.automation.tc2412.session import BrowserConfig, TC2412SessionManager
+                from src.security.credentials import CredentialManager
+
+                download_scratch = Path("scratch/downloads").resolve()
+                download_scratch.mkdir(parents=True, exist_ok=True)
+
+                config = BrowserConfig(
+                    download_dir=download_scratch,
+                    headless=True,
+                )
+                sm = TC2412SessionManager(config=config)
+                tc_client = TC2412AutomationClient(session_manager=sm)
+
+                tc_user = self.tc_account.strip() or "vn_pe02"
+                tc_pass = tc_user
                 try:
-                    bak_dir = self.dest_dir / "backup_before_virgo_filter"
-                    raw_file = bak_dir / f"PLM_{part}.xlsx" if bak_dir.exists() else None
-                    target_dest = self.dest_dir / f"PLM_{part}.xlsx"
+                    stored_creds = CredentialManager.get_credentials("PM_SOSANHBOM_TC2412")
+                    if stored_creds and stored_creds.username == tc_user and stored_creds.password:
+                        tc_pass = stored_creds.password
+                except Exception:
+                    pass
 
-                    if raw_file and raw_file.exists():
-                        self.log_message.emit(f"[+] [TC24] Tìm thấy bản gốc lưu trữ: {raw_file.name}")
-                        orig_c, final_c = standardize_plm_file(
-                            raw_file,
-                            target_dest,
-                            prune_electrical=self.tc_auto_standardize,
-                        )
-                        self.log_message.emit(
-                            f"[+] [TC24] Chuẩn hóa 14 cột thành công: {orig_c:,} dòng raw -> {final_c:,} dòng chuẩn."
-                        )
-                        plm_success += 1
-                    else:
-                        self.log_message.emit(f"[*] [TC24] Kết nối tự động Teamcenter 24 để tải {part}...")
-                        from src.automation.tc2412.client import TC2412AutomationClient
-                        from src.automation.tc2412.session import BrowserConfig, TC2412SessionManager
+                self.log_message.emit(f"[*] [TC24] Đang đăng nhập tự động vào Teamcenter 2412 ({tc_user})...")
+                try:
+                    tc_client.login(username=tc_user, password=tc_pass)
+                    self.log_message.emit("[+] [TC24] Đăng nhập thành công! Bắt đầu trích xuất BOM.")
+                except Exception as login_err:
+                    self.log_message.emit(f"[-] [TC24] Cảnh báo đăng nhập: {login_err}")
 
-                        download_scratch = Path("scratch/downloads").resolve()
-                        download_scratch.mkdir(parents=True, exist_ok=True)
+                driver = tc_client.driver
+                wait = WebDriverWait(driver, 25)
 
-                        config = BrowserConfig(download_dir=download_scratch, headless=True)
-                        sm = TC2412SessionManager(config=config)
-                        client = TC2412AutomationClient(session_manager=sm)
+                for idx, item in enumerate(self.items, 1):
+                    part = item.part_number
+                    current_step += 1
+                    pct = int((current_step - 1) / total_steps * 95) + 2
+                    self.progress.emit(pct, f"[{current_step}/{total_steps}] TC24: Đang tải mã {part}...")
+                    self.log_message.emit(f"\n--- [TC24] Xử lý mã ({idx}/{total_parts}): {part} ---")
 
-                        client.search_item(part)
-                        time.sleep(3)
-                        client.select_all_bom_tree()
-                        time.sleep(2)
-                        dl_path = client.trigger_export_download(f"PLM_{part}")
+                    try:
+                        bak_dir = self.dest_dir / "backup_before_virgo_filter"
+                        raw_file = bak_dir / f"PLM_{part}.xlsx" if bak_dir.exists() else None
+                        target_dest = self.dest_dir / f"PLM_{part}.xlsx"
 
-                        if dl_path and Path(dl_path).exists():
+                        if raw_file and raw_file.exists():
+                            self.log_message.emit(f"[+] [TC24] Tìm thấy bản gốc lưu trữ: {raw_file.name}")
                             orig_c, final_c = standardize_plm_file(
-                                Path(dl_path),
+                                raw_file,
                                 target_dest,
                                 prune_electrical=self.tc_auto_standardize,
                             )
-                            self.log_message.emit(f"[+] [TC24] Tải và chuẩn hóa thành công: {final_c:,} dòng.")
+                            self.log_message.emit(
+                                f"[+] [TC24] Chuẩn hóa 14 cột thành công: {orig_c:,} dòng raw -> {final_c:,} dòng chuẩn."
+                            )
                             plm_success += 1
                         else:
-                            raise RuntimeError("Không tải được tệp từ giao diện Teamcenter.")
+                            self.log_message.emit(f"[*] [TC24] Tìm kiếm mã {part} trên hệ thống...")
+                            for f in download_scratch.glob("*"):
+                                try:
+                                    f.unlink()
+                                except Exception:
+                                    pass
 
-                    # Sync to engineer subfolder if exists
-                    if self.dest_dir.exists():
-                        for d in self.dest_dir.iterdir():
-                            if d.is_dir() and d.name.upper().startswith(part.upper()):
-                                import shutil
-                                sub_file = d / f"PLM_{part}.xlsx"
-                                shutil.copy2(target_dest, sub_file)
-                                self.log_message.emit(f"[+] [TC24] Đã đồng bộ sang thư mục kỹ sư: {d.name}")
-                                break
+                            # 1. Search item
+                            tc_client.search_item(part)
+                            time.sleep(2.5)
 
-                except Exception as exc:
-                    self.log_message.emit(f"[-] [TC24] LỖI khi xử lý mã {part}: {exc}")
+                            # 2. Content tab
+                            content_tab = wait.until(
+                                EC.element_to_be_clickable(
+                                    (By.XPATH, "//a[contains(@class, 'sw-tab-title') and normalize-space()='Content']")
+                                )
+                            )
+                            content_tab.click()
+                            time.sleep(3.5)
+
+                            # 3. Select root row and Expand Below
+                            root_cells = driver.find_elements(
+                                By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText"
+                            )
+                            if root_cells:
+                                root_cells[0].click()
+                                time.sleep(1)
+
+                            workarea_tb = driver.find_element(
+                                By.CSS_SELECTOR, "div.aw-layout-workareaCommandbar, div.aw-commands-toolbar"
+                            )
+                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Awb0Expand']").click()
+                            time.sleep(1.5)
+
+                            cmds = driver.find_elements(
+                                By.CSS_SELECTOR, "div.aw-widgets-cellListItem, [command-id='Awb0ExpandBelow']"
+                            )
+                            exp_below = [
+                                c for c in cmds if "expand below" in (c.text or "").lower() or c.get_attribute("command-id") == "Awb0ExpandBelow"
+                            ]
+                            if exp_below:
+                                exp_below[0].click()
+                                self.log_message.emit("   [*] Đang mở rộng toàn bộ cây BOM...")
+                                time.sleep(10)
+
+                            # 4. Select all rows
+                            workarea_tb = driver.find_element(
+                                By.CSS_SELECTOR, "div.aw-layout-workareaCommandbar, div.aw-commands-toolbar"
+                            )
+                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Awp0SelectAll']").click()
+                            time.sleep(2)
+
+                            # 5. Open Export to Excel
+                            workarea_tb.find_element(By.CSS_SELECTOR, "button[command-id='Arm0ExportImport']").click()
+                            time.sleep(2)
+
+                            popup = wait.until(
+                                EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, "div.aw-popup-commandListContainer, div.aw-popup, div.sw-popup")
+                                )
+                            )
+                            for it in popup.find_elements(By.CSS_SELECTOR, ".aw-widgets-cellListItem, .aw-command, button, a, div"):
+                                txt = (it.text or "").strip().lower()
+                                if "export to excel" in txt and "import" not in txt:
+                                    it.click()
+                                    break
+                            time.sleep(3)
+
+                            # 6. Panel configuration
+                            panel = wait.until(
+                                EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, "form.sw-command-panel, div.sw-right-dialog form")
+                                )
+                            )
+                            if tc_user == "vn_pe02":
+                                has_ktct = ensure_ktct_trong_arrangement(driver, panel, wait)
+                                if has_ktct:
+                                    self.log_message.emit("   [+] Đã áp dụng quy tắc xuất KTCT_Trong (luật của KTCT_Trọng).")
+
+                            # Uncheck background for direct download
+                            cbs = panel.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
+                            for cb in cbs:
+                                try:
+                                    parent_lbl = cb.find_element(
+                                        By.XPATH, "./ancestor::label | ./ancestor::div[contains(@class,'checkbox')]"
+                                    )
+                                    if "background" in parent_lbl.text.lower():
+                                        if cb.is_selected():
+                                            cb.click()
+                                            time.sleep(0.5)
+                                except Exception:
+                                    pass
+
+                            # Click Export button
+                            export_btn = wait.until(
+                                EC.element_to_be_clickable(
+                                    (By.XPATH, "//button[normalize-space()='Export' or @button-id='exportBtn']")
+                                )
+                            )
+                            driver.execute_script("arguments[0].click();", export_btn)
+                            self.log_message.emit("   [*] Đã gửi yêu cầu Export, đang đợi máy chủ xuất file...")
+
+                            # Wait for download
+                            start_dl_wait = time.time()
+                            downloaded_path = None
+                            while time.time() - start_dl_wait < 75:
+                                time.sleep(2)
+                                fls = [
+                                    f for f in download_scratch.glob("*")
+                                    if not f.name.endswith(".crdownload") and not f.name.endswith(".tmp")
+                                ]
+                                if fls and fls[0].stat().st_size > 5000:
+                                    downloaded_path = fls[0]
+                                    break
+
+                            if not downloaded_path:
+                                raise TimeoutError(f"Quá thời gian chờ tải file BOM cho {part}!")
+
+                            # Convert .xlsm to pure .xlsx if necessary
+                            clean_xlsx = download_scratch / f"PLM_{part}.pure.xlsx"
+                            if downloaded_path.suffix.lower() == ".xlsm" or "macro" in downloaded_path.name.lower():
+                                convert_to_pure_xlsx(downloaded_path, clean_xlsx)
+                                raw_source = clean_xlsx
+                            else:
+                                raw_source = downloaded_path
+
+                            # Backup raw
+                            bak_dir.mkdir(parents=True, exist_ok=True)
+                            import shutil
+                            shutil.copy2(raw_source, bak_dir / f"PLM_{part}.xlsx")
+
+                            # Standardize to 14 columns
+                            orig_c, final_c = standardize_plm_file(
+                                raw_source,
+                                target_dest,
+                                prune_electrical=self.tc_auto_standardize,
+                            )
+                            self.log_message.emit(f"[+] [TC24] Tải và chuẩn hóa thành công: {orig_c:,} dòng raw -> {final_c:,} dòng chuẩn.")
+                            plm_success += 1
+
+                        # Sync to engineer subfolder if exists
+                        if self.dest_dir.exists():
+                            for d in self.dest_dir.iterdir():
+                                if d.is_dir() and d.name.upper().startswith(part.upper()):
+                                    import shutil
+                                    sub_file = d / f"PLM_{part}.xlsx"
+                                    shutil.copy2(target_dest, sub_file)
+                                    self.log_message.emit(f"[+] [TC24] Đã đồng bộ sang thư mục kỹ sư: {d.name}")
+                                    break
+
+                    except Exception as exc:
+                        self.log_message.emit(f"[-] [TC24] LỖI khi xử lý mã {part}: {exc}")
+
+            except Exception as outer_tc_exc:
+                self.log_message.emit(f"[-] [TC24] Sự cố kết nối Teamcenter: {outer_tc_exc}")
+            finally:
+                if tc_client:
+                    try:
+                        tc_client.close()
+                    except Exception:
+                        pass
 
         # ---------------------------------------------------------------------
         # 2. SAP R3 CS12 Multilevel BOM Download (Uses per-BOM or default date)
@@ -266,11 +476,39 @@ class UnifiedBOMDownloadWorker(QObject):
                 from src.automation.sap.cs12 import CS12Service
                 from src.automation.sap.models import CS12Params
 
-                self.log_message.emit("[*] [SAP R3] Đang kết nối tới SAP GUI 770...")
+                self.log_message.emit("[*] [SAP R3] Đang kết nối tới SAP GUI (chế độ chạy ngầm / ẩn)...")
                 conn_mgr = SAPConnectionManager()
                 session = conn_mgr.get_or_create_session()
+
+                # Minimize SAP main window to prevent focus stealing
+                try:
+                    wnd0 = session.findById("wnd[0]")
+                    if hasattr(wnd0, "iconify"):
+                        wnd0.iconify()
+                    elif hasattr(wnd0, "Iconify"):
+                        wnd0.Iconify()
+                except Exception:
+                    pass
+
+                # Windows API minimize non-activating
+                try:
+                    import ctypes
+                    user32 = ctypes.windll.user32
+                    def _min_sap_win(hwnd, _):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            buf = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, buf, length + 1)
+                            if "SAP" in buf.value or "cs12" in buf.value.lower():
+                                user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE
+                        return True
+                    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+                    user32.EnumWindows(WNDENUMPROC(_min_sap_win), 0)
+                except Exception:
+                    pass
+
                 sap_service = CS12Service(session=session)
-                self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công!")
+                self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công (chế độ ẩn hoàn toàn)!")
             except Exception as conn_exc:
                 self.log_message.emit(f"[-] [SAP R3] Không thể kết nối SAP GUI: {conn_exc}")
                 self.log_message.emit("    (Vui lòng đảm bảo saplogon.exe đang chạy và bật quyền SAP GUI Scripting)")
@@ -446,8 +684,8 @@ class PLMDownloadDialog(QDialog):
 
         self.combo_account = QComboBox()
         self.combo_account.addItems([
+            "vn_pe02 : 製造技術2課 (KTCT_Trọng)",
             "vn_pe01 : Cơ 1",
-            "vn_pe02 : Cơ 2",
             "vn_pe03 : Phát triển hệ thống",
             "vn_pe04 : Kỹ thuật chế tạo điện",
         ])

@@ -10,7 +10,7 @@
   "entrypoint": "SSBOM_App.py",
   "files": {
     "config/settings.json": {
-      "sha256": "5cbfafb04790bf6ad7d5a2c093f6ea884d9b1c23ba2e1d6e47b49718a9ad527b",
+      "sha256": "161c6954292081862a5f894e91bbe2d1282b3ca773bbdef9835865b99991dfd6",
       "size": 1831
     },
     "locales/ja.json": {
@@ -58,7 +58,7 @@
       "size": 895
     },
     "src/automation/tc14/client.py": {
-      "sha256": "625662dd993f63dfe3e8e934d7543070e48de1205aa5d0d07c1f9719fd7a55eb",
+      "sha256": "8eaa676341eaeab036ca0ac5d8fdd7f993ebf6494d48ed5f81d24bae3be48d07",
       "size": 31837
     },
     "src/automation/tc14/selectors.py": {
@@ -74,8 +74,8 @@
       "size": 2194
     },
     "src/automation/tc2412/client.py": {
-      "sha256": "b3d3783ca786907648f2280404cb3e03913cc5dad0cfc2668eeb232c80b2af90",
-      "size": 40811
+      "sha256": "11efd4d235cd774eb05f116d4498a5968c4babb60750f1136fd0eb8a2f5a4024",
+      "size": 40818
     },
     "src/automation/tc2412/progress_reporter.py": {
       "sha256": "a105df95217a8c69f1d537e707b6b08d9e0cb770bfa03eca0b6869c36ca2bcca",
@@ -262,11 +262,11 @@
       "size": 25209
     },
     "src/gui/plm_download_dialog.py": {
-      "sha256": "7db498b2e6bfa4fc761cec6e5afd110915214320bad895a154833460f542181e",
-      "size": 37777
+      "sha256": "92f08eac028fec741a851945d617ebe7c6b7df61d4bfe56d63a7a8d887944c9f",
+      "size": 50098
     },
     "src/gui/settings_dialog.py": {
-      "sha256": "e4929d2cc18444b760973f4fc834aa03245d92a439576b0d6ed230f8ef7b89a0",
+      "sha256": "b96dfbfdc923dfbd1be72d784c2ac4bf3432415f16baab7df1a549e723add4f2",
       "size": 27020
     },
     "src/gui/styles/__init__.py": {
