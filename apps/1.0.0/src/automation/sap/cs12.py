@@ -101,6 +101,19 @@ class CS12Service:
         except Exception as ex:
             logger.debug(f"Reset navigation encountered non-fatal error: {ex}")
 
+    def logoff(self) -> bool:
+        """Exit and logoff from SAP via /nex fast logoff."""
+        logger.info("Logging off SAP via /nex...")
+        try:
+            okcd = self.session.findById("wnd[0]/tbar[0]/okcd")
+            okcd.Text = "/nex"
+            wnd0 = self.session.findById("wnd[0]")
+            wnd0.sendVKey(0)
+            return True
+        except Exception as ex:
+            logger.debug(f"Failed logging off SAP via /nex: {ex}")
+            return False
+
     def execute_cs12_and_export(self, params: CS12Params) -> ExportResult:
         """
         Execute CS12 query for a single material BOM and export to spreadsheet.

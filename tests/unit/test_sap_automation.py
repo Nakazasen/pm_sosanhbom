@@ -795,3 +795,31 @@ class TestAdditionalEdgeCases:
         assert res.success is True
         assert btn_replace.pressed is True
 
+    def test_logoff_and_exit(self):
+        mock_session = MockSAPElement("Session0")
+        okcd = MockSAPElement("okcd")
+        wnd0 = MockSAPElement("wnd0")
+        vkeys_sent = []
+        def on_vkey(k):
+            vkeys_sent.append(k)
+        wnd0.sendVKey = on_vkey
+
+        mock_session.add_child("wnd[0]/tbar[0]/okcd", okcd)
+        mock_session.add_child("wnd[0]", wnd0)
+
+        # 1. Test CS12Service.logoff()
+        service = CS12Service(session=mock_session)
+        assert service.logoff() is True
+        assert okcd.Text == "/nex"
+        assert 0 in vkeys_sent
+
+        # 2. Test SAPConnectionManager.logoff_and_exit()
+        manager = SAPConnectionManager()
+        manager.session = mock_session
+        okcd.Text = ""
+        vkeys_sent.clear()
+        assert manager.logoff_and_exit(close_saplogon=False) is True
+        assert okcd.Text == "/nex"
+        assert 0 in vkeys_sent
+        assert manager.session is None
+

@@ -223,6 +223,7 @@ class UnifiedBOMDownloadWorker(QObject):
         custom_dates_map: Dict[str, date],  # Part -> specific date if enabled
         dest_dir: Path,
         model_name: str = "Virgo",
+        sap_auto_logout: bool = True,
     ) -> None:
         super().__init__()
         self.items = items
@@ -236,6 +237,7 @@ class UnifiedBOMDownloadWorker(QObject):
         self.custom_dates_map = custom_dates_map
         self.dest_dir = dest_dir
         self.model_name = model_name
+        self.sap_auto_logout = sap_auto_logout
 
     @pyqtSlot()
     def run(self) -> None:
@@ -562,90 +564,100 @@ class UnifiedBOMDownloadWorker(QObject):
         # ---------------------------------------------------------------------
         if self.mode in (MODE_BOTH, MODE_SAP):
             self.log_message.emit(f"\n>> BƯỚC 2: TẢI TỪ SAP R3 (CS12) [Plant: {self.sap_plant}, Usage: {self.sap_bom_usage}]")
+            conn_mgr = None
             sap_service = None
             try:
-                from src.automation.sap.connection import SAPConnectionManager
-                from src.automation.sap.cs12 import CS12Service
-                from src.automation.sap.models import CS12Params
-
-                self.log_message.emit("[*] [SAP R3] Đang kết nối tới SAP GUI (chế độ chạy ngầm / ẩn)...")
-                conn_mgr = SAPConnectionManager()
-                session = conn_mgr.get_or_create_session()
-
-                # Minimize SAP main window to prevent focus stealing
                 try:
-                    wnd0 = session.findById("wnd[0]")
-                    if hasattr(wnd0, "iconify"):
-                        wnd0.iconify()
-                    elif hasattr(wnd0, "Iconify"):
-                        wnd0.Iconify()
-                except Exception:
-                    pass
+                    from src.automation.sap.connection import SAPConnectionManager
+                    from src.automation.sap.cs12 import CS12Service
+                    from src.automation.sap.models import CS12Params
 
-                # Windows API minimize non-activating
-                try:
-                    import ctypes
-                    user32 = ctypes.windll.user32
-                    def _min_sap_win(hwnd, _):
-                        length = user32.GetWindowTextLengthW(hwnd)
-                        if length > 0:
-                            buf = ctypes.create_unicode_buffer(length + 1)
-                            user32.GetWindowTextW(hwnd, buf, length + 1)
-                            if "SAP" in buf.value or "cs12" in buf.value.lower():
-                                user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE
-                        return True
-                    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-                    user32.EnumWindows(WNDENUMPROC(_min_sap_win), 0)
-                except Exception:
-                    pass
+                    self.log_message.emit("[*] [SAP R3] Đang kết nối tới SAP GUI (chế độ chạy ngầm / ẩn)...")
+                    conn_mgr = SAPConnectionManager()
+                    session = conn_mgr.get_or_create_session()
 
-                sap_service = CS12Service(session=session)
-                self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công (chế độ ẩn hoàn toàn)!")
-            except Exception as conn_exc:
-                sap_tip = "Gợi ý: Mở SAP GUI (đăng nhập vào hệ thống P1J) và kiểm tra mục Scripting đã Enable"
-                error_messages.append(f"SAP R3 (Kết nối GUI): {conn_exc} ({sap_tip})")
-                self.log_message.emit(f"[-] [SAP R3] Không thể kết nối SAP GUI: {conn_exc}")
-                self.log_message.emit(f"    ({sap_tip})")
+                    # Minimize SAP main window to prevent focus stealing
+                    try:
+                        wnd0 = session.findById("wnd[0]")
+                        if hasattr(wnd0, "iconify"):
+                            wnd0.iconify()
+                        elif hasattr(wnd0, "Iconify"):
+                            wnd0.Iconify()
+                    except Exception:
+                        pass
 
-            for idx, item in enumerate(self.items, 1):
-                part = item.part_number
-                eff_date = self.custom_dates_map.get(part, self.sap_default_date)
-                date_tag = f"Ngày riêng: {eff_date.strftime('%Y/%m/%d')}" if part in self.custom_dates_map else f"Ngày chung: {eff_date.strftime('%Y/%m/%d')}"
+                    # Windows API minimize non-activating
+                    try:
+                        import ctypes
+                        user32 = ctypes.windll.user32
+                        def _min_sap_win(hwnd, _):
+                            length = user32.GetWindowTextLengthW(hwnd)
+                            if length > 0:
+                                buf = ctypes.create_unicode_buffer(length + 1)
+                                user32.GetWindowTextW(hwnd, buf, length + 1)
+                                if "SAP" in buf.value or "cs12" in buf.value.lower():
+                                    user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE
+                            return True
+                        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+                        user32.EnumWindows(WNDENUMPROC(_min_sap_win), 0)
+                    except Exception:
+                        pass
 
-                current_step += 1
-                pct = int((current_step - 1) / total_steps * 95) + 2
-                self.progress.emit(pct, f"[{current_step}/{total_steps}] SAP R3: Đang tải CS12 cho {part}...")
-                self.log_message.emit(f"\n--- [SAP R3] Xử lý mã ({idx}/{total_parts}): {part} | {date_tag} ---")
+                    sap_service = CS12Service(session=session)
+                    self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công (chế độ ẩn hoàn toàn)!")
+                except Exception as conn_exc:
+                    sap_tip = "Gợi ý: Mở SAP GUI (đăng nhập vào hệ thống P1J) và kiểm tra mục Scripting đã Enable"
+                    error_messages.append(f"SAP R3 (Kết nối GUI): {conn_exc} ({sap_tip})")
+                    self.log_message.emit(f"[-] [SAP R3] Không thể kết nối SAP GUI: {conn_exc}")
+                    self.log_message.emit(f"    ({sap_tip})")
 
-                if sap_service is None:
-                    error_messages.append(f"SAP R3 ({part}): Bỏ qua do không có kết nối SAP GUI.")
-                    self.log_message.emit(f"[-] [SAP R3] Bỏ qua mã {part} do không có kết nối SAP GUI.")
-                    continue
+                for idx, item in enumerate(self.items, 1):
+                    part = item.part_number
+                    eff_date = self.custom_dates_map.get(part, self.sap_default_date)
+                    date_tag = f"Ngày riêng: {eff_date.strftime('%Y/%m/%d')}" if part in self.custom_dates_map else f"Ngày chung: {eff_date.strftime('%Y/%m/%d')}"
 
-                try:
-                    params = CS12Params(
-                        material=part,
-                        plant=self.sap_plant,
-                        bom_usage=self.sap_bom_usage,
-                        alternative=self.sap_alternative,
-                        valid_date=eff_date,
-                        destination_dir=self.dest_dir,
-                    )
-                    export_result = sap_service.execute_cs12_and_export(params)
-                    if export_result.success:
-                        self.log_message.emit(
-                            f"[+] [SAP R3] Xuất BOM CS12 thành công: {params.expected_filename} "
-                            f"({export_result.execution_time_sec:.1f}s)"
+                    current_step += 1
+                    pct = int((current_step - 1) / total_steps * 95) + 2
+                    self.progress.emit(pct, f"[{current_step}/{total_steps}] SAP R3: Đang tải CS12 cho {part}...")
+                    self.log_message.emit(f"\n--- [SAP R3] Xử lý mã ({idx}/{total_parts}): {part} | {date_tag} ---")
+
+                    if sap_service is None:
+                        error_messages.append(f"SAP R3 ({part}): Bỏ qua do không có kết nối SAP GUI.")
+                        self.log_message.emit(f"[-] [SAP R3] Bỏ qua mã {part} do không có kết nối SAP GUI.")
+                        continue
+
+                    try:
+                        params = CS12Params(
+                            material=part,
+                            plant=self.sap_plant,
+                            bom_usage=self.sap_bom_usage,
+                            alternative=self.sap_alternative,
+                            valid_date=eff_date,
+                            destination_dir=self.dest_dir,
                         )
-                        sap_success += 1
-                    else:
-                        error_messages.append(f"SAP R3 ({part}): {export_result.error_message}")
-                        self.log_message.emit(
-                            f"[-] [SAP R3] Lỗi từ SAP khi xử lý mã {part}: {export_result.error_message}"
-                        )
-                except Exception as sap_err:
-                    error_messages.append(f"SAP R3 ({part}): {sap_err}")
-                    self.log_message.emit(f"[-] [SAP R3] LỖI khi tải CS12 mã {part}: {sap_err}")
+                        export_result = sap_service.execute_cs12_and_export(params)
+                        if export_result.success:
+                            self.log_message.emit(
+                                f"[+] [SAP R3] Xuất BOM CS12 thành công: {params.expected_filename} "
+                                f"({export_result.execution_time_sec:.1f}s)"
+                            )
+                            sap_success += 1
+                        else:
+                            error_messages.append(f"SAP R3 ({part}): {export_result.error_message}")
+                            self.log_message.emit(
+                                f"[-] [SAP R3] Lỗi từ SAP khi xử lý mã {part}: {export_result.error_message}"
+                            )
+                    except Exception as sap_err:
+                        error_messages.append(f"SAP R3 ({part}): {sap_err}")
+                        self.log_message.emit(f"[-] [SAP R3] LỖI khi tải CS12 mã {part}: {sap_err}")
+            finally:
+                if conn_mgr is not None and self.sap_auto_logout:
+                    try:
+                        self.log_message.emit("\n[*] [SAP R3] Đang tự động đăng xuất và thoát tài khoản SAP R3 (/nex)...")
+                        conn_mgr.logoff_and_exit(close_saplogon=True)
+                        self.log_message.emit("[+] [SAP R3] Đã thoát tài khoản và đóng ứng dụng SAP GUI an toàn.")
+                    except Exception as logout_err:
+                        self.log_message.emit(f"[-] [SAP R3] Cảnh báo khi thoát SAP GUI: {logout_err}")
 
         # ---------------------------------------------------------------------
         # Final Summary & Accurate Outcome
@@ -914,6 +926,11 @@ class PLMDownloadDialog(QDialog):
         sap_note = QLabel("<b>Quy tắc SAP R3:</b> Ngày hiệu lực dùng để truy xuất cấu trúc BOM đa tầng theo mốc thời gian đã chọn.")
         sap_note.setStyleSheet("color: #4d7c0f; font-size: 11px; background-color: #f7fee7; padding: 6px; border-radius: 4px; border: 1px solid #d9f99d;")
         sap_layout.addWidget(sap_note)
+
+        self.chk_sap_auto_logout = QCheckBox("Tự động thoát tài khoản & đóng SAP GUI sau khi tải xong")
+        self.chk_sap_auto_logout.setChecked(True)
+        self.chk_sap_auto_logout.setStyleSheet("color: #15803d; font-weight: bold; margin-top: 4px;")
+        sap_layout.addWidget(self.chk_sap_auto_logout)
 
         self.tab_config.addTab(sap_widget, "SAP R3")
         config_layout.addWidget(self.tab_config)
@@ -1293,6 +1310,7 @@ class PLMDownloadDialog(QDialog):
             custom_dates_map=custom_dates,
             dest_dir=self.dest_dir,
             model_name=self.get_current_model_name(),
+            sap_auto_logout=self.chk_sap_auto_logout.isChecked(),
         )
         self.worker.moveToThread(self.thread)
 

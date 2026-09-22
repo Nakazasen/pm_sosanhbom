@@ -6,7 +6,7 @@
   "min_app_version": "1.0.0",
   "database_schema": 1,
   "health_check": "--health-check",
-  "created_at": "2026-09-22T09:29:31.623241+00:00Z",
+  "created_at": "2026-09-22T09:52:30.342252+00:00Z",
   "entrypoint": "SSBOM_App.py",
   "files": {
     "SSBOM_App.py": {
@@ -126,8 +126,8 @@
       "size": 25209
     },
     "src/gui/plm_download_dialog.py": {
-      "sha256": "32d2e9c1f54dd5e999b2ebcb2eee9e3f73cad2bcc717c55891d7d9852bb80bcc",
-      "size": 66800
+      "sha256": "736e54b2aa948116bd235e19d26b7ded28b3a1c9ec7629113f11e3e0d2127d67",
+      "size": 68272
     },
     "src/gui/settings_dialog.py": {
       "sha256": "b96dfbfdc923dfbd1be72d784c2ac4bf3432415f16baab7df1a549e723add4f2",
@@ -310,12 +310,12 @@
       "size": 271
     },
     "src/automation/sap/connection.py": {
-      "sha256": "67d2b257f96d12f4dd38626c2c471c89b6bfc179a67b3c2aa8867aa003a6971c",
-      "size": 18699
+      "sha256": "3ce064108d412ac0bae160f4620bc2a78afe2b885fa012a05c87469cb498a90f",
+      "size": 20841
     },
     "src/automation/sap/cs12.py": {
-      "sha256": "72ab44afaeeee78da4d8575345fd8966a3763b034c299bc08a7fac7e660e90e2",
-      "size": 14734
+      "sha256": "7453e53eaaf7eec4aae08c5e677904b87a4b4ab8d0e0abe9ed6235a898ddb1da",
+      "size": 15213
     },
     "src/automation/sap/models.py": {
       "sha256": "50667e003a90284a0f5e62b0b80288ffefbae3a31e69230cec413730e805b259",
