@@ -65,6 +65,69 @@ class TestPLMDownloadDialogM3:
         dlg.deleteLater()
         qapp.processEvents()
 
+    def test_plm_dialog_accurate_progress_states(self, qapp: QApplication, tmp_path: Path, monkeypatch) -> None:
+        """Verify that UI accurately displays Red on Failure, Amber on Partial, Green on Full Success."""
+        monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.StandardButton.Ok)
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.StandardButton.Ok)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.StandardButton.Ok)
+
+        dlg = PLMDownloadDialog(default_dir=tmp_path)
+
+        class MockWorker:
+            def __init__(self, succ: int, total: int, errs: list):
+                self.successful_ops = succ
+                self.total_ops = total
+                self.error_messages = errs
+
+        # Case 1: Total Failure (0/2 success)
+        dlg.worker = MockWorker(0, 2, ["TC24 failed", "SAP failed"])
+        dlg._on_finished(False, "Summary: 0/2")
+        assert "ef4444" in dlg.progress_bar.styleSheet().lower() or "dc2626" in dlg.progress_bar.styleSheet().lower()
+        assert "thất bại" in dlg.progress_bar.text().lower()
+        assert "thất bại" in dlg.lbl_status.text().lower()
+        assert "dc2626" in dlg.lbl_status.styleSheet().lower()
+
+        # Case 2: Partial Success (1/2 success)
+        dlg.worker = MockWorker(1, 2, ["SAP failed"])
+        dlg._on_finished(True, "Summary: 1/2")
+        assert "f59e0b" in dlg.progress_bar.styleSheet().lower() or "d97706" in dlg.progress_bar.styleSheet().lower()
+        assert "một phần" in dlg.progress_bar.text().lower()
+        assert "hoàn thành một phần" in dlg.lbl_status.text().lower()
+
+        # Case 3: Full Success (2/2 success)
+        dlg.worker = MockWorker(2, 2, [])
+        dlg._on_finished(True, "Summary: 2/2")
+        assert "10b981" in dlg.progress_bar.styleSheet().lower() or "059669" in dlg.progress_bar.styleSheet().lower()
+        assert "thành công" in dlg.progress_bar.text().lower()
+        assert "hoàn tất thành công" in dlg.lbl_status.text().lower()
+
+        dlg.close()
+        dlg.deleteLater()
+        qapp.processEvents()
+
+    def test_plm_dialog_model_autodetection_and_dynamic_backup(self, qapp: QApplication, tmp_path: Path) -> None:
+        """Verify that PLMDownloadDialog auto-detects Polaris Next and dynamically adjusts backup dir."""
+        # 1. Test with initial_model
+        dlg = PLMDownloadDialog(default_dir=tmp_path, initial_model="Polaris Next")
+        assert dlg.get_current_model_name() == "Polaris Next"
+        assert "backup_before_polaris_next_filter" in dlg.lbl_backup_preview.text()
+
+        # 2. Test auto-detection by pasting Polaris Next BOM part 110C103NL0
+        dlg.combo_model.setCurrentIndex(0)  # Reset to Auto
+        dlg.txt_parts.setPlainText("110C103NL0")
+        assert dlg.get_current_model_name() == "Polaris Next"
+        assert "Polaris Next" in dlg.lbl_model_badge.text()
+        assert "backup_before_polaris_next_filter" in dlg.lbl_backup_preview.text()
+
+        # 3. Test changing model manually updates backup preview
+        dlg.combo_model.setCurrentText("Virgo")
+        assert dlg.get_current_model_name() == "Virgo"
+        assert "backup_before_virgo_filter" in dlg.lbl_backup_preview.text()
+
+        dlg.close()
+        dlg.deleteLater()
+        qapp.processEvents()
+
 
 class TestSettingsDialogM3:
     """Test Theme integration in SettingsDialog."""

@@ -9,12 +9,15 @@ Designed specifically for non-tech manufacturing engineers and team leads:
 from __future__ import annotations
 
 import logging
+import re
 import time
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+
+from src.services.machine_dict_service import MachineDictService
 
 from PyQt6.QtCore import QDate, QObject, QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QGuiApplication, QTextCursor
@@ -51,9 +54,10 @@ from src.gui.styles import get_theme_manager
 
 logger = logging.getLogger(__name__)
 
-VIRGO_DIR = Path(
-    r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3\Virgo2"
+SO_SANH_BASE_DIR = Path(
+    r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3"
 )
+VIRGO_DIR = SO_SANH_BASE_DIR / "Virgo2"
 
 MODE_BOTH = "BOTH"
 MODE_PLM = "PLM"
@@ -99,6 +103,26 @@ def convert_to_pure_xlsx(src_file: Path, dest_xlsx: Path) -> bool:
     except Exception as exc:
         logger.warning("Error converting to pure xlsx: %s", exc)
         return False
+
+
+def is_macro_file(file_path: Path) -> bool:
+    """Check if an Excel file contains macro parts (.xlsm, .xltm or internal vbaProject/macroEnabled)."""
+    if not file_path.exists():
+        return False
+    if file_path.suffix.lower() in (".xlsm", ".xltm") or "macro" in file_path.name.lower():
+        return True
+    try:
+        with zipfile.ZipFile(file_path, "r") as z:
+            names = set(z.namelist())
+            if any("vbaProject" in n for n in names):
+                return True
+            if "[Content_Types].xml" in names:
+                ct = z.read("[Content_Types].xml").decode("utf-8", errors="ignore")
+                if "macroEnabled" in ct:
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
@@ -198,6 +222,7 @@ class UnifiedBOMDownloadWorker(QObject):
         sap_default_date: date,
         custom_dates_map: Dict[str, date],  # Part -> specific date if enabled
         dest_dir: Path,
+        model_name: str = "Virgo",
     ) -> None:
         super().__init__()
         self.items = items
@@ -210,6 +235,7 @@ class UnifiedBOMDownloadWorker(QObject):
         self.sap_default_date = sap_default_date
         self.custom_dates_map = custom_dates_map
         self.dest_dir = dest_dir
+        self.model_name = model_name
 
     @pyqtSlot()
     def run(self) -> None:
@@ -219,9 +245,26 @@ class UnifiedBOMDownloadWorker(QObject):
             self.finished.emit(False, "Không có mã BOM nào để tải.")
             return
 
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+
+        try:
+            self._execute_run(total_parts)
+        finally:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
+    def _execute_run(self, total_parts: int) -> None:
         self.dest_dir.mkdir(parents=True, exist_ok=True)
         plm_success = 0
         sap_success = 0
+        error_messages: List[str] = []
 
         steps_per_part = 2 if self.mode == MODE_BOTH else 1
         total_steps = total_parts * steps_per_part
@@ -287,8 +330,16 @@ class UnifiedBOMDownloadWorker(QObject):
                     self.log_message.emit(f"\n--- [TC24] Xử lý mã ({idx}/{total_parts}): {part} ---")
 
                     try:
-                        bak_dir = self.dest_dir / "backup_before_virgo_filter"
-                        raw_file = bak_dir / f"PLM_{part}.xlsx" if bak_dir.exists() else None
+                        model_slug = re.sub(r"[^\w]+", "_", (self.model_name or "raw").strip().lower()).strip("_")
+                        bak_dir_name = f"backup_before_{model_slug}_filter"
+                        bak_dir = self.dest_dir / bak_dir_name
+
+                        raw_file = None
+                        if bak_dir.exists() and (bak_dir / f"PLM_{part}.xlsx").exists():
+                            raw_file = bak_dir / f"PLM_{part}.xlsx"
+                        elif (self.dest_dir / "backup_before_virgo_filter" / f"PLM_{part}.xlsx").exists():
+                            raw_file = self.dest_dir / "backup_before_virgo_filter" / f"PLM_{part}.xlsx"
+
                         target_dest = self.dest_dir / f"PLM_{part}.xlsx"
 
                         if raw_file and raw_file.exists():
@@ -405,27 +456,65 @@ class UnifiedBOMDownloadWorker(QObject):
                             driver.execute_script("arguments[0].click();", export_btn)
                             self.log_message.emit("   [*] Đã gửi yêu cầu Export, đang đợi máy chủ xuất file...")
 
-                            # Wait for download
+                            # Wait for download to complete and stabilize
                             start_dl_wait = time.time()
                             downloaded_path = None
-                            while time.time() - start_dl_wait < 75:
-                                time.sleep(2)
-                                fls = [
+                            last_size = -1
+                            stable_count = 0
+                            while time.time() - start_dl_wait < 90:
+                                time.sleep(1.5)
+                                # Check if browser is actively downloading chunks
+                                cr_files = (
+                                    list(download_scratch.glob("*.crdownload"))
+                                    + list(download_scratch.glob("*.tmp"))
+                                    + list(download_scratch.glob("*.download"))
+                                )
+                                if cr_files:
+                                    continue
+
+                                cand_files = [
                                     f for f in download_scratch.glob("*")
-                                    if not f.name.endswith(".crdownload") and not f.name.endswith(".tmp")
+                                    if f.is_file()
+                                    and not f.name.endswith(".crdownload")
+                                    and not f.name.endswith(".tmp")
+                                    and not f.name.endswith(".download")
+                                    and not f.name.endswith(".pure.xlsx")
                                 ]
-                                if fls and fls[0].stat().st_size > 5000:
-                                    downloaded_path = fls[0]
-                                    break
+                                if cand_files:
+                                    cand = cand_files[0]
+                                    curr_size = cand.stat().st_size
+                                    if curr_size > 1000:
+                                        if curr_size == last_size:
+                                            stable_count += 1
+                                        else:
+                                            stable_count = 0
+                                            last_size = curr_size
+
+                                        # Verify file is completely written and unlocked
+                                        if stable_count >= 1:
+                                            try:
+                                                import zipfile
+                                                if zipfile.is_zipfile(cand):
+                                                    with open(cand, "rb") as tf:
+                                                        tf.seek(0)
+                                                    downloaded_path = cand
+                                                    break
+                                            except Exception:
+                                                pass
 
                             if not downloaded_path:
                                 raise TimeoutError(f"Quá thời gian chờ tải file BOM cho {part}!")
 
-                            # Convert .xlsm to pure .xlsx if necessary
+                            # Convert macro-enabled Excel export to pure .xlsx
                             clean_xlsx = download_scratch / f"PLM_{part}.pure.xlsx"
-                            if downloaded_path.suffix.lower() == ".xlsm" or "macro" in downloaded_path.name.lower():
-                                convert_to_pure_xlsx(downloaded_path, clean_xlsx)
-                                raw_source = clean_xlsx
+                            if is_macro_file(downloaded_path):
+                                self.log_message.emit("   [*] Phát hiện file chứa macro/vba từ TC24, đang chuyển đổi sang pure .xlsx...")
+                                conv_ok = convert_to_pure_xlsx(downloaded_path, clean_xlsx)
+                                if conv_ok and clean_xlsx.exists() and clean_xlsx.stat().st_size > 0:
+                                    raw_source = clean_xlsx
+                                else:
+                                    self.log_message.emit("   [!] Chuyển đổi macro không khả dụng, giữ nguyên file gốc.")
+                                    raw_source = downloaded_path
                             else:
                                 raw_source = downloaded_path
 
@@ -433,6 +522,7 @@ class UnifiedBOMDownloadWorker(QObject):
                             bak_dir.mkdir(parents=True, exist_ok=True)
                             import shutil
                             shutil.copy2(raw_source, bak_dir / f"PLM_{part}.xlsx")
+                            self.log_message.emit(f"   [+] Đã lưu bản gốc trước khi lọc vào: {bak_dir_name}/PLM_{part}.xlsx")
 
                             # Standardize to 14 columns
                             orig_c, final_c = standardize_plm_file(
@@ -454,9 +544,11 @@ class UnifiedBOMDownloadWorker(QObject):
                                     break
 
                     except Exception as exc:
+                        error_messages.append(f"TC24 ({part}): {exc}")
                         self.log_message.emit(f"[-] [TC24] LỖI khi xử lý mã {part}: {exc}")
 
             except Exception as outer_tc_exc:
+                error_messages.append(f"TC24 (Kết nối/Đăng nhập): {outer_tc_exc}")
                 self.log_message.emit(f"[-] [TC24] Sự cố kết nối Teamcenter: {outer_tc_exc}")
             finally:
                 if tc_client:
@@ -510,8 +602,10 @@ class UnifiedBOMDownloadWorker(QObject):
                 sap_service = CS12Service(session=session)
                 self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công (chế độ ẩn hoàn toàn)!")
             except Exception as conn_exc:
+                sap_tip = "Gợi ý: Mở SAP GUI (đăng nhập vào hệ thống P1J) và kiểm tra mục Scripting đã Enable"
+                error_messages.append(f"SAP R3 (Kết nối GUI): {conn_exc} ({sap_tip})")
                 self.log_message.emit(f"[-] [SAP R3] Không thể kết nối SAP GUI: {conn_exc}")
-                self.log_message.emit("    (Vui lòng đảm bảo saplogon.exe đang chạy và bật quyền SAP GUI Scripting)")
+                self.log_message.emit(f"    ({sap_tip})")
 
             for idx, item in enumerate(self.items, 1):
                 part = item.part_number
@@ -524,6 +618,7 @@ class UnifiedBOMDownloadWorker(QObject):
                 self.log_message.emit(f"\n--- [SAP R3] Xử lý mã ({idx}/{total_parts}): {part} | {date_tag} ---")
 
                 if sap_service is None:
+                    error_messages.append(f"SAP R3 ({part}): Bỏ qua do không có kết nối SAP GUI.")
                     self.log_message.emit(f"[-] [SAP R3] Bỏ qua mã {part} do không có kết nối SAP GUI.")
                     continue
 
@@ -544,16 +639,21 @@ class UnifiedBOMDownloadWorker(QObject):
                         )
                         sap_success += 1
                     else:
+                        error_messages.append(f"SAP R3 ({part}): {export_result.error_message}")
                         self.log_message.emit(
                             f"[-] [SAP R3] Lỗi từ SAP khi xử lý mã {part}: {export_result.error_message}"
                         )
                 except Exception as sap_err:
+                    error_messages.append(f"SAP R3 ({part}): {sap_err}")
                     self.log_message.emit(f"[-] [SAP R3] LỖI khi tải CS12 mã {part}: {sap_err}")
 
         # ---------------------------------------------------------------------
-        # Final Summary
+        # Final Summary & Accurate Outcome
         # ---------------------------------------------------------------------
-        self.progress.emit(100, "Hoàn thành toàn bộ tiến trình tải BOM!")
+        total_ops = total_parts * (2 if self.mode == MODE_BOTH else 1)
+        successful_ops = (plm_success if self.mode in (MODE_BOTH, MODE_PLM) else 0) + \
+                         (sap_success if self.mode in (MODE_BOTH, MODE_SAP) else 0)
+
         summary_lines = []
         if self.mode in (MODE_BOTH, MODE_PLM):
             summary_lines.append(f"• Teamcenter TC24: Thành công {plm_success}/{total_parts} mã BOM.")
@@ -561,7 +661,26 @@ class UnifiedBOMDownloadWorker(QObject):
             summary_lines.append(f"• SAP R3: Thành công {sap_success}/{total_parts} mã BOM.")
 
         full_summary = "\n".join(summary_lines)
+
+        if successful_ops == 0:
+            final_status = f"Thất bại (0/{total_ops} tác vụ hoàn thành)"
+            self.progress.emit(100, final_status)
+        elif successful_ops < total_ops:
+            final_status = f"Hoàn thành một phần ({successful_ops}/{total_ops} tác vụ hoàn thành)"
+            self.progress.emit(100, final_status)
+        else:
+            final_status = f"Hoàn tất thành công toàn bộ ({successful_ops}/{total_ops} tác vụ)"
+            self.progress.emit(100, final_status)
+
         self.log_message.emit(f"\n=== TỔNG KẾT TIẾN TRÌNH ===\n{full_summary}")
+        if error_messages:
+            self.log_message.emit(f"\n[!] CHI TIẾT SỰ CỐ GẶP PHẢI ({len(error_messages)}):")
+            for err in error_messages:
+                self.log_message.emit(f"   * {err}")
+
+        self.successful_ops = successful_ops
+        self.total_ops = total_ops
+        self.error_messages = error_messages
 
         has_success = (plm_success > 0) or (sap_success > 0)
         self.finished.emit(has_success, full_summary)
@@ -570,16 +689,24 @@ class UnifiedBOMDownloadWorker(QObject):
 class PLMDownloadDialog(QDialog):
     """User-friendly, Non-Tech BOM Downloader for Siemens TC24 and SAP R3."""
 
-    def __init__(self, parent: QWidget | None = None, default_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        default_dir: Path | None = None,
+        initial_model: str | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._machine_dict = MachineDictService()
+        self._initial_model = initial_model
         self.dest_dir = Path(default_dir or VIRGO_DIR)
         self.thread: QThread | None = None
         self.worker: UnifiedBOMDownloadWorker | None = None
         self.current_items: List[BOMDownloadItem] = []
+        self._detected_model_name: str | None = None
 
         self.setWindowTitle("Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
-        self.resize(860, 620)
-        self.setMinimumSize(780, 480)
+        self.resize(860, 640)
+        self.setMinimumSize(780, 500)
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -629,6 +756,42 @@ class PLMDownloadDialog(QDialog):
         # ---------------------------------------------------------------------
         part_group = QGroupBox("Bước 1: Nhập hoặc dán danh sách mã máy / mã BOM")
         part_layout = QVBoxLayout(part_group)
+
+        # Model Selector and Auto-detection Row
+        model_row = QHBoxLayout()
+        model_lbl = QLabel("Dòng máy / Model:")
+        model_lbl.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        model_row.addWidget(model_lbl)
+
+        self.combo_model = QComboBox()
+        self.combo_model.setFont(QFont("Calibri", 10))
+        self.combo_model.addItem("-- Tự động nhận diện theo mã BOM --")
+        try:
+            for m_name in self._machine_dict.get_model_names():
+                self.combo_model.addItem(m_name)
+        except Exception as exc:
+            logger.warning("Could not load model names: %s", exc)
+
+        if self._initial_model:
+            idx = self.combo_model.findText(self._initial_model)
+            if idx >= 0:
+                self.combo_model.setCurrentIndex(idx)
+            else:
+                self.combo_model.addItem(self._initial_model)
+                self.combo_model.setCurrentText(self._initial_model)
+
+        self.combo_model.currentIndexChanged.connect(self._on_model_selection_changed)
+        model_row.addWidget(self.combo_model, stretch=1)
+
+        self.lbl_model_badge = QLabel("")
+        self.lbl_model_badge.setStyleSheet(
+            "color: #0369a1; background-color: #e0f2fe; padding: 3px 8px; "
+            "border-radius: 4px; border: 1px solid #bae6fd; font-size: 11px;"
+        )
+        self.lbl_model_badge.setVisible(False)
+        model_row.addWidget(self.lbl_model_badge)
+
+        part_layout.addLayout(model_row)
 
         # Toolbar above text edit
         tools_layout = QHBoxLayout()
@@ -770,6 +933,11 @@ class PLMDownloadDialog(QDialog):
         dest_layout.addWidget(self.btn_browse)
         config_layout.addLayout(dest_layout)
 
+        self.lbl_backup_preview = QLabel()
+        self.lbl_backup_preview.setStyleSheet("color: #475569; font-size: 11px; margin-top: 2px;")
+        config_layout.addWidget(self.lbl_backup_preview)
+        self._update_backup_preview()
+
         layout.addWidget(config_group)
 
         # Nhật ký hoạt động chi tiết
@@ -879,17 +1047,87 @@ class PLMDownloadDialog(QDialog):
         qdate = self.date_sap_valid.date()
         return date(qdate.year(), qdate.month(), qdate.day())
 
+    def get_current_model_name(self) -> str:
+        txt = self.combo_model.currentText().strip()
+        if not txt or txt.startswith("--"):
+            return self._detected_model_name or "Virgo"
+        return txt
+
+    def _update_backup_preview(self) -> None:
+        model_name = self.get_current_model_name()
+        model_slug = re.sub(r"[^\w]+", "_", model_name.strip().lower()).strip("_")
+        bak_name = f"backup_before_{model_slug}_filter"
+        if hasattr(self, "lbl_backup_preview"):
+            self.lbl_backup_preview.setText(
+                f"Thư mục sao lưu file gốc (trước khi lọc): <b style='color: #0284c7;'>{bak_name}/</b>"
+            )
+
+    def _on_model_selection_changed(self, index: int) -> None:
+        self._update_backup_preview()
+        model = self.get_current_model_name()
+        if SO_SANH_BASE_DIR.exists():
+            candidate = SO_SANH_BASE_DIR / model
+            try:
+                if self.dest_dir.parent == SO_SANH_BASE_DIR or self.dest_dir == SO_SANH_BASE_DIR:
+                    if candidate.exists():
+                        self.dest_dir = candidate
+                        self.edit_dest.setText(str(self.dest_dir))
+            except Exception:
+                pass
+
     def _on_text_changed(self) -> None:
-        """Update counter and synchronize embedded date table."""
+        """Update counter, auto-detect model from machine dictionary, and sync date table."""
         self.current_items = parse_bom_items(self.txt_parts.toPlainText())
         count = len(self.current_items)
 
         if count == 0:
             self.lbl_count.setText("Đã nhận diện: <b>0</b> mã BOM")
             self.lbl_count.setStyleSheet("color: #64748b; font-size: 12px;")
+            self.lbl_model_badge.setVisible(False)
+            self._detected_model_name = None
         else:
             self.lbl_count.setText(f"Đã nhận diện: <b>{count}</b> mã BOM hợp lệ")
             self.lbl_count.setStyleSheet("color: #16a34a; font-size: 12px; font-weight: bold;")
+
+            # Auto-detect machine model using MachineDictService
+            detected_info = None
+            for item in self.current_items:
+                info = self._machine_dict.extract_and_lookup_material(item.part_number)
+                if info and info.machine_name:
+                    detected_info = info
+                    break
+
+            if detected_info:
+                self._detected_model_name = detected_info.machine_name
+                matched_codes = ", ".join(detected_info.machine_codes) if detected_info.machine_codes else ""
+                badge_text = f"✓ Nhận diện từ file_loaimay: <b>{detected_info.machine_name}</b>"
+                if matched_codes:
+                    badge_text += f" (Mã: {matched_codes})"
+                self.lbl_model_badge.setText(badge_text)
+                self.lbl_model_badge.setStyleSheet(
+                    "color: #065f46; background-color: #d1fae5; padding: 3px 8px; "
+                    "border-radius: 4px; border: 1px solid #a7f3d0; font-size: 11px;"
+                )
+                self.lbl_model_badge.setVisible(True)
+
+                # If combo is on Auto, select the detected model
+                if self.combo_model.currentIndex() == 0:
+                    idx = self.combo_model.findText(detected_info.machine_name)
+                    if idx >= 0:
+                        self.combo_model.blockSignals(True)
+                        self.combo_model.setCurrentIndex(idx)
+                        self.combo_model.blockSignals(False)
+                        self._on_model_selection_changed(idx)
+            else:
+                if self.combo_model.currentIndex() == 0:
+                    self.lbl_model_badge.setText("Chưa tìm thấy mã máy tương ứng trong file_loaimay")
+                    self.lbl_model_badge.setStyleSheet(
+                        "color: #92400e; background-color: #fef3c7; padding: 3px 8px; "
+                        "border-radius: 4px; border: 1px solid #fde68a; font-size: 11px;"
+                    )
+                    self.lbl_model_badge.setVisible(True)
+
+        self._update_backup_preview()
 
         # Synchronize table if currently visible
         if self.chk_custom_dates.isChecked():
@@ -1016,12 +1254,29 @@ class PLMDownloadDialog(QDialog):
         sap_default_dt = self._get_current_default_date()
         custom_dates = self._get_effective_custom_dates()
 
-        # Lock UI
+        # Lock UI & Reset status styling to active
         self._set_ui_busy(True)
         self._download_start_time = time.time()
         self.log_box.clear()
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0%")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #CBD5E1;
+                border-radius: 4px;
+                text-align: center;
+                height: 14px;
+                font-size: 10px;
+                font-weight: bold;
+                background-color: #F1F5F9;
+                color: #1E293B;
+            }
+            QProgressBar::chunk {
+                background-color: #2563EB;
+                border-radius: 3px;
+            }
+        """)
+        self.lbl_status.setStyleSheet("font-style: italic; color: #475569; font-size: 11px;")
         self.lbl_status.setText(f"Đang chuẩn bị tải BOM (Chế độ: {mode})...")
 
         # Start background worker
@@ -1037,6 +1292,7 @@ class PLMDownloadDialog(QDialog):
             sap_default_date=sap_default_dt,
             custom_dates_map=custom_dates,
             dest_dir=self.dest_dir,
+            model_name=self.get_current_model_name(),
         )
         self.worker.moveToThread(self.thread)
 
@@ -1058,8 +1314,6 @@ class PLMDownloadDialog(QDialog):
             total_est = elapsed / (pct / 100.0)
             remaining = max(0, int(total_est - elapsed))
             rem_str = f" (~{remaining}s còn lại)"
-        elif pct >= 100:
-            rem_str = " (Hoàn thành)"
         self.progress_bar.setFormat(f"{pct}%{rem_str}")
         self.lbl_status.setText(f"Trạng thái: {msg} | Tiến độ: {pct}%{rem_str}")
 
@@ -1069,10 +1323,98 @@ class PLMDownloadDialog(QDialog):
 
     def _on_finished(self, success: bool, msg: str) -> None:
         self._set_ui_busy(False)
-        if success:
-            QMessageBox.information(self, "Tải BOM Hoàn tất", f"Tiến trình tải BOM hoàn tất!\n\n{msg}")
+        successful_ops = getattr(self.worker, "successful_ops", 0) if self.worker else (1 if success else 0)
+        total_ops = getattr(self.worker, "total_ops", 1) if self.worker else 1
+        error_messages = getattr(self.worker, "error_messages", []) if self.worker else []
+
+        if successful_ops == 0:
+            # 1. Total Failure (Red)
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #DC2626;
+                    border-radius: 4px;
+                    text-align: center;
+                    height: 14px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    background-color: #FEF2F2;
+                    color: #991B1B;
+                }
+                QProgressBar::chunk {
+                    background-color: #EF4444;
+                    border-radius: 3px;
+                }
+            """)
+            self.progress_bar.setFormat("Thất bại (0 mã thành công)")
+            self.lbl_status.setStyleSheet("color: #DC2626; font-weight: bold; font-size: 11px;")
+            self.lbl_status.setText(f"Trạng thái: Thất bại (0/{total_ops} tác vụ hoàn thành) | Xem chi tiết lỗi bên dưới.")
+
+            err_text = "\n".join(f"• {e}" for e in error_messages[:5]) if error_messages else "Không thể kết nối hoặc xuất dữ liệu."
+            QMessageBox.critical(
+                self,
+                "Tải BOM Thất bại",
+                f"Quá trình tải BOM thất bại hoàn toàn (0/{total_ops} tác vụ thành công):\n\n"
+                f"{msg}\n\n"
+                f"Chi tiết sự cố:\n{err_text}\n\n"
+                "Vui lòng xem thêm nhật ký bên dưới để khắc phục.",
+            )
+        elif successful_ops < total_ops:
+            # 2. Partial Success (Amber/Orange)
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #D97706;
+                    border-radius: 4px;
+                    text-align: center;
+                    height: 14px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    background-color: #FFFBEB;
+                    color: #92400E;
+                }
+                QProgressBar::chunk {
+                    background-color: #F59E0B;
+                    border-radius: 3px;
+                }
+            """)
+            self.progress_bar.setFormat(f"Một phần ({successful_ops}/{total_ops} thành công)")
+            self.lbl_status.setStyleSheet("color: #D97706; font-weight: bold; font-size: 11px;")
+            self.lbl_status.setText(f"Trạng thái: Hoàn thành một phần ({successful_ops}/{total_ops} tác vụ) | Xem chi tiết lỗi bên dưới.")
+
+            err_text = "\n".join(f"• {e}" for e in error_messages[:5]) if error_messages else ""
+            err_suffix = f"\n\nSự cố gặp phải:\n{err_text}" if err_text else ""
+            QMessageBox.warning(
+                self,
+                "Tải BOM Một phần",
+                f"Quá trình tải BOM hoàn thành một phần ({successful_ops}/{total_ops} tác vụ thành công):\n\n"
+                f"{msg}{err_suffix}\n\n"
+                "Vui lòng kiểm tra nhật ký chi tiết đối với các mã bị lỗi.",
+            )
         else:
-            QMessageBox.warning(self, "Cảnh báo Tiến trình", f"Tiến trình kết thúc với cảnh báo:\n\n{msg}")
+            # 3. Full Success (Green)
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #059669;
+                    border-radius: 4px;
+                    text-align: center;
+                    height: 14px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    background-color: #F0FDF4;
+                    color: #065F46;
+                }
+                QProgressBar::chunk {
+                    background-color: #10B981;
+                    border-radius: 3px;
+                }
+            """)
+            self.progress_bar.setFormat(f"100% (Hoàn tất thành công {total_ops}/{total_ops})")
+            self.lbl_status.setStyleSheet("color: #059669; font-weight: bold; font-size: 11px;")
+            self.lbl_status.setText(f"Trạng thái: Hoàn tất thành công toàn bộ ({total_ops}/{total_ops} tác vụ)!")
+            QMessageBox.information(
+                self,
+                "Tải BOM Hoàn tất",
+                f"Tiến trình tải BOM hoàn tất thành công 100%!\n\n{msg}",
+            )
 
 
 # Backwards compatibility alias
