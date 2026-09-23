@@ -152,6 +152,7 @@ class ModelPruner:
         nodes: list[BOMNode],
         rule: ModelRule,
         visited: set[int] | None = None,
+        parent: BOMNode | None = None,
     ) -> list[BOMNode]:
         """Apply a single ModelRule to a list of sibling nodes and their subtrees with cycle protection."""
         if visited is None:
@@ -165,7 +166,7 @@ class ModelPruner:
                 continue
             visited.add(id(node))
 
-            if rule.matches(node):
+            if rule.matches(node, parent=parent):
                 action = rule.determine_action(node)
 
                 if action == PruneAction.DELETE_NODE:
@@ -183,7 +184,7 @@ class ModelPruner:
             else:
                 # Node didn't match rule; apply rule recursively to its children
                 if node.children:
-                    node.children = self._apply_rule_to_nodes(node.children, rule, visited=visited)
+                    node.children = self._apply_rule_to_nodes(node.children, rule, visited=visited, parent=node)
                 surviving_nodes.append(node)
 
         return surviving_nodes
@@ -208,15 +209,42 @@ class ModelPruner:
 
         for rule in active_rules:
             idx = 0
+            parent_stack: list[BOMNode] = []
             while idx < len(current_nodes):
                 node = current_nodes[idx]
-                if not rule.matches(node):
+                while parent_stack and parent_stack[-1].level >= node.level:
+                    parent_stack.pop()
+                parent = parent_stack[-1] if parent_stack else None
+
+                if not rule.matches(node, parent=parent):
+                    parent_stack.append(node)
                     idx += 1
                     continue
 
                 # Node matches rule!
-                has_children = node.has_children
                 current_level = node.level
+
+                if rule.action:
+                    act = rule.action.strip().lower()
+                    if act in ("prune_node", "delete_node"):
+                        current_nodes.pop(idx)
+                        continue
+                    elif act in ("prune_children", "delete_children"):
+                        del_start = idx + 1
+                        del_end = del_start
+                        while del_end < len(current_nodes) and current_nodes[del_end].level > current_level:
+                            del_end += 1
+                        del current_nodes[del_start:del_end]
+                        parent_stack.append(node)
+                        idx += 1
+                        continue
+                    elif act in ("keep",):
+                        parent_stack.append(node)
+                        idx += 1
+                        continue
+
+                # Legacy flat-node determination based on subsequent row levels
+                has_children = node.has_children
                 next_level = current_nodes[idx + 1].level if idx + 1 < len(current_nodes) else 0
 
                 # Rule 1: has_children == True AND level == 6
@@ -232,11 +260,13 @@ class ModelPruner:
                     while del_end < len(current_nodes) and current_nodes[del_end].level > current_level:
                         del_end += 1
                     del current_nodes[del_start:del_end]
+                    parent_stack.append(node)
                     idx += 1
 
                 # Rule 3: has_children == True AND level >= next_level AND level < 6
                 elif has_children and current_level >= next_level and current_level < 6:
                     # Do nothing
+                    parent_stack.append(node)
                     idx += 1
 
                 # Rule 4: has_children == False
@@ -245,6 +275,7 @@ class ModelPruner:
                     # Don't increment idx
 
                 else:
+                    parent_stack.append(node)
                     idx += 1
 
         return current_nodes

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import re
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -86,7 +87,13 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.raw_tree: BOMTree | None = None
         self.file_path: Path | None = Path(initial_file) if initial_file else None
 
-        # Rule action state per item_name: {item_name: 'prune_children' | 'prune_node' | 'none'}
+        # Specific branch/node action state: {node_key: 'prune_children' | 'prune_node'}
+        self.node_rule_actions: dict[str, str] = {}
+        # Detailed configured node data: {node_key: {...}}
+        self.configured_nodes: dict[str, dict[str, Any]] = {}
+        # Existing model rules from database
+        self.existing_model_rules: list[Any] = []
+        # Rule action state per item_name (for backward compatibility): {item_name: action}
         self.rule_actions: dict[str, str] = {}
         # Part code mapping: {item_name: part_code}
         self.item_part_codes: dict[str, str | None] = {}
@@ -515,17 +522,59 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
     def _load_existing_model_rules(self) -> None:
         """Load any existing rules for current model to pre-select them on the tree."""
+        self.node_rule_actions.clear()
+        self.configured_nodes.clear()
         self.rule_actions.clear()
+        self.existing_model_rules = []
         if not self.current_model:
             return
 
-        existing_rules = self.filter_manager.get_rules_for_model(self.current_model)
-        for r in existing_rules:
+        self.existing_model_rules = self.filter_manager.get_rules_for_model(self.current_model)
+        for r in self.existing_model_rules:
             if r.item_name:
-                # Default legacy rules are Rule 2 (cut children, keep unit)
-                self.rule_actions[r.item_name.strip().upper()] = "prune_children"
+                clean_name = r.item_name.strip().upper()
+                r_notes = (r.notes or "").lower()
+                act = "prune_node" if ("loại bỏ cả cụm" in r_notes or "prune_node" in r_notes) else "prune_children"
+                self.rule_actions[clean_name] = act
                 if r.part_code:
-                    self.item_part_codes[r.item_name.strip().upper()] = r.part_code
+                    self.item_part_codes[clean_name] = r.part_code
+
+    def _find_matching_model_rule_action(self, node: BOMNode, parent_item: QTreeWidgetItem | None = None) -> str | None:
+        """Check if an existing model rule from DB matches this specific node."""
+        if not getattr(self, "existing_model_rules", None):
+            return None
+
+        node_code = (node.item_id or "").strip().upper()
+        node_name = (node.item_name or "").strip().upper()
+        parent_code = None
+        if parent_item:
+            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
+            parent_code = (p_data.get("item_id") or "").strip().upper()
+
+        for r in self.existing_model_rules:
+            r_notes = (r.notes or "").lower()
+            m = re.search(r"\[branch:\s*([^\]]+)\]", r.notes or "")
+            if m:
+                expected_parent = m.group(1).strip().upper()
+                if parent_code != expected_parent:
+                    continue
+
+            # 1. Match by part_code if specified
+            if r.part_code and r.part_code.strip():
+                if node_code == r.part_code.strip().upper():
+                    return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
+
+            # 2. Match by item_name (only if valid, not generic "RELEASED" or "(CHƯA ĐẶT TÊN)")
+            elif r.item_name and r.item_name.strip():
+                r_name = r.item_name.strip().upper()
+                if r_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)") and node_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)"):
+                    mode = (r.match_mode or "Full_name").strip().lower()
+                    if mode == "part_name" and r_name in node_name:
+                        return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
+                    elif r_name == node_name:
+                        return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
+
+        return None
 
     def _build_tree_widget(self) -> None:
         """Construct QTreeWidgetItem nodes recursively from self.raw_tree."""
@@ -536,11 +585,16 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.tree_widget.setUpdatesEnabled(False)
         try:
             for root_node in self.raw_tree.roots:
-                self._add_node_to_tree(root_node, parent_item=None)
+                self._add_node_to_tree(root_node, parent_item=None, parent_path="")
         finally:
             self.tree_widget.setUpdatesEnabled(True)
 
-    def _add_node_to_tree(self, node: BOMNode, parent_item: QTreeWidgetItem | None = None) -> QTreeWidgetItem:
+    def _add_node_to_tree(
+        self,
+        node: BOMNode,
+        parent_item: QTreeWidgetItem | None = None,
+        parent_path: str = "",
+    ) -> QTreeWidgetItem:
         """Create a tree item for node and recurse for children."""
         item = QTreeWidgetItem()
         item.setText(0, node.item_name or "(Chưa đặt tên)")
@@ -557,12 +611,24 @@ class BOMVisualRuleBuilderDialog(QDialog):
         item.setTextAlignment(4, Qt.AlignmentFlag.AlignCenter)
         item.setTextAlignment(5, Qt.AlignmentFlag.AlignCenter)
 
+        # Unique branch/node identifier
+        parent_part_code = None
+        if parent_item:
+            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
+            parent_part_code = p_data.get("item_id")
+        node_key = f"{parent_path}/{node.item_id}_r{node.row_index or id(node)}"
+        current_path = f"{parent_path}/{node.item_id}" if parent_path else (node.item_id or "")
+
         # Store domain data
         item.setData(0, Qt.ItemDataRole.UserRole, {
+            "node_key": node_key,
             "level": node.level,
             "item_name": node.item_name,
             "item_id": node.item_id,
             "has_children": node.has_children,
+            "row_index": node.row_index,
+            "parent_part_code": parent_part_code,
+            "parent_path": parent_path,
         })
 
         # Record part code
@@ -576,15 +642,31 @@ class BOMVisualRuleBuilderDialog(QDialog):
         else:
             self.tree_widget.addTopLevelItem(item)
 
+        # Check existing action
+        current_action = self.node_rule_actions.get(node_key)
+        if not current_action:
+            current_action = self._find_matching_model_rule_action(node, parent_item)
+            if current_action:
+                self.node_rule_actions[node_key] = current_action
+                self.configured_nodes[node_key] = {
+                    "action": current_action,
+                    "item_name": node.item_name or "",
+                    "part_code": node.item_id,
+                    "level": node.level,
+                    "parent_part_code": parent_part_code,
+                    "tree_item": item,
+                }
+                if node.item_name:
+                    clean_name = node.item_name.strip().upper()
+                    self.rule_actions[clean_name] = current_action
+                    self.item_part_codes[clean_name] = node.item_id
+
         # Cell Widget: Filter Action ComboBox
         action_combo = QComboBox()
         action_combo.addItem("— Bình thường (Giữ)", "none")
         action_combo.addItem("✂️ Cắt con (Rule 2)", "prune_children")
         action_combo.addItem("❌ Bỏ cả cụm (Rule 1/4)", "prune_node")
 
-        # Check existing action
-        clean_name = (node.item_name or "").strip().upper()
-        current_action = self.rule_actions.get(clean_name, "none")
         idx = 0
         if current_action == "prune_children":
             idx = 1
@@ -592,20 +674,56 @@ class BOMVisualRuleBuilderDialog(QDialog):
             idx = 2
         action_combo.setCurrentIndex(idx)
 
-        # Connect action change
+        # Connect action change targeting ONLY this specific tree item!
         action_combo.currentIndexChanged.connect(
-            lambda index, n_name=node.item_name, combo=action_combo: self._on_action_changed(n_name, combo.itemData(index))
+            lambda index, tree_item=item, combo=action_combo: self._on_tree_item_action_changed(tree_item, combo.itemData(index))
         )
         self.tree_widget.setItemWidget(item, 6, action_combo)
 
         # Recurse for children
         for child in node.children:
-            self._add_node_to_tree(child, parent_item=item)
+            self._add_node_to_tree(child, parent_item=item, parent_path=current_path)
 
         return item
 
+    def _on_tree_item_action_changed(self, item: QTreeWidgetItem, new_action: str) -> None:
+        """Update action rule for THIS specific tree node/branch and refresh preview."""
+        data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+        node_key = data.get("node_key")
+        if not node_key:
+            return
+
+        item_name = data.get("item_name") or ""
+        clean_name = item_name.strip().upper()
+
+        if new_action == "none":
+            self.node_rule_actions.pop(node_key, None)
+            self.configured_nodes.pop(node_key, None)
+            still_used = any(
+                n.get("item_name", "").strip().upper() == clean_name
+                for n in self.configured_nodes.values()
+            )
+            if not still_used and clean_name:
+                self.rule_actions.pop(clean_name, None)
+        else:
+            self.node_rule_actions[node_key] = new_action
+            self.configured_nodes[node_key] = {
+                "action": new_action,
+                "item_name": item_name,
+                "part_code": data.get("item_id"),
+                "level": data.get("level"),
+                "parent_part_code": data.get("parent_part_code"),
+                "tree_item": item,
+            }
+            if clean_name:
+                self.rule_actions[clean_name] = new_action
+                self.item_part_codes[clean_name] = data.get("item_id")
+
+        # Re-run simulation preview & stats (without affecting other branches)
+        self._apply_simulation_preview()
+
     def _on_action_changed(self, item_name: str | None, new_action: str) -> None:
-        """Update action rule across all nodes matching item_name and refresh preview."""
+        """Programmatic helper to set action for nodes matching item_name (backward compatibility)."""
         if not item_name:
             return
 
@@ -615,14 +733,6 @@ class BOMVisualRuleBuilderDialog(QDialog):
         else:
             self.rule_actions[clean_name] = new_action
 
-        # Synchronize all combo boxes for this item_name across tree
-        self._sync_all_combos_for_item(clean_name, new_action)
-
-        # Re-run simulation preview & stats
-        self._apply_simulation_preview()
-
-    def _sync_all_combos_for_item(self, target_name: str, new_action: str) -> None:
-        """Synchronize combo boxes of all tree items sharing the same item_name."""
         target_idx = 0
         if new_action == "prune_children":
             target_idx = 1
@@ -630,20 +740,37 @@ class BOMVisualRuleBuilderDialog(QDialog):
             target_idx = 2
 
         def visit(item: QTreeWidgetItem) -> None:
-            data = item.data(0, Qt.ItemDataRole.UserRole)
-            if data:
-                n_name = (data.get("item_name") or "").strip().upper()
-                if n_name == target_name:
-                    combo = self.tree_widget.itemWidget(item, 6)
-                    if isinstance(combo, QComboBox) and combo.currentIndex() != target_idx:
-                        combo.blockSignals(True)
-                        combo.setCurrentIndex(target_idx)
-                        combo.blockSignals(False)
+            data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+            n_name = (data.get("item_name") or "").strip().upper()
+            if n_name == clean_name:
+                node_key = data.get("node_key")
+                if new_action == "none":
+                    self.node_rule_actions.pop(node_key, None)
+                    self.configured_nodes.pop(node_key, None)
+                else:
+                    self.node_rule_actions[node_key] = new_action
+                    self.configured_nodes[node_key] = {
+                        "action": new_action,
+                        "item_name": data.get("item_name") or "",
+                        "part_code": data.get("item_id"),
+                        "level": data.get("level"),
+                        "parent_part_code": data.get("parent_part_code"),
+                        "tree_item": item,
+                    }
+                    self.item_part_codes[clean_name] = data.get("item_id")
+                combo = self.tree_widget.itemWidget(item, 6)
+                if isinstance(combo, QComboBox) and combo.currentIndex() != target_idx:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(target_idx)
+                    combo.blockSignals(False)
             for i in range(item.childCount()):
                 visit(item.child(i))
 
         for i in range(self.tree_widget.topLevelItemCount()):
             visit(self.tree_widget.topLevelItem(i))
+
+        # Re-run simulation preview & stats
+        self._apply_simulation_preview()
 
     def _apply_simulation_preview(self) -> None:
         """Apply visual styling (highlighting, dimming, or hiding) according to current rule actions."""
@@ -658,13 +785,17 @@ class BOMVisualRuleBuilderDialog(QDialog):
             total_nodes += 1
 
             data = item.data(0, Qt.ItemDataRole.UserRole) or {}
-            item_name = (data.get("item_name") or "").strip().upper()
-            node_action = self.rule_actions.get(item_name, "none")
+            node_key = data.get("node_key", "")
+            node_action = self.node_rule_actions.get(node_key, "none")
+            if node_action == "none" and not self.node_rule_actions:
+                # Fallback to rule_actions if node_rule_actions is empty (e.g. programmatic test call before tree populated)
+                clean_name = (data.get("item_name") or "").strip().upper()
+                node_action = self.rule_actions.get(clean_name, "none")
 
             # Determine effective action on this node
-            # If an ancestor is 'prune_node' or 'prune_children', this child is pruned!
+            # If an ancestor in THIS branch is 'prune_node' or 'prune_children', this child is pruned!
             is_pruned = False
-            if ancestor_action == "prune_node" or ancestor_action == "prune_children":
+            if ancestor_action in ("prune_node", "prune_children"):
                 is_pruned = True
             elif node_action == "prune_node":
                 is_pruned = True
@@ -692,8 +823,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
                     self._reset_item_visuals(item)
 
             # Recurse to children with updated ancestor state
-            # If this node itself is 'prune_children', children inherit 'prune_children'
-            # If this node itself is 'prune_node', children inherit 'prune_node'
+            # ONLY children of this specific node inherit this node's pruning action!
             next_ancestor = node_action if node_action in ("prune_node", "prune_children") else ancestor_action
             for c_idx in range(item.childCount()):
                 traverse(item.child(c_idx), next_ancestor)
@@ -709,7 +839,8 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.lbl_stats_filtered.setText(
             f"Sau khi lọc: {surviving_nodes:,} ({pct_reduction:.1f}% giảm)"
         )
-        self.lbl_stats_rules.setText(f"Quy tắc đã chọn: {len(self.rule_actions)} quy tắc")
+        rule_count = len(self.node_rule_actions) if self.node_rule_actions else len(self.rule_actions)
+        self.lbl_stats_rules.setText(f"Quy tắc đã chọn: {rule_count} quy tắc")
 
     def _reset_item_visuals(self, item: QTreeWidgetItem) -> None:
         """Reset font and background colors to normal."""
@@ -806,7 +937,24 @@ class BOMVisualRuleBuilderDialog(QDialog):
             self.combo_model.setFocus()
             return
 
-        if not self.rule_actions:
+        # Collect rules to save from configured nodes or rule_actions
+        rules_to_save: list[dict[str, Any]] = []
+        if self.configured_nodes:
+            for node_key, n_info in self.configured_nodes.items():
+                act = n_info.get("action")
+                if act and act != "none":
+                    rules_to_save.append(n_info)
+        elif self.rule_actions:
+            for item_name, act in self.rule_actions.items():
+                if act and act != "none":
+                    rules_to_save.append({
+                        "item_name": item_name,
+                        "part_code": self.item_part_codes.get(item_name),
+                        "action": act,
+                        "parent_part_code": None,
+                    })
+
+        if not rules_to_save:
             QMessageBox.warning(
                 self,
                 "Chưa chọn quy tắc",
@@ -818,7 +966,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Xác nhận lưu bộ lọc",
-            f"Bạn có muốn lưu {len(self.rule_actions)} quy tắc lọc vừa chọn vào CSDL cho dòng máy '{model_name}'?\n\n"
+            f"Bạn có muốn lưu {len(rules_to_save)} quy tắc lọc vừa chọn vào CSDL cho dòng máy '{model_name}'?\n\n"
             "Các quy tắc này sẽ được tự động áp dụng khi thực hiện lọc BOM cho model này.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
@@ -831,16 +979,23 @@ class BOMVisualRuleBuilderDialog(QDialog):
             # First, delete previous rules for this model to prevent duplicates
             self.filter_manager.delete_model(model_name)
 
-            for item_name, action in self.rule_actions.items():
-                part_code = self.item_part_codes.get(item_name)
+            for r_info in rules_to_save:
+                item_name = r_info.get("item_name") or ""
+                part_code = r_info.get("part_code")
+                action = r_info.get("action", "prune_children")
+                parent_part_code = r_info.get("parent_part_code")
                 match_mode = "Full_name"
                 note_str = "Tạo tự động từ Cây BOM Mô phỏng"
                 if action == "prune_node":
                     note_str += " (Loại bỏ cả cụm)"
+                else:
+                    note_str += " (Cắt con)"
+                if parent_part_code:
+                    note_str += f" [branch: {parent_part_code}]"
 
                 rule_id = self.filter_manager.add_rule(
                     model_name=model_name,
-                    item_name=item_name,
+                    item_name=item_name if item_name else None,
                     match_mode=match_mode,
                     part_code=part_code,
                     notes=note_str,

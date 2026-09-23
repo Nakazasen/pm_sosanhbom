@@ -32,7 +32,8 @@ COLUMN_ALIASES: dict[str, list[str]] = {
         "partno", "part_no", "malinhkien", "mãlinhkiện", "malk"
     ],
     "has_children": [
-        "haschildren", "has_children", "cocon", "cócon", "children", "expandable"
+        "haschildren", "has_children", "cocon", "cócon", "children", "expandable",
+        "assemblyindicator", "assembly_indicator"
     ],
     "quantity": [
         "quantity", "qty", "soluong", "sốlượng", "count"
@@ -45,14 +46,15 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     ],
     "effectivity": [
         "occurrenceeffectivities", "occurrence_effectivities", "effectivities",
-        "effectivity", "chuoihieuluc", "chuỗichiếtlực", "hieuluc", "hiệulực", "validity"
+        "effectivity", "elementeffectivities", "element_effectivities",
+        "chuoihieuluc", "chuỗichiếtlực", "hieuluc", "hiệulực", "validity"
     ],
     "item_revision_projects_list": [
-        "itemrevisionprojectslist", "projectslist", "projects_list"
+        "itemrevisionprojectslist", "itemrevisionprojectlist", "projectslist", "projects_list"
     ],
     "item_name": [
-        "itemname", "item_name", "partname", "part_name", "tenlinhkien",
-        "tênlinhkiện", "tenlk", "description", "mota", "name"
+        "itemname", "item_name", "partname", "part_name", "partstext", "parts_text",
+        "parttext", "tenlinhkien", "tênlinhkiện", "tenlk", "description", "mota"
     ],
     "notice_no": [
         "noticeno", "notice_no", "ecn", "ecnno", "ecn_no"
@@ -61,7 +63,8 @@ COLUMN_ALIASES: dict[str, list[str]] = {
         "revision", "rev", "revlev", "phienban", "phiênbản"
     ],
     "item_rev_status": [
-        "itemrevstatus", "item_rev_status", "revstatus", "status", "trangthai", "trạngthái"
+        "itemrevstatus", "item_rev_status", "releasestatus", "release_status",
+        "revstatus", "status", "trangthai", "trạngthái"
     ],
 }
 
@@ -71,7 +74,7 @@ def _normalize_header(header: Any) -> str:
     if header is None:
         return ""
     text = str(header).strip().lower()
-    return re.sub(r"[^a-z0-9]", "", text)
+    return re.sub(r"[^\w]", "", text, flags=re.UNICODE)
 
 
 def _parse_bool(val: Any) -> bool:
@@ -81,7 +84,7 @@ def _parse_bool(val: Any) -> bool:
     if val is None:
         return False
     norm = str(val).strip().lower()
-    return norm in ("true", "1", "yes", "y", "t", "x")
+    return norm in ("true", "1", "yes", "y", "t", "x", "fixed assembly", "assembly")
 
 
 def _parse_int_level(val: Any) -> int | None:
@@ -145,7 +148,23 @@ class PLMTreeParser:
         mapping: dict[str, int] = {}
         normalized_headers = [_normalize_header(h) for h in headers]
 
+        # Check if this is a Teamcenter export with 'Parts Text' and/or 'Name'
+        has_parts_text = any(nh in ("partstext", "parttext", "parts_text") for nh in normalized_headers)
+        has_name = "name" in normalized_headers
+
+        if has_parts_text:
+            # In Teamcenter format, 'Parts Text' is always Item Name (description)
+            for idx, nh in enumerate(normalized_headers):
+                if nh in ("partstext", "parttext", "parts_text") and "item_name" not in mapping:
+                    mapping["item_name"] = idx
+                    break
+            # In Teamcenter format, 'Name' is the Item ID (part code)
+            if has_name and "item_id" not in mapping:
+                mapping["item_id"] = normalized_headers.index("name")
+
         for col_name, aliases in COLUMN_ALIASES.items():
+            if col_name in mapping:
+                continue
             for idx, nh in enumerate(normalized_headers):
                 if not nh:
                     continue
@@ -153,7 +172,11 @@ class PLMTreeParser:
                     mapping[col_name] = idx
                     break
 
-        # Fallback to positional mapping only if standard TC14 width (at least 13 cols)
+        # If 'item_name' not matched yet and 'name' header exists (generic format without Parts Text)
+        if "item_name" not in mapping and not has_parts_text and has_name:
+            mapping["item_name"] = normalized_headers.index("name")
+
+        # Fallback to positional mapping only if standard TC14 / TC24 width (at least 13 cols)
         if ("level" not in mapping or "item_id" not in mapping) and len(headers) >= 13:
             mapping = self._get_positional_fallback(len(headers))
 
@@ -162,6 +185,21 @@ class PLMTreeParser:
     def _get_positional_fallback(self, num_cols: int) -> dict[str, int]:
         """Fallback to positional indexing based on column count:
         
+        20+ col TC2412 format:
+          0: Level (string)
+          1: Level (int)
+          2: Item Type
+          3: Item Id (Name)
+          4: 1st Parts
+          5: Quantity
+          6: 2nd BOM Flag
+          7: Item Name (Parts Text)
+          8: Notice No
+          9: Revision
+          10: Item Rev Status (Release Status)
+          14: Has Children (Assembly Indicator)
+          16: Effectivity (Element Effectivities)
+
         14-col TC14 format:
           0: Row Index / Object
           1: Level
@@ -193,6 +231,21 @@ class PLMTreeParser:
           11: Revision
           12: Item Rev Status
         """
+        if num_cols >= 20:
+            return {
+                "level": 1,
+                "item_type": 2,
+                "item_id": 3,
+                "first_parts": 4,
+                "quantity": 5,
+                "second_bom_flag": 6,
+                "item_name": 7,
+                "notice_no": 8,
+                "revision": 9,
+                "item_rev_status": 10,
+                "has_children": 14,
+                "effectivity": 16,
+            }
         if num_cols >= 14:
             return {
                 "level": 1,

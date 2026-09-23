@@ -46,10 +46,23 @@ class BOMRuleRecord:
 
     def to_model_rule(self) -> ModelRule:
         """Convert to ModelRule domain entity used by ModelPruner."""
+        action = None
+        parent_part_code = None
+        if self.notes:
+            n_low = self.notes.lower()
+            if "loại bỏ cả cụm" in n_low or "prune_node" in n_low:
+                action = "prune_node"
+            elif "cắt con" in n_low or "prune_children" in n_low:
+                action = "prune_children"
+            m = re.search(r"\[branch:\s*([^\]]+)\]", self.notes)
+            if m:
+                parent_part_code = m.group(1).strip()
         return ModelRule(
             item_name=self.item_name,
             match_mode=self.match_mode or "Full_name",
             part_code=self.part_code,
+            action=action,
+            parent_part_code=parent_part_code,
         )
 
     def to_dict(self) -> dict[str, Any]:

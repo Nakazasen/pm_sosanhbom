@@ -228,9 +228,17 @@ class ModelRule(BaseModel):
     item_name: str | None = Field(default=None, description="Assembly or component name")
     match_mode: str = Field(default="Full_name", description="'Full_name' or 'Part_name'")
     part_code: str | None = Field(default=None, description="Exact Kyocera part code if specified")
+    action: str | None = Field(default=None, description="Explicit action override ('prune_node' or 'prune_children')")
+    parent_part_code: str | None = Field(default=None, description="Parent assembly part code to target specific branch")
 
-    def matches(self, node: BOMNode) -> bool:
+    def matches(self, node: BOMNode, parent: BOMNode | None = None) -> bool:
         """Evaluate if the BOMNode matches this rule."""
+        if self.parent_part_code:
+            if not parent or not parent.item_id:
+                return False
+            if parent.item_id.strip().lower() != self.parent_part_code.strip().lower():
+                return False
+
         # 1. Exact match on part code takes precedence
         if self.part_code is not None and self.part_code.strip():
             return node.item_id.strip().lower() == self.part_code.strip().lower()
@@ -256,6 +264,15 @@ class ModelRule(BaseModel):
         Rule 3: has_children == True AND len(children) == 0 AND level < 6 -> KEEP
         Rule 4: has_children == False -> DELETE_NODE
         """
+        if self.action:
+            act = self.action.strip().lower()
+            if act in ("prune_node", "delete_node"):
+                return PruneAction.DELETE_NODE
+            if act in ("prune_children", "delete_children"):
+                return PruneAction.DELETE_CHILDREN
+            if act in ("keep",):
+                return PruneAction.KEEP
+
         if node.has_children:
             if node.level == 6:
                 return PruneAction.DELETE_NODE
