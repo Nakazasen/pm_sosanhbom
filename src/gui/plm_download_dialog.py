@@ -1533,8 +1533,8 @@ class PLMDownloadDialog(QDialog):
         self._detected_models_map: Dict[str, str] = {}
 
         self.setWindowTitle("Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
-        self.resize(860, 640)
-        self.setMinimumSize(780, 500)
+        self.resize(880, 720)
+        self.setMinimumSize(780, 520)
         self._init_ui()
         self._update_smart_suggestion()
 
@@ -1618,8 +1618,23 @@ class PLMDownloadDialog(QDialog):
         )
         self.lbl_model_badge.setVisible(False)
         model_row.addWidget(self.lbl_model_badge)
-
         part_layout.addLayout(model_row)
+
+        # BolocBom filter option right under Model row in Step 1
+        filter_opt_row = QHBoxLayout()
+        filter_opt_row.setContentsMargins(0, 2, 0, 2)
+        self.chk_apply_bolocbom = QCheckBox(
+            "Tự động áp dụng Bộ lọc BOM (BolocBom) theo từng loại máy ngay sau khi tải"
+        )
+        self.chk_apply_bolocbom.setChecked(True)
+        self.chk_apply_bolocbom.setFont(QFont("Calibri", 10))
+        self.chk_apply_bolocbom.setToolTip(
+            "Sau khi tải và chuẩn hóa 14 cột, tự động nhận diện dòng máy và chạy cắt tỉa "
+            "các cụm con/phantom branch theo đúng quy tắc Sheet BolocBom."
+        )
+        filter_opt_row.addWidget(self.chk_apply_bolocbom)
+        filter_opt_row.addStretch()
+        part_layout.addLayout(filter_opt_row)
 
         # Toolbar above text edit
         tools_layout = QHBoxLayout()
@@ -1789,16 +1804,6 @@ class PLMDownloadDialog(QDialog):
         self.chk_standardize = QCheckBox("Tự động chuẩn hóa 14 cột tiêu chuẩn")
         self.chk_standardize.setChecked(True)
         tc_form.addRow("Quy chuẩn PLM:", self.chk_standardize)
-
-        self.chk_apply_bolocbom = QCheckBox(
-            "Tự động áp dụng Bộ lọc BOM (BolocBom) theo từng loại máy ngay sau khi tải"
-        )
-        self.chk_apply_bolocbom.setChecked(True)
-        self.chk_apply_bolocbom.setToolTip(
-            "Sau khi tải và chuẩn hóa 14 cột, tự động nhận diện dòng máy và chạy cắt tỉa "
-            "các cụm con/phantom branch theo đúng quy tắc Sheet BolocBom."
-        )
-        tc_form.addRow("Bộ lọc BolocBom:", self.chk_apply_bolocbom)
         self.chk_standardize.toggled.connect(self._on_standardize_toggled)
         tc_layout.addLayout(tc_form)
 
