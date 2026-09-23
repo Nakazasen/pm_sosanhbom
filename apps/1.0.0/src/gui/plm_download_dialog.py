@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 
 from src.services.machine_dict_service import MachineDictService
 
-from PyQt6.QtCore import QDate, QObject, QThread, QTimer, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QDate, QObject, QSize, QThread, QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QGuiApplication, QTextCursor
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -1690,14 +1690,56 @@ class PLMDownloadDialog(QDialog):
         banner_layout.addWidget(self.btn_banner_all)
 
         self.btn_banner_scan = QPushButton("📂 Chi tiết...")
-        self.btn_banner_scan.setStyleSheet("padding: 4px 10px; border-radius: 4px;")
+        self.btn_banner_scan.setObjectName("btn_banner_scan")
+        self.btn_banner_scan.setStyleSheet("""
+            QPushButton#btn_banner_scan {
+                background-color: #FFFFFF;
+                color: #1E293B;
+                border: 1px solid #CBD5E1;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 4px;
+                font-size: 11.5px;
+            }
+            QPushButton#btn_banner_scan:hover {
+                background-color: #F1F5F9;
+                border-color: #94A3B8;
+            }
+            QPushButton#btn_banner_scan:pressed {
+                background-color: #E2E8F0;
+            }
+        """)
         self.btn_banner_scan.clicked.connect(self._open_scan_dialog)
         banner_layout.addWidget(self.btn_banner_scan)
 
-        self.btn_banner_dismiss = QPushButton("✕")
-        self.btn_banner_dismiss.setFixedWidth(24)
-        self.btn_banner_dismiss.setStyleSheet("color: #64748B; font-weight: bold; border: none; font-size: 13px;")
-        self.btn_banner_dismiss.setToolTip("Đóng gợi ý")
+        self.btn_banner_dismiss = QPushButton()
+        self.btn_banner_dismiss.setObjectName("btn_banner_dismiss")
+        self.btn_banner_dismiss.setIcon(theme_mgr.get_styled_icon("x-circle", color="#475569"))
+        self.btn_banner_dismiss.setIconSize(QSize(16, 16))
+        self.btn_banner_dismiss.setFixedSize(26, 26)
+        self.btn_banner_dismiss.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_banner_dismiss.setToolTip("Đóng thanh gợi ý này")
+        self.btn_banner_dismiss.setStyleSheet("""
+            QPushButton#btn_banner_dismiss {
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 0px;
+                margin: 0px;
+                min-width: 26px;
+                max-width: 26px;
+                min-height: 26px;
+                max-height: 26px;
+            }
+            QPushButton#btn_banner_dismiss:hover {
+                background-color: #FEE2E2;
+                border: 1px solid #FCA5A5;
+            }
+            QPushButton#btn_banner_dismiss:pressed {
+                background-color: #FECACA;
+                border: 1px solid #F87171;
+            }
+        """)
         self.btn_banner_dismiss.clicked.connect(self._dismiss_smart_suggestion)
         banner_layout.addWidget(self.btn_banner_dismiss)
 
