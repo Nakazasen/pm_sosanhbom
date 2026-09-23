@@ -427,6 +427,15 @@ class SettingsDialog(QDialog):
     def get_settings(self) -> dict[str, Any]:
         """Collect current form values into settings dictionary."""
         theme_val = self.theme_combo.currentData() or "light"
+        existing_paths = dict(self._current_settings.get("paths", {}))
+        existing_paths.update({
+            "base_dir": self.base_dir_edit.text().strip(),
+            "fix_serial_path": self.fs_path_edit.text().strip(),
+            "reports_dir": self.reports_dir_edit.text().strip(),
+            "shared_db_path": self.shared_db_edit.text().strip(),
+            "update_dir": self.update_dir_edit.text().strip(),
+            "default_model": self.default_model_combo.currentText().strip(),
+        })
         return {
             "tc14": {
                 "base_url": self.tc_url_edit.text().strip(),
@@ -447,14 +456,7 @@ class SettingsDialog(QDialog):
                 "alternative": self.sap_alt_edit.text().strip(),
                 "saplogon_path": self.sap_path_edit.text().strip(),
             },
-            "paths": {
-                "base_dir": self.base_dir_edit.text().strip(),
-                "fix_serial_path": self.fs_path_edit.text().strip(),
-                "reports_dir": self.reports_dir_edit.text().strip(),
-                "shared_db_path": self.shared_db_edit.text().strip(),
-                "update_dir": self.update_dir_edit.text().strip(),
-                "default_model": self.default_model_combo.currentText().strip(),
-            },
+            "paths": existing_paths,
             "email": {
                 "test_mode": self.email_test_mode_chk.isChecked(),
                 "test_recipient": self.email_test_recipient_edit.text().strip(),

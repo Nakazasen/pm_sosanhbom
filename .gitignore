@@ -46,5 +46,11 @@ Thumbs.db
 data/*.db
 *.db
 Virgo/
+Iris2024/
+Libra2/
+Sirius2/
+Polaris/
+Mebius/
+backup_before_*_filter/
 
 

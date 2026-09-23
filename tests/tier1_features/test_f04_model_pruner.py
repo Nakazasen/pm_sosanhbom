@@ -169,3 +169,22 @@ class TestF04ModelPruner:
         assert ws_out.cell(3, 4).value == "ASSY01"
         assert ws_out.cell(4, 4).value == "PART02"
         wb_out.close()
+
+    def test_f04_normalize_model_name_variants(self):
+        """Test 7: Verify normalize_model_name correctly maps real-world model names."""
+        from src.core.model_pruner import normalize_model_name
+
+        assert normalize_model_name("Libra235ppm") == "Libra2"
+        assert normalize_model_name("libra2") == "Libra2"
+        assert normalize_model_name("Sirius2(21ppm)") == "Sirius2"
+        assert normalize_model_name("Sirius2") == "Sirius2"
+        assert normalize_model_name("Polaris Next") == "Polaris"
+        assert normalize_model_name("Polaris") == "Polaris"
+        assert normalize_model_name("Virgo") == "Virgo"
+        assert normalize_model_name("virgo") == "Virgo"
+        assert normalize_model_name("Iris2024") == "Iris2024"
+        assert normalize_model_name("Mebius") == "Mebius"
+        assert normalize_model_name("UnknownModelXYZ") is None
+        assert normalize_model_name("") is None
+        assert normalize_model_name(None) is None
+

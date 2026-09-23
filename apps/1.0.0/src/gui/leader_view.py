@@ -1728,7 +1728,15 @@ class Step2DataSourcingWidget(QWidget):
     def _open_download_dialog(self) -> None:
         from src.gui.plm_download_dialog import PLMDownloadDialog
         target_dir = self.state.base_dir / self.state.model_name
-        dlg = PLMDownloadDialog(parent=self, default_dir=target_dir, initial_model=self.state.model_name)
+        project_parts = [
+            m.machine_code for m in getattr(self.state, "machines", []) if getattr(m, "machine_code", None)
+        ]
+        dlg = PLMDownloadDialog(
+            parent=self,
+            default_dir=target_dir,
+            initial_model=self.state.model_name,
+            project_parts=project_parts,
+        )
         if dlg.exec():
             self._auto_route_model_files_to_machine_dirs()
             self.refresh_sourcing_table()

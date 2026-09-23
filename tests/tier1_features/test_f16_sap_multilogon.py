@@ -109,3 +109,56 @@ class TestF16SAPMultiLogon:
         # When okcd raises exception -> False
         mock_sap_session.findById.side_effect = Exception("Not logged in")
         assert mgr.is_logged_in(mock_sap_session) is False
+
+    def test_f16_multi_logon_appears_post_credentials(self, mock_sap_session):
+        """Test 6: Multi-logon appears AFTER entering username/password and pressing Enter (production SAP behavior)."""
+        rad_btn = MagicMock()
+        confirm_btn = MagicMock()
+        wnd0 = MagicMock()
+        bname = MagicMock()
+        bcode = MagicMock()
+        langu = MagicMock()
+        okcd = MagicMock()
+
+        submitted_credentials = {"done": False}
+
+        def on_send_vkey(key_code):
+            if key_code == 0:
+                submitted_credentials["done"] = True
+
+        wnd0.sendVKey = on_send_vkey
+
+        def find_elem(eid):
+            if "txtRSYST-BNAME" in eid:
+                return bname
+            if "pwdRSYST-BCODE" in eid:
+                return bcode
+            if "txtRSYST-LANGU" in eid:
+                return langu
+            if eid == "wnd[0]":
+                return wnd0
+            if "okcd" in eid:
+                return okcd
+            # wnd[1] only exists AFTER credentials are submitted via Enter
+            if not submitted_credentials["done"]:
+                raise Exception("Control not found")
+
+            if "radMULTI_LOGON_OPT2" in eid:
+                return rad_btn
+            if "wnd[1]/tbar[0]/btn[0]" in eid:
+                return confirm_btn
+            if eid == "wnd[1]":
+                return MagicMock()
+            return MagicMock()
+
+        mock_sap_session.findById.side_effect = find_elem
+        mgr = SAPConnectionManager(credentials=SAPCredentials())
+        mgr.is_logged_in = MagicMock(return_value=True)
+
+        mgr.handle_multi_logon_and_login(mock_sap_session)
+
+        # Verify that Option 2 was selected and confirmed
+        rad_btn.Select.assert_called_once()
+        rad_btn.SetFocus.assert_called_once()
+        confirm_btn.press.assert_called_once()
+

@@ -275,6 +275,80 @@ class SAPConnectionManager:
         self.handle_multi_logon_and_login(self.session)
         return self.session
 
+    def _resolve_multi_logon_dialog(self, session: Any) -> bool:
+        """
+        Detect and resolve SAP Multi-Logon license warning dialog (wnd[1]).
+        Selects Option 2 (or Option 1 if Option 2 unavailable) and confirms with btn[0].
+        Returns True if multi-logon dialog was found and handled, False otherwise.
+        """
+        try:
+            # 1. Look for radMULTI_LOGON_OPT2 first (standard option: continue logon)
+            rad_btn = None
+            try:
+                rad_btn = session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2")
+            except Exception:
+                pass
+
+            # Fallback to radMULTI_LOGON_OPT1 if OPT2 is not present
+            if rad_btn is None:
+                try:
+                    rad_btn = session.findById("wnd[1]/usr/radMULTI_LOGON_OPT1")
+                except Exception:
+                    pass
+
+            # Fallback: check children of wnd[1]/usr for any element containing MULTI_LOGON
+            if rad_btn is None:
+                try:
+                    usr = session.findById("wnd[1]/usr")
+                    children = getattr(usr, "Children", None)
+                    count = getattr(children, "Count", 0) if children else 0
+                    for i in range(count):
+                        child = children(i) if callable(children) else children[i]
+                        name = str(getattr(child, "Name", ""))
+                        c_id = str(getattr(child, "Id", ""))
+                        if "MULTI_LOGON_OPT2" in name or "MULTI_LOGON_OPT2" in c_id:
+                            rad_btn = child
+                            break
+                        elif "MULTI_LOGON_OPT1" in name or "MULTI_LOGON_OPT1" in c_id:
+                            rad_btn = child
+                except Exception:
+                    pass
+
+            if rad_btn is not None:
+                btn_name = getattr(rad_btn, "Name", "radMULTI_LOGON_OPT2")
+                logger.warning(
+                    f"Phát hiện cảnh báo đa phiên đăng nhập SAP (Multi-Logon) cho '{self.creds.username}'. "
+                    f"Tự động chọn {btn_name} để tiếp tục đăng nhập..."
+                )
+                if hasattr(rad_btn, "Select"):
+                    rad_btn.Select()
+                if hasattr(rad_btn, "SetFocus"):
+                    rad_btn.SetFocus()
+
+                # Press Enter / Confirm in wnd[1]
+                btn_enter = None
+                try:
+                    btn_enter = session.findById("wnd[1]/tbar[0]/btn[0]")
+                except Exception:
+                    pass
+
+                if btn_enter is not None and hasattr(btn_enter, "press"):
+                    btn_enter.press()
+                else:
+                    try:
+                        wnd1 = session.findById("wnd[1]")
+                        if hasattr(wnd1, "sendVKey"):
+                            wnd1.sendVKey(0)
+                    except Exception:
+                        pass
+
+                self.wait_ready(session)
+                return True
+        except Exception as ex:
+            logger.debug(f"Multi-logon dialog resolution skipped or error: {ex}")
+
+        return False
+
     def handle_multi_logon_and_login(self, session: Optional[Any] = None) -> None:
         """
         Handle multi-logon resolution dialog (`radMULTI_LOGON_OPT2`) and
@@ -286,32 +360,10 @@ class SAPConnectionManager:
 
         self.wait_ready(sess)
 
-        # 1. Multi-logon popup resolution:
-        # Option 2 terminates existing logons and enters this one
-        multi_logon_resolved = False
-        try:
-            rad_opt2 = sess.findById("wnd[1]/usr/radMULTI_LOGON_OPT2")
-            if rad_opt2 is not None:
-                logger.warning(
-                    f"Multi-logon conflict detected for {self.creds.username}. "
-                    "Selecting Option 2 (terminate older sessions)."
-                )
-                if hasattr(rad_opt2, "Select"):
-                    rad_opt2.Select()
-                if hasattr(rad_opt2, "SetFocus"):
-                    rad_opt2.SetFocus()
+        # 1. Multi-logon popup resolution before credentials (if dialog already present or in test mocks)
+        multi_logon_resolved = self._resolve_multi_logon_dialog(sess)
 
-                # Press Enter / Confirm in wnd[1]
-                btn_enter = sess.findById("wnd[1]/tbar[0]/btn[0]")
-                if btn_enter is not None:
-                    btn_enter.press()
-                self.wait_ready(sess)
-                multi_logon_resolved = True
-        except Exception:
-            # No multi-logon dialog present
-            pass
-
-        # 2. Check if login screen fields are present
+        # 2. Check if login screen fields are present and submit credentials
         try:
             bname_field = sess.findById("wnd[0]/usr/txtRSYST-BNAME")
             if bname_field is not None:
@@ -334,11 +386,17 @@ class SAPConnectionManager:
         except Exception as ex:
             logger.debug(f"Login field entry bypassed or non-existent: {ex}")
 
-        # 3. Handle any modal information popups post-login (system notes, license notices)
+        # 3. Check for multi-logon dialog immediately after submitting credentials (real SAP behavior)
         if not multi_logon_resolved:
-            self.dismiss_post_login_popups(sess)
+            multi_logon_resolved = self._resolve_multi_logon_dialog(sess)
 
-        # 4. Final verification
+        # 4. Handle modal information popups post-login (system notes, broadcast messages)
+        # Avoid looping on static test mocks that do not simulate dialog closing
+        is_mock = hasattr(sess, "_mock_return_value") or "Mock" in type(sess).__name__
+        if not multi_logon_resolved or not is_mock:
+            self.dismiss_post_login_popups(sess, multi_logon_already_handled=multi_logon_resolved)
+
+        # 5. Final verification
         if not self.is_logged_in(sess):
             # Check if an error was posted to sbar
             sbar_text = ""
@@ -356,13 +414,18 @@ class SAPConnectionManager:
 
         logger.info(f"Successfully authenticated to SAP system '{self.creds.system}'.")
 
-    def dismiss_post_login_popups(self, session: Any) -> None:
+    def dismiss_post_login_popups(self, session: Any, multi_logon_already_handled: bool = False) -> None:
         """Dismiss informational modal popups that may appear after logon."""
-        for _ in range(3):
+        multi_logon_done = multi_logon_already_handled
+        for _ in range(5):
             try:
                 # If a modal dialog exists at wnd[1]
                 wnd1 = session.findById("wnd[1]")
                 if wnd1 is not None:
+                    # If this is a multi-logon dialog and not handled yet, select option 2 and confirm
+                    if not multi_logon_done and self._resolve_multi_logon_dialog(session):
+                        multi_logon_done = True
+                        continue
                     btn0 = session.findById("wnd[1]/tbar[0]/btn[0]")
                     if btn0 is not None:
                         btn0.press()

@@ -21,6 +21,7 @@ The 4 Action Rules on Matched Nodes:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from src.core.default_rules import DEFAULT_MODEL_RULES
@@ -35,11 +36,12 @@ def normalize_model_name(name: str) -> str | None:
         return None
     cleaned = name.strip().lower()
     for known in DEFAULT_MODEL_RULES:
-        if known.lower() == cleaned:
+        k_low = known.lower()
+        if k_low == cleaned or k_low.startswith(cleaned) or cleaned.startswith(k_low):
             return known
-    # Check if prefix matches (e.g. 'iris' -> 'Iris2024')
-    for known in DEFAULT_MODEL_RULES:
-        if known.lower().startswith(cleaned):
+        k_alpha = re.sub(r"[^a-zA-Z0-9]", "", k_low)
+        c_alpha = re.sub(r"[^a-zA-Z0-9]", "", cleaned)
+        if k_alpha and (k_alpha == c_alpha or c_alpha.startswith(k_alpha) or k_alpha.startswith(c_alpha)):
             return known
     return None
 
