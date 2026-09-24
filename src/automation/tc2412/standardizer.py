@@ -86,6 +86,14 @@ def prune_mechanical_scope(raw_rows: List[List[Any]]) -> List[List[Any]]:
     if len(raw_rows) <= 2:
         return raw_rows
 
+    headers = raw_rows[0]
+    norm_headers = [str(c).strip().lower() for c in headers if c is not None]
+    is_27_col = len(headers) >= 25 and ("revision name" in norm_headers or "assembly indicator" in norm_headers)
+
+    lvl_col = 0 if is_27_col else 1
+    pid_col = 3
+    pname_col = 4 if is_27_col else 7
+
     res: List[List[Any]] = [raw_rows[0], raw_rows[1]]
 
     in_elec = False
@@ -94,12 +102,13 @@ def prune_mechanical_scope(raw_rows: List[List[Any]]) -> List[List[Any]]:
     for idx in range(2, len(raw_rows)):
         r = raw_rows[idx]
         try:
-            lvl = int(r[1] if len(r) > 1 and r[1] is not None else 0)
+            raw_lvl = r[lvl_col] if len(r) > lvl_col and r[lvl_col] is not None else 0
+            lvl = int(str(raw_lvl).lstrip(".").strip())
         except Exception:
             lvl = 0
 
-        pid = str(r[3] if len(r) > 3 and r[3] is not None else "").strip()
-        pname = str(r[7] if len(r) > 7 and r[7] is not None else "").strip()
+        pid = str(r[pid_col] if len(r) > pid_col and r[pid_col] is not None else "").strip()
+        pname = str(r[pname_col] if len(r) > pname_col and r[pname_col] is not None else "").strip()
 
         # Reset state at Level 1 or Level 0
         if lvl <= 1:
@@ -134,28 +143,25 @@ def transform_24_to_14_columns(
     raw_rows: List[List[Any]],
     prune_electrical: bool = True,
 ) -> List[List[Any]]:
-    """Transform raw 24-column rows into canonical 14-column format.
-
-    Maps:
-      Home -> 1-based sequential row index
-      Level -> Level.1 (Col 2)
-      Item Type -> Item Type (Col 3, e.g. 'Parts')
-      Item Id -> Name (Col 4, Part Number)
-      Has Children -> None
-      Quantity -> Quantity (Col 6)
-      1st Parts -> None
-      2nd BOM Flag -> 2nd BOM Flag (Col 7)
-      Occurrence Effectivities -> None
-      Item Revision Project List -> None
-      Item Name -> Parts Text (Col 8)
-      Notice No -> Notice No (Col 9)
-      Revision -> Revision (Col 10)
-      Item Rev Status -> Release Status (Col 11)
-    """
+    """Transform raw 24-column or 27-column rows into canonical 14-column format."""
     if not raw_rows:
         return []
 
     source_rows = prune_mechanical_scope(raw_rows) if prune_electrical else raw_rows
+
+    headers = raw_rows[0]
+    norm_headers = [str(c).strip().lower() for c in headers if c is not None]
+    is_27_col = len(headers) >= 25 and ("revision name" in norm_headers or "assembly indicator" in norm_headers)
+
+    lvl_col = 0 if is_27_col else 1
+    type_col = None if is_27_col else 2
+    pid_col = 3
+    qty_col = 7 if is_27_col else 5
+    flag_col = None if is_27_col else 6
+    name_col = 4 if is_27_col else 7
+    notice_col = None if is_27_col else 8
+    rev_col = 2 if is_27_col else 9
+    status_col = 25 if is_27_col and len(headers) > 25 else 10
 
     res: List[List[Any]] = [CANONICAL_14_COLUMNS]
 
@@ -165,15 +171,16 @@ def transform_24_to_14_columns(
 
         # Level
         try:
-            lvl_val = int(r[1] if len(r) > 1 and r[1] is not None else 0)
+            raw_lvl = r[lvl_col] if len(r) > lvl_col and r[lvl_col] is not None else 0
+            lvl_val = int(str(raw_lvl).lstrip(".").strip())
         except Exception:
             lvl_val = 0
 
-        item_type = str(r[2]).strip() if len(r) > 2 and r[2] is not None else "Parts"
-        item_id = str(r[3]).strip() if len(r) > 3 and r[3] is not None else ""
+        item_type = str(r[type_col]).strip() if type_col is not None and len(r) > type_col and r[type_col] is not None else "Parts"
+        item_id = str(r[pid_col]).strip() if len(r) > pid_col and r[pid_col] is not None else ""
 
         # Quantity
-        qty_raw = r[5] if len(r) > 5 else None
+        qty_raw = r[qty_col] if len(r) > qty_col else None
         if qty_raw is not None and str(qty_raw).strip() != "":
             try:
                 # Format as string with 3 decimals if float, or keep string
@@ -184,19 +191,19 @@ def transform_24_to_14_columns(
             qty_str = None
 
         # 2nd BOM Flag
-        flag_raw = r[6] if len(r) > 6 else None
+        flag_raw = r[flag_col] if flag_col is not None and len(r) > flag_col else None
         flag_str = str(flag_raw).strip() if flag_raw is not None and str(flag_raw).strip() != "" else None
 
-        # Item Name (Parts Text)
-        name_raw = r[7] if len(r) > 7 else None
+        # Item Name (Description / Parts Text)
+        name_raw = r[name_col] if len(r) > name_col else None
         name_str = str(name_raw).strip() if name_raw is not None else ""
 
         # Notice No
-        notice_raw = r[8] if len(r) > 8 else None
+        notice_raw = r[notice_col] if notice_col is not None and len(r) > notice_col else None
         notice_str = str(notice_raw).strip() if notice_raw is not None and str(notice_raw).strip() != "" else None
 
         # Revision
-        rev_raw = r[9] if len(r) > 9 else None
+        rev_raw = r[rev_col] if len(r) > rev_col else None
         if rev_raw is not None and str(rev_raw).strip() != "":
             rev_str = str(rev_raw).strip()
             if len(rev_str) == 1 and rev_str.isdigit():
@@ -205,7 +212,7 @@ def transform_24_to_14_columns(
             rev_str = ""
 
         # Release Status
-        status_raw = r[10] if len(r) > 10 else None
+        status_raw = r[status_col] if len(r) > status_col else None
         status_str = str(status_raw).strip() if status_raw is not None and str(status_raw).strip() != "" else None
 
         row_14 = [

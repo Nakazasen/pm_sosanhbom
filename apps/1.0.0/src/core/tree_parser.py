@@ -29,7 +29,8 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     ],
     "item_id": [
         "itemid", "item_id", "partcode", "part_code", "partnumber", "part_number",
-        "partno", "part_no", "malinhkien", "mãlinhkiện", "malk"
+        "partno", "part_no", "malinhkien", "mãlinhkiện", "malk",
+        "revisionname", "revision_name", "revname", "rev_name"
     ],
     "has_children": [
         "haschildren", "has_children", "cocon", "cócon", "children", "expandable",
@@ -143,7 +144,7 @@ class PLMTreeParser:
     def __init__(self, default_qty: float = 1.0) -> None:
         self.default_qty = default_qty
 
-    def detect_column_mapping(self, headers: list[Any]) -> dict[str, int]:
+    def detect_column_mapping(self, headers: list[Any], allow_positional_fallback: bool = True) -> dict[str, int]:
         """Detect column positions from header names."""
         mapping: dict[str, int] = {}
         normalized_headers = [_normalize_header(h) for h in headers]
@@ -162,6 +163,14 @@ class PLMTreeParser:
             if has_name and "item_id" not in mapping:
                 mapping["item_id"] = normalized_headers.index("name")
 
+        # Check for Teamcenter Active Workspace export with 'Revision Name' (part code)
+        has_rev_name = any(nh in ("revisionname", "revname", "revision_name") for nh in normalized_headers)
+        if has_rev_name and "item_id" not in mapping:
+            for idx, nh in enumerate(normalized_headers):
+                if nh in ("revisionname", "revname", "revision_name"):
+                    mapping["item_id"] = idx
+                    break
+
         for col_name, aliases in COLUMN_ALIASES.items():
             if col_name in mapping:
                 continue
@@ -176,8 +185,8 @@ class PLMTreeParser:
         if "item_name" not in mapping and not has_parts_text and has_name:
             mapping["item_name"] = normalized_headers.index("name")
 
-        # Fallback to positional mapping only if standard TC14 / TC24 width (at least 13 cols)
-        if ("level" not in mapping or "item_id" not in mapping) and len(headers) >= 13:
+        # Fallback to positional mapping only if requested and standard TC14 / TC24 width (at least 13 cols)
+        if allow_positional_fallback and ("level" not in mapping or "item_id" not in mapping) and len(headers) >= 13:
             mapping = self._get_positional_fallback(len(headers))
 
         return mapping
@@ -185,6 +194,16 @@ class PLMTreeParser:
     def _get_positional_fallback(self, num_cols: int) -> dict[str, int]:
         """Fallback to positional indexing based on column count:
         
+        27+ col Teamcenter Active Workspace format:
+          0: Level (int/string)
+          1: ID (MBC)
+          2: Revision
+          3: Revision Name (Part Number / Item ID)
+          4: Description (Item Name)
+          7: Quantity
+          14: Assembly Indicator (Has Children)
+          25: Release Status
+
         20+ col TC2412 format:
           0: Level (string)
           1: Level (int)
@@ -231,6 +250,16 @@ class PLMTreeParser:
           11: Revision
           12: Item Rev Status
         """
+        if num_cols >= 27:
+            return {
+                "level": 0,
+                "item_id": 3,
+                "revision": 2,
+                "item_name": 4,
+                "quantity": 7,
+                "has_children": 14,
+                "item_rev_status": 25,
+            }
         if num_cols >= 20:
             return {
                 "level": 1,
@@ -315,12 +344,29 @@ class PLMTreeParser:
 
         for r_idx in range(min(10, len(all_rows))):
             row_candidates = all_rows[r_idx]
-            mapping = self.detect_column_mapping(row_candidates)
-            score = sum(1 for k in ("level", "item_id", "has_children", "quantity", "effectivity", "item_name") if k in mapping)
-            if score > best_score:
-                best_score = score
-                header_row_idx = r_idx
-                detected_mapping = mapping
+            mapping = self.detect_column_mapping(row_candidates, allow_positional_fallback=False)
+            if "level" in mapping:
+                score = sum(1 for k in ("level", "item_id", "has_children", "quantity", "effectivity", "item_name") if k in mapping)
+                if score > best_score:
+                    best_score = score
+                    header_row_idx = r_idx
+                    detected_mapping = mapping
+
+        # If no explicit header was recognized (best_score < 2 or 'level' missing), use positional fallback
+        if best_score < 2 or "level" not in detected_mapping:
+            first_row = all_rows[0]
+            lvl0 = _parse_int_level(first_row[0]) if len(first_row) > 0 else None
+            lvl1 = _parse_int_level(first_row[1]) if len(first_row) > 1 else None
+            if lvl0 is None and lvl1 is None:
+                header_row_idx = 0
+            else:
+                header_row_idx = -1
+            detected_mapping = self._get_positional_fallback(len(all_rows[0]))
+        elif "item_id" not in detected_mapping and len(all_rows[0]) >= 13:
+            fallback = self._get_positional_fallback(len(all_rows[0]))
+            for k, v in fallback.items():
+                if k not in detected_mapping:
+                    detected_mapping[k] = v
 
         data_rows = all_rows[header_row_idx + 1:]
         return self._build_tree_from_matrix(data_rows, detected_mapping, source_file=str(path), row_offset=header_row_idx + 2)
@@ -379,8 +425,8 @@ class PLMTreeParser:
         status_col = mapping.get("item_rev_status")
 
         for row_num, row in enumerate(rows, start=row_offset):
-            # Check row bounds
-            if not row or all(v is None or str(v).strip() == "" for v in row):
+            # Check row bounds (short-circuit on first non-empty cell)
+            if not row or not any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row):
                 continue
 
             lvl_val = row[lvl_col] if lvl_col < len(row) else None

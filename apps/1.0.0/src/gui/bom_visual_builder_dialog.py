@@ -20,7 +20,7 @@ import re
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QBrush, QColor, QFont
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -50,6 +50,80 @@ from src.gui.styles import get_theme_manager
 from src.services.machine_dict_service import MachineDictService
 
 logger = logging.getLogger(__name__)
+
+ACTION_DISPLAY_TEXT: dict[str, str] = {
+    "none": "— Bình thường (Giữ)",
+    "prune_children": "✂️ Cắt con (Rule 2)",
+    "prune_node": "❌ Bỏ cả cụm (Rule 1/4)",
+}
+
+
+class FastBOMTreeWidget(QTreeWidget):
+    """High-performance QTreeWidget supporting on-demand QComboBox creation.
+
+    Avoids allocating thousands of heavyweight QWidget handles upfront, preventing
+    catastrophic GUI freeze and sluggishness when rendering thousands of BOM nodes.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.dialog: Any | None = None
+        self.itemClicked.connect(self._on_item_clicked)
+        self.itemDoubleClicked.connect(self._on_item_clicked)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            curr = self.currentItem()
+            if curr:
+                combo = self.get_or_create_action_combo(curr, 6)
+                combo.showPopup()
+                return
+        super().keyPressEvent(event)
+
+    def get_or_create_action_combo(self, item: QTreeWidgetItem, col: int = 6) -> QComboBox:
+        existing = super().itemWidget(item, col)
+        if isinstance(existing, QComboBox):
+            return existing
+
+        combo = QComboBox()
+        combo.addItem("— Bình thường (Giữ)", "none")
+        combo.addItem("✂️ Cắt con (Rule 2)", "prune_children")
+        combo.addItem("❌ Bỏ cả cụm (Rule 1/4)", "prune_node")
+
+        dialog = getattr(self, "dialog", None) or self.window()
+        act = "none"
+        data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+        node_key = data.get("node_key")
+        if hasattr(dialog, "node_rule_actions") and node_key:
+            act = dialog.node_rule_actions.get(node_key, "none")
+        elif hasattr(dialog, "rule_actions"):
+            clean_name = (data.get("item_name") or "").strip().upper()
+            act = dialog.rule_actions.get(clean_name, "none")
+
+        idx = 0
+        if act == "prune_children":
+            idx = 1
+        elif act == "prune_node":
+            idx = 2
+        combo.setCurrentIndex(idx)
+
+        if hasattr(dialog, "_on_tree_item_action_changed"):
+            combo.currentIndexChanged.connect(
+                lambda index, tree_item=item, c=combo: dialog._on_tree_item_action_changed(tree_item, c.itemData(index))
+            )
+
+        super().setItemWidget(item, col, combo)
+        return combo
+
+    def itemWidget(self, item: QTreeWidgetItem, column: int) -> QWidget | None:
+        if column == 6:
+            return self.get_or_create_action_combo(item, column)
+        return super().itemWidget(item, column)
+
+    def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        if column == 6:
+            combo = self.get_or_create_action_combo(item, column)
+            combo.showPopup()
 
 
 class BOMVisualRuleBuilderDialog(QDialog):
@@ -201,7 +275,8 @@ class BOMVisualRuleBuilderDialog(QDialog):
         tree_layout.setContentsMargins(8, 8, 8, 8)
         tree_layout.setSpacing(6)
 
-        self.tree_widget = QTreeWidget()
+        self.tree_widget = FastBOMTreeWidget(self)
+        self.tree_widget.dialog = self
         self.tree_widget.setColumnCount(7)
         self.tree_widget.setHeaderLabels([
             "Cấu Trúc BOM & Tên Linh Kiện (Item Name)",
@@ -479,6 +554,11 @@ class BOMVisualRuleBuilderDialog(QDialog):
     def _on_model_changed(self, model_name: str) -> None:
         self.current_model = model_name.strip()
         self.btn_save.setText(f"💾 Lưu Vào Bộ Lọc Cho Model: {self.current_model or 'Chưa chọn'}")
+        if self.raw_tree is not None:
+            self._load_existing_model_rules()
+            self._build_tree_widget()
+            self._expand_to_level_2()
+            self._apply_simulation_preview()
 
     def _on_browse_file(self) -> None:
         """Open file dialog to choose PLM BOM file."""
@@ -495,6 +575,9 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
     def _load_file(self, file_path: Path) -> None:
         """Parse BOM file and populate the tree widget."""
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self.lbl_loaded_file.setText("⏳ Đang nạp và phân tích tệp BOM...")
+        QApplication.processEvents()
         try:
             parser = BOMTreeParser()
             self.raw_tree = parser.parse_file(file_path)
@@ -519,6 +602,8 @@ class BOMVisualRuleBuilderDialog(QDialog):
         except Exception as ex:
             logger.error("Error loading BOM tree from %s: %s", file_path, ex)
             QMessageBox.critical(self, "Lỗi nạp BOM", f"Không thể phân tích cây BOM từ tệp:\n{ex}")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def _load_existing_model_rules(self) -> None:
         """Load any existing rules for current model to pre-select them on the tree."""
@@ -526,78 +611,115 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.configured_nodes.clear()
         self.rule_actions.clear()
         self.existing_model_rules = []
+        self._rule_lookup_branch_code: dict[tuple[str, str], str] = {}
+        self._rule_lookup_code: dict[str, str] = {}
+        self._rule_lookup_branch_name: dict[tuple[str, str], str] = {}
+        self._rule_lookup_name: dict[str, str] = {}
+        self._rule_substring_rules: list[tuple[str | None, str, str]] = []
+
         if not self.current_model:
             return
 
         self.existing_model_rules = self.filter_manager.get_rules_for_model(self.current_model)
         for r in self.existing_model_rules:
-            if r.item_name:
-                clean_name = r.item_name.strip().upper()
-                r_notes = (r.notes or "").lower()
-                act = "prune_node" if ("loại bỏ cả cụm" in r_notes or "prune_node" in r_notes) else "prune_children"
-                self.rule_actions[clean_name] = act
-                if r.part_code:
-                    self.item_part_codes[clean_name] = r.part_code
-
-    def _find_matching_model_rule_action(self, node: BOMNode, parent_item: QTreeWidgetItem | None = None) -> str | None:
-        """Check if an existing model rule from DB matches this specific node."""
-        if not getattr(self, "existing_model_rules", None):
-            return None
-
-        node_code = (node.item_id or "").strip().upper()
-        node_name = (node.item_name or "").strip().upper()
-        parent_code = None
-        if parent_item:
-            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
-            parent_code = (p_data.get("item_id") or "").strip().upper()
-
-        for r in self.existing_model_rules:
             r_notes = (r.notes or "").lower()
+            act = "prune_node" if ("loại bỏ cả cụm" in r_notes or "prune_node" in r_notes) else "prune_children"
+
+            expected_parent = None
             m = re.search(r"\[branch:\s*([^\]]+)\]", r.notes or "")
             if m:
                 expected_parent = m.group(1).strip().upper()
-                if parent_code != expected_parent:
-                    continue
 
-            # 1. Match by part_code if specified
             if r.part_code and r.part_code.strip():
-                if node_code == r.part_code.strip().upper():
-                    return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
+                clean_code = r.part_code.strip().upper()
+                if expected_parent:
+                    self._rule_lookup_branch_code[(expected_parent, clean_code)] = act
+                else:
+                    self._rule_lookup_code[clean_code] = act
 
-            # 2. Match by item_name (only if valid, not generic "RELEASED" or "(CHƯA ĐẶT TÊN)")
-            elif r.item_name and r.item_name.strip():
-                r_name = r.item_name.strip().upper()
-                if r_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)") and node_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)"):
+            if r.item_name and r.item_name.strip():
+                clean_name = r.item_name.strip().upper()
+                if clean_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)"):
+                    self.rule_actions[clean_name] = act
+                    if r.part_code:
+                        self.item_part_codes[clean_name] = r.part_code
                     mode = (r.match_mode or "Full_name").strip().lower()
-                    if mode == "part_name" and r_name in node_name:
-                        return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
-                    elif r_name == node_name:
-                        return "prune_node" if "loại bỏ cả cụm" in r_notes else "prune_children"
+                    if mode == "part_name":
+                        self._rule_substring_rules.append((expected_parent, clean_name, act))
+                    else:
+                        if expected_parent:
+                            self._rule_lookup_branch_name[(expected_parent, clean_name)] = act
+                        else:
+                            self._rule_lookup_name[clean_name] = act
+
+    def _find_matching_model_rule_action(
+        self,
+        node: BOMNode,
+        parent_item: QTreeWidgetItem | None = None,
+        parent_part_code: str | None = None,
+    ) -> str | None:
+        """Check if an existing model rule from DB matches this specific node (O(1) indexed lookup)."""
+        if not getattr(self, "existing_model_rules", None):
+            return None
+
+        if parent_part_code is None and parent_item is not None:
+            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
+            parent_part_code = p_data.get("item_id")
+
+        node_code = (node.item_id or "").strip().upper()
+        node_name = (node.item_name or "").strip().upper()
+        p_code = parent_part_code.strip().upper() if parent_part_code else None
+
+        # 1. Match by part_code with branch
+        if p_code and node_code and (p_code, node_code) in getattr(self, "_rule_lookup_branch_code", {}):
+            return self._rule_lookup_branch_code[(p_code, node_code)]
+
+        # 2. Match by part_code without branch
+        if node_code and node_code in getattr(self, "_rule_lookup_code", {}):
+            return self._rule_lookup_code[node_code]
+
+        # 3. Match by item_name
+        if node_name and node_name not in ("RELEASED", "(CHƯA ĐẶT TÊN)"):
+            if p_code and (p_code, node_name) in getattr(self, "_rule_lookup_branch_name", {}):
+                return self._rule_lookup_branch_name[(p_code, node_name)]
+            if node_name in getattr(self, "_rule_lookup_name", {}):
+                return self._rule_lookup_name[node_name]
+
+            # 4. Substring match (part_name mode)
+            if getattr(self, "_rule_substring_rules", None):
+                for exp_p, substr, act in self._rule_substring_rules:
+                    if exp_p and p_code != exp_p:
+                        continue
+                    if substr in node_name:
+                        return act
 
         return None
 
     def _build_tree_widget(self) -> None:
-        """Construct QTreeWidgetItem nodes recursively from self.raw_tree."""
+        """Construct QTreeWidgetItem nodes recursively from self.raw_tree in high-performance batch mode."""
         self.tree_widget.clear()
         if not self.raw_tree:
             return
 
         self.tree_widget.setUpdatesEnabled(False)
         try:
+            top_items: list[QTreeWidgetItem] = []
             for root_node in self.raw_tree.roots:
-                self._add_node_to_tree(root_node, parent_item=None, parent_path="")
+                top_items.append(self._create_tree_item(root_node, parent_part_code=None, parent_path=""))
+            self.tree_widget.addTopLevelItems(top_items)
         finally:
             self.tree_widget.setUpdatesEnabled(True)
 
-    def _add_node_to_tree(
+    def _create_tree_item(
         self,
         node: BOMNode,
-        parent_item: QTreeWidgetItem | None = None,
+        parent_part_code: str | None = None,
         parent_path: str = "",
     ) -> QTreeWidgetItem:
-        """Create a tree item for node and recurse for children."""
+        """Create a tree item for node, match rules, set text, and recurse for children."""
         item = QTreeWidgetItem()
-        item.setText(0, node.item_name or "(Chưa đặt tên)")
+        item_display_name = node.item_name or node.item_id or "(Chưa đặt tên)"
+        item.setText(0, item_display_name)
         item.setText(1, f"L{node.level}")
         item.setText(2, node.item_id or "")
         item.setText(3, getattr(node, "revision", "") or "")
@@ -612,10 +734,6 @@ class BOMVisualRuleBuilderDialog(QDialog):
         item.setTextAlignment(5, Qt.AlignmentFlag.AlignCenter)
 
         # Unique branch/node identifier
-        parent_part_code = None
-        if parent_item:
-            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
-            parent_part_code = p_data.get("item_id")
         node_key = f"{parent_path}/{node.item_id}_r{node.row_index or id(node)}"
         current_path = f"{parent_path}/{node.item_id}" if parent_path else (node.item_id or "")
 
@@ -623,7 +741,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         item.setData(0, Qt.ItemDataRole.UserRole, {
             "node_key": node_key,
             "level": node.level,
-            "item_name": node.item_name,
+            "item_name": node.item_name or node.item_id or "",
             "item_id": node.item_id,
             "has_children": node.has_children,
             "row_index": node.row_index,
@@ -637,15 +755,10 @@ class BOMVisualRuleBuilderDialog(QDialog):
             if clean_name not in self.item_part_codes or not self.item_part_codes[clean_name]:
                 self.item_part_codes[clean_name] = node.item_id
 
-        if parent_item:
-            parent_item.addChild(item)
-        else:
-            self.tree_widget.addTopLevelItem(item)
-
         # Check existing action
         current_action = self.node_rule_actions.get(node_key)
         if not current_action:
-            current_action = self._find_matching_model_rule_action(node, parent_item)
+            current_action = self._find_matching_model_rule_action(node, parent_part_code=parent_part_code)
             if current_action:
                 self.node_rule_actions[node_key] = current_action
                 self.configured_nodes[node_key] = {
@@ -661,29 +774,36 @@ class BOMVisualRuleBuilderDialog(QDialog):
                     self.rule_actions[clean_name] = current_action
                     self.item_part_codes[clean_name] = node.item_id
 
-        # Cell Widget: Filter Action ComboBox
-        action_combo = QComboBox()
-        action_combo.addItem("— Bình thường (Giữ)", "none")
-        action_combo.addItem("✂️ Cắt con (Rule 2)", "prune_children")
-        action_combo.addItem("❌ Bỏ cả cụm (Rule 1/4)", "prune_node")
-
-        idx = 0
-        if current_action == "prune_children":
-            idx = 1
-        elif current_action == "prune_node":
-            idx = 2
-        action_combo.setCurrentIndex(idx)
-
-        # Connect action change targeting ONLY this specific tree item!
-        action_combo.currentIndexChanged.connect(
-            lambda index, tree_item=item, combo=action_combo: self._on_tree_item_action_changed(tree_item, combo.itemData(index))
-        )
-        self.tree_widget.setItemWidget(item, 6, action_combo)
+        # Display filter action text in column 6
+        act_text = ACTION_DISPLAY_TEXT.get(current_action or "none", ACTION_DISPLAY_TEXT["none"])
+        item.setText(6, act_text)
+        item.setTextAlignment(6, Qt.AlignmentFlag.AlignCenter)
 
         # Recurse for children
+        my_part_code = node.item_id
         for child in node.children:
-            self._add_node_to_tree(child, parent_item=item, parent_path=current_path)
+            child_item = self._create_tree_item(child, parent_part_code=my_part_code, parent_path=current_path)
+            item.addChild(child_item)
 
+        return item
+
+    def _add_node_to_tree(
+        self,
+        node: BOMNode,
+        parent_item: QTreeWidgetItem | None = None,
+        parent_path: str = "",
+    ) -> QTreeWidgetItem:
+        """Create a tree item for node and recurse for children (backward-compatible API)."""
+        parent_part_code = None
+        if parent_item:
+            p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
+            parent_part_code = p_data.get("item_id")
+
+        item = self._create_tree_item(node, parent_part_code=parent_part_code, parent_path=parent_path)
+        if parent_item:
+            parent_item.addChild(item)
+        else:
+            self.tree_widget.addTopLevelItem(item)
         return item
 
     def _on_tree_item_action_changed(self, item: QTreeWidgetItem, new_action: str) -> None:
@@ -719,6 +839,10 @@ class BOMVisualRuleBuilderDialog(QDialog):
                 self.rule_actions[clean_name] = new_action
                 self.item_part_codes[clean_name] = data.get("item_id")
 
+        # Update text in column 6
+        act_text = ACTION_DISPLAY_TEXT.get(new_action, ACTION_DISPLAY_TEXT["none"])
+        item.setText(6, act_text)
+
         # Re-run simulation preview & stats (without affecting other branches)
         self._apply_simulation_preview()
 
@@ -739,6 +863,8 @@ class BOMVisualRuleBuilderDialog(QDialog):
         elif new_action == "prune_node":
             target_idx = 2
 
+        act_text = ACTION_DISPLAY_TEXT.get(new_action, ACTION_DISPLAY_TEXT["none"])
+
         def visit(item: QTreeWidgetItem) -> None:
             data = item.data(0, Qt.ItemDataRole.UserRole) or {}
             n_name = (data.get("item_name") or "").strip().upper()
@@ -758,11 +884,12 @@ class BOMVisualRuleBuilderDialog(QDialog):
                         "tree_item": item,
                     }
                     self.item_part_codes[clean_name] = data.get("item_id")
-                combo = self.tree_widget.itemWidget(item, 6)
-                if isinstance(combo, QComboBox) and combo.currentIndex() != target_idx:
-                    combo.blockSignals(True)
-                    combo.setCurrentIndex(target_idx)
-                    combo.blockSignals(False)
+                item.setText(6, act_text)
+                raw_combo = super(FastBOMTreeWidget, self.tree_widget).itemWidget(item, 6)
+                if isinstance(raw_combo, QComboBox) and raw_combo.currentIndex() != target_idx:
+                    raw_combo.blockSignals(True)
+                    raw_combo.setCurrentIndex(target_idx)
+                    raw_combo.blockSignals(False)
             for i in range(item.childCount()):
                 visit(item.child(i))
 
@@ -780,56 +907,75 @@ class BOMVisualRuleBuilderDialog(QDialog):
         total_nodes = 0
         surviving_nodes = 0
 
-        def traverse(item: QTreeWidgetItem, ancestor_action: str | None) -> None:
-            nonlocal total_nodes, surviving_nodes
-            total_nodes += 1
+        self.tree_widget.setUpdatesEnabled(False)
+        try:
+            def traverse(item: QTreeWidgetItem, ancestor_action: str | None) -> None:
+                nonlocal total_nodes, surviving_nodes
+                total_nodes += 1
 
-            data = item.data(0, Qt.ItemDataRole.UserRole) or {}
-            node_key = data.get("node_key", "")
-            node_action = self.node_rule_actions.get(node_key, "none")
-            if node_action == "none" and not self.node_rule_actions:
-                # Fallback to rule_actions if node_rule_actions is empty (e.g. programmatic test call before tree populated)
-                clean_name = (data.get("item_name") or "").strip().upper()
-                node_action = self.rule_actions.get(clean_name, "none")
+                data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+                node_key = data.get("node_key", "")
+                node_action = self.node_rule_actions.get(node_key, "none")
+                if node_action == "none" and not self.node_rule_actions:
+                    # Fallback to rule_actions if node_rule_actions is empty (e.g. programmatic test call before tree populated)
+                    clean_name = (data.get("item_name") or "").strip().upper()
+                    node_action = self.rule_actions.get(clean_name, "none")
 
-            # Determine effective action on this node
-            # If an ancestor in THIS branch is 'prune_node' or 'prune_children', this child is pruned!
-            is_pruned = False
-            if ancestor_action in ("prune_node", "prune_children"):
-                is_pruned = True
-            elif node_action == "prune_node":
-                is_pruned = True
-
-            if not is_pruned:
-                surviving_nodes += 1
-
-            # Visual representation
-            if not preview_enabled:
-                item.setHidden(False)
-                self._reset_item_visuals(item)
-            elif is_pruned:
-                if hide_pruned:
-                    item.setHidden(True)
-                else:
-                    item.setHidden(False)
-                    self._set_item_dimmed(item)
-            else:
-                item.setHidden(False)
-                if node_action == "prune_children":
-                    self._set_item_rule2_highlight(item)
+                # Determine effective action on this node
+                # If an ancestor in THIS branch is 'prune_node' or 'prune_children', this child is pruned!
+                is_pruned = False
+                if ancestor_action in ("prune_node", "prune_children"):
+                    is_pruned = True
                 elif node_action == "prune_node":
-                    self._set_item_rule1_highlight(item)
+                    is_pruned = True
+
+                if not is_pruned:
+                    surviving_nodes += 1
+
+                # Visual state determination
+                if not preview_enabled:
+                    target_state = "normal"
+                elif is_pruned:
+                    target_state = "hidden" if hide_pruned else "dimmed"
                 else:
-                    self._reset_item_visuals(item)
+                    if node_action == "prune_children":
+                        target_state = "rule2"
+                    elif node_action == "prune_node":
+                        target_state = "rule1"
+                    else:
+                        target_state = "normal"
 
-            # Recurse to children with updated ancestor state
-            # ONLY children of this specific node inherit this node's pruning action!
-            next_ancestor = node_action if node_action in ("prune_node", "prune_children") else ancestor_action
-            for c_idx in range(item.childCount()):
-                traverse(item.child(c_idx), next_ancestor)
+                current_state = getattr(item, "_visual_state", None)
+                if current_state != target_state:
+                    item._visual_state = target_state
+                    if target_state == "hidden":
+                        item.setHidden(True)
+                    elif target_state == "dimmed":
+                        if item.isHidden():
+                            item.setHidden(False)
+                        self._set_item_dimmed(item)
+                    elif target_state == "rule2":
+                        if item.isHidden():
+                            item.setHidden(False)
+                        self._set_item_rule2_highlight(item)
+                    elif target_state == "rule1":
+                        if item.isHidden():
+                            item.setHidden(False)
+                        self._set_item_rule1_highlight(item)
+                    else:  # normal
+                        if item.isHidden():
+                            item.setHidden(False)
+                        self._reset_item_visuals(item)
 
-        for top_idx in range(self.tree_widget.topLevelItemCount()):
-            traverse(self.tree_widget.topLevelItem(top_idx), None)
+                # Recurse to children with updated ancestor state
+                next_ancestor = node_action if node_action in ("prune_node", "prune_children") else ancestor_action
+                for c_idx in range(item.childCount()):
+                    traverse(item.child(c_idx), next_ancestor)
+
+            for top_idx in range(self.tree_widget.topLevelItemCount()):
+                traverse(self.tree_widget.topLevelItem(top_idx), None)
+        finally:
+            self.tree_widget.setUpdatesEnabled(True)
 
         # Update KPI statistics
         self.lbl_stats_total.setText(f"Tổng linh kiện: {total_nodes:,}")
@@ -842,92 +988,143 @@ class BOMVisualRuleBuilderDialog(QDialog):
         rule_count = len(self.node_rule_actions) if self.node_rule_actions else len(self.rule_actions)
         self.lbl_stats_rules.setText(f"Quy tắc đã chọn: {rule_count} quy tắc")
 
+    def _get_style_resources(self) -> dict[str, Any]:
+        """Cache QBrush and QFont objects to avoid tens of thousands of allocations per styling pass."""
+        is_dark = get_theme_manager().is_dark()
+        cache = getattr(self, "_style_cache", None)
+        if cache and cache.get("is_dark") == is_dark:
+            return cache
+
+        font_normal = self.font()
+        font_strike = QFont(font_normal)
+        font_strike.setStrikeOut(True)
+
+        res = {
+            "is_dark": is_dark,
+            "font_normal": font_normal,
+            "font_strike": font_strike,
+            "trans_bg": QBrush(QColor(0, 0, 0, 0)),
+            "normal_fg": QBrush(QColor("#F1F5F9" if is_dark else "#0F172A")),
+            "dimmed_fg": QBrush(QColor("#64748B" if is_dark else "#94A3B8")),
+            "rule2_bg": QBrush(QColor("#451A03" if is_dark else "#FEF3C7")),
+            "rule2_fg": QBrush(QColor("#FBBF24" if is_dark else "#D97706")),
+            "rule1_bg": QBrush(QColor("#450A0A" if is_dark else "#FEE2E2")),
+            "rule1_fg": QBrush(QColor("#F87171" if is_dark else "#EF4444")),
+        }
+        self._style_cache = res
+        return res
+
     def _reset_item_visuals(self, item: QTreeWidgetItem) -> None:
         """Reset font and background colors to normal."""
-        is_dark = get_theme_manager().is_dark()
-        font = item.font(0)
-        font.setStrikeOut(False)
+        res = self._get_style_resources()
+        font = res["font_normal"]
+        bg = res["trans_bg"]
+        fg = res["normal_fg"]
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor(0, 0, 0, 0))
-            item.setForeground(col, QColor("#F1F5F9" if is_dark else "#0F172A"))
+            item.setBackground(col, bg)
+            item.setForeground(col, fg)
 
     def _set_item_dimmed(self, item: QTreeWidgetItem) -> None:
         """Dim node and strikethrough font to show it is eliminated in the output."""
-        is_dark = get_theme_manager().is_dark()
-        font = item.font(0)
-        font.setStrikeOut(True)
+        res = self._get_style_resources()
+        font = res["font_strike"]
+        bg = res["trans_bg"]
+        fg = res["dimmed_fg"]
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor(0, 0, 0, 0))
-            item.setForeground(col, QColor("#64748B" if is_dark else "#94A3B8"))
+            item.setBackground(col, bg)
+            item.setForeground(col, fg)
 
     def _set_item_rule2_highlight(self, item: QTreeWidgetItem) -> None:
         """Highlight Rule 2 assembly (kept, but its children pruned)."""
-        is_dark = get_theme_manager().is_dark()
-        font = item.font(0)
-        font.setStrikeOut(False)
+        res = self._get_style_resources()
+        font = res["font_normal"]
+        bg = res["rule2_bg"]
+        fg = res["rule2_fg"]
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor("#451A03" if is_dark else "#FEF3C7"))
-            item.setForeground(col, QColor("#FBBF24" if is_dark else "#D97706"))
+            item.setBackground(col, bg)
+            item.setForeground(col, fg)
 
     def _set_item_rule1_highlight(self, item: QTreeWidgetItem) -> None:
         """Highlight Rule 1/4 assembly (node and children completely deleted)."""
-        is_dark = get_theme_manager().is_dark()
-        font = item.font(0)
-        font.setStrikeOut(True)
+        res = self._get_style_resources()
+        font = res["font_strike"]
+        bg = res["rule1_bg"]
+        fg = res["rule1_fg"]
         for col in range(6):
             item.setFont(col, font)
-            item.setBackground(col, QColor("#450A0A" if is_dark else "#FEE2E2"))
-            item.setForeground(col, QColor("#F87171" if is_dark else "#EF4444"))
+            item.setBackground(col, bg)
+            item.setForeground(col, fg)
 
     def _expand_to_level_2(self) -> None:
         """Expand tree nodes up to level 2, collapsing deeper nodes."""
-        def visit(item: QTreeWidgetItem) -> None:
-            data = item.data(0, Qt.ItemDataRole.UserRole)
-            level = data.get("level", 1) if data else 1
-            if level <= 2:
-                item.setExpanded(True)
-            else:
-                item.setExpanded(False)
-            for i in range(item.childCount()):
-                visit(item.child(i))
+        self.tree_widget.setUpdatesEnabled(False)
+        try:
+            def visit(item: QTreeWidgetItem) -> None:
+                data = item.data(0, Qt.ItemDataRole.UserRole)
+                level = data.get("level", 1) if data else 1
+                if level <= 2:
+                    item.setExpanded(True)
+                    for i in range(item.childCount()):
+                        visit(item.child(i))
+                else:
+                    item.setExpanded(False)
 
-        for i in range(self.tree_widget.topLevelItemCount()):
-            visit(self.tree_widget.topLevelItem(i))
+            for i in range(self.tree_widget.topLevelItemCount()):
+                visit(self.tree_widget.topLevelItem(i))
+        finally:
+            self.tree_widget.setUpdatesEnabled(True)
 
     def _on_search_tree(self, query: str) -> None:
         """Filter / highlight matching nodes on tree."""
         q = query.strip().lower()
         if not q:
+            def restore(item: QTreeWidgetItem) -> None:
+                item._visual_state = None
+                item.setBackground(0, QColor(0, 0, 0, 0))
+                for i in range(item.childCount()):
+                    restore(item.child(i))
+
+            self.tree_widget.setUpdatesEnabled(False)
+            try:
+                for i in range(self.tree_widget.topLevelItemCount()):
+                    restore(self.tree_widget.topLevelItem(i))
+            finally:
+                self.tree_widget.setUpdatesEnabled(True)
+
             self._apply_simulation_preview()
             return
 
-        def visit(item: QTreeWidgetItem) -> bool:
-            name = item.text(0).lower()
-            code = item.text(2).lower()
-            matches = q in name or q in code
+        self.tree_widget.setUpdatesEnabled(False)
+        try:
+            def visit(item: QTreeWidgetItem) -> bool:
+                name = item.text(0).lower()
+                code = item.text(2).lower()
+                matches = q in name or q in code
 
-            child_matches = False
-            for i in range(item.childCount()):
-                if visit(item.child(i)):
-                    child_matches = True
+                child_matches = False
+                for i in range(item.childCount()):
+                    if visit(item.child(i)):
+                        child_matches = True
 
-            should_show = matches or child_matches
-            item.setHidden(not should_show)
-            if should_show and child_matches:
-                item.setExpanded(True)
+                should_show = matches or child_matches
+                item.setHidden(not should_show)
+                if should_show and child_matches:
+                    item.setExpanded(True)
 
-            if matches:
-                item.setBackground(0, QColor("#38BDF844"))
-            else:
-                item.setBackground(0, QColor(0, 0, 0, 0))
+                if matches:
+                    item.setBackground(0, QColor("#38BDF844"))
+                else:
+                    item.setBackground(0, QColor(0, 0, 0, 0))
 
-            return should_show
+                return should_show
 
-        for i in range(self.tree_widget.topLevelItemCount()):
-            visit(self.tree_widget.topLevelItem(i))
+            for i in range(self.tree_widget.topLevelItemCount()):
+                visit(self.tree_widget.topLevelItem(i))
+        finally:
+            self.tree_widget.setUpdatesEnabled(True)
 
     def _on_save_rules(self) -> None:
         """Extract all chosen pruning rules and persist them into SQLite bolocbom_rules."""

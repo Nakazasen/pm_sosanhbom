@@ -290,3 +290,165 @@ class TestBOMVisualRuleBuilderDialog:
         poly_pruned = lsu.children[0]
         assert poly_pruned.item_id == "302FP94010"
         assert len(poly_pruned.children) == 0  # children pruned!
+
+    def test_fast_lazy_combo_creation_and_column_text(self, visual_builder_fixture):
+        """Verify on-demand QComboBox creation and column 6 display text."""
+        from src.gui.bom_visual_builder_dialog import FastBOMTreeWidget, ACTION_DISPLAY_TEXT
+
+        mgr, dlg, sample_file = visual_builder_fixture
+        root0 = dlg.tree_widget.topLevelItem(0)
+
+        # Before calling itemWidget, no heavyweight QComboBox widget was allocated upfront
+        raw_widget = super(FastBOMTreeWidget, dlg.tree_widget).itemWidget(root0, 6)
+        assert raw_widget is None
+        # But text is present in column 6
+        assert root0.text(6) == ACTION_DISPLAY_TEXT["none"]
+
+        # Accessing itemWidget creates it on-demand
+        combo = dlg.tree_widget.itemWidget(root0, 6)
+        assert isinstance(combo, QComboBox)
+        assert combo.currentIndex() == 0
+
+        # Changing index updates column 6 text
+        combo.setCurrentIndex(1)
+        assert root0.text(6) == ACTION_DISPLAY_TEXT["prune_children"]
+
+    def test_large_scale_performance_boost(self, qapp, tmp_path: Path):
+        """Verify 2000-node synthetic BOM builds, styles, and expands in under 1 second."""
+        import time
+        from src.core.models import BOMNode, BOMTree
+
+        # Construct synthetic tree with 2000 nodes (10 roots, each with 199 descendants)
+        roots = []
+        node_id_counter = 1000
+        for r_idx in range(10):
+            root = BOMNode(level=1, item_id=f"ROOT_{r_idx}", item_name=f"ROOT ASSEMBLY {r_idx}", has_children=True)
+            for c_idx in range(10):
+                child = BOMNode(level=2, item_id=f"SUB_{node_id_counter}", item_name=f"SUB ASSY {node_id_counter}", has_children=True)
+                node_id_counter += 1
+                for g_idx in range(18):
+                    leaf = BOMNode(level=3, item_id=f"PART_{node_id_counter}", item_name=f"LEAF PART {node_id_counter}", has_children=False)
+                    node_id_counter += 1
+                    child.add_child(leaf)
+                root.add_child(child)
+            roots.append(root)
+
+        synthetic_tree = BOMTree(roots=roots)
+        assert len(synthetic_tree.flatten()) > 1900
+
+        dlg = BOMVisualRuleBuilderDialog(initial_model="TestModel")
+        try:
+            dlg.raw_tree = synthetic_tree
+            dlg._load_existing_model_rules()
+
+            t0 = time.time()
+            dlg._build_tree_widget()
+            dlg._expand_to_level_2()
+            dlg._apply_simulation_preview()
+            elapsed = time.time() - t0
+
+            # Must build, expand, and simulate thousands of nodes in < 0.8s
+            assert elapsed < 0.8, f"Tree population took too long: {elapsed:.3f}s"
+            assert dlg.tree_widget.topLevelItemCount() == 10
+        finally:
+            dlg.close()
+
+    def test_search_tree_clearing_restores_hidden_nodes(self, visual_builder_fixture):
+        """Verify that clearing search text unhides nodes and clears search highlights."""
+        mgr, dlg, sample_file = visual_builder_fixture
+        root0 = dlg.tree_widget.topLevelItem(0)
+
+        # Before search: root0 is visible
+        assert root0.isHidden() is False
+
+        # Search for non-matching query
+        dlg._on_search_tree("NONEXISTENT_QUERY_12345")
+        assert root0.isHidden() is True
+
+        # Clear search query: root0 must be restored to visible
+        dlg._on_search_tree("")
+        assert root0.isHidden() is False
+
+    def test_model_change_reloads_tree_rules(self, visual_builder_fixture):
+        """Verify that changing model in combo box re-evaluates tree rules on loaded BOM."""
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # Add a rule for AnotherModel
+        mgr.add_rule(
+            model_name="AnotherModel",
+            item_name="LSU UNIT",
+            match_mode="Full_name",
+            notes="Tạo tự động (Cắt con)",
+        )
+
+        # Switch model in dialog
+        dlg.combo_model.setCurrentText("AnotherModel")
+        assert dlg.current_model == "AnotherModel"
+        assert len(dlg.existing_model_rules) == 1
+        assert "Quy tắc đã chọn: 1 quy tắc" in dlg.lbl_stats_rules.text()
+
+    def test_tc_active_workspace_27col_tree_parsing(self, tmp_path: Path):
+        """Verify that 27-column Teamcenter Active Workspace files parse correctly."""
+        from src.core.tree_parser import BOMTreeParser
+        excel_path = tmp_path / "tc_aw_27col.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+
+        headers = [
+            "Level", "ID", "Revision", "Revision Name", "Description", "Reference Designator",
+            "Find Number", "Quantity", "Unit Of Measure", "Date Released", "Release Effectivity",
+            "Owner", "Group ID", "Last Modifying User", "Assembly Indicator", "Part Required",
+            "Is Part Aligned", "Aligned Parts", "Aligned Part Contexts", "Aligned Part Release Status",
+            "Design Required", "Is Design Aligned", "Aligned Designs", "Aligned Design Contexts",
+            "Aligned Design Release Status", "Release Status", "TCUID"
+        ]
+        ws.append(headers)
+        rows = [
+            ["0", "MBC_001", "01", "110C2K2US0", "VIRGO MAIN MACHINE", None, None, None, None, "06-Mar-2024", None, None, None, None, "Fixed Assembly", None, None, None, None, None, None, None, None, None, None, "Released", "uid0"],
+            ["1", "MBC_002", "01", "3VC2KP0020", "SET ASSY ELEMENTS US", None, "10", "1.000", "/Piece", "25-Mar-2024", None, None, None, None, "Fixed Assembly", None, None, None, None, None, None, None, None, None, None, "Released", "uid1"],
+            ["2", "MBC_003", "01", "302XC00243", None, None, "30", "1.000", "/Piece", "27-Jul-2023", None, None, None, None, "Fixed Assembly", None, None, None, None, None, None, None, None, None, None, "Released", "uid2"],
+        ]
+        for r in rows:
+            ws.append(r)
+        wb.save(excel_path)
+        wb.close()
+
+        parser = BOMTreeParser()
+        tree = parser.parse_file(excel_path)
+        assert len(tree.roots) == 1
+        root = tree.roots[0]
+        assert root.item_id == "110C2K2US0"
+        assert root.item_name == "VIRGO MAIN MACHINE"
+        assert root.level == 0
+        assert len(root.children) == 1
+
+        child = root.children[0]
+        assert child.item_id == "3VC2KP0020"
+        assert child.item_name == "SET ASSY ELEMENTS US"
+        assert child.level == 1
+        assert len(child.children) == 1
+
+        subchild = child.children[0]
+        assert subchild.item_id == "302XC00243"
+        assert subchild.level == 2
+
+    def test_fast_tree_widget_keyboard_popup(self, qapp):
+        """Verify Space and Return keys invoke action popup on selected tree item."""
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtWidgets import QTreeWidgetItem
+        from src.gui.bom_visual_builder_dialog import FastBOMTreeWidget
+
+        tree = FastBOMTreeWidget()
+        item = QTreeWidgetItem(["Item 1", "L1", "P001", "01", "1", "No", "— Bình thường (Giữ)"])
+        item.setData(0, Qt.ItemDataRole.UserRole, {"node_key": "k1", "item_name": "Item 1", "item_id": "P001"})
+        tree.addTopLevelItem(item)
+        tree.setCurrentItem(item)
+
+        # Trigger Space key
+        key_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier)
+        tree.keyPressEvent(key_event)
+
+        combo = tree.itemWidget(item, 6)
+        assert isinstance(combo, QComboBox)
+
