@@ -894,8 +894,24 @@ class BOMVisualRuleBuilderDialog(QDialog):
             parser = BOMTreeParser()
             self.raw_tree = parser.parse_file(file_path)
             self.file_path = file_path
-            self.lbl_loaded_file.setText(f"📁 {file_path.name}")
-            self.lbl_loaded_file.setToolTip(str(file_path))
+
+            # Check if BOM has part names
+            all_nodes = self.raw_tree.get_all_nodes() if hasattr(self.raw_tree, "get_all_nodes") else []
+            has_names = any(
+                bool(n.item_name and n.item_name.strip().upper() != (n.item_id or "").strip().upper())
+                for n in all_nodes
+            )
+            if not has_names and all_nodes:
+                self.lbl_loaded_file.setText(f"📁 {file_path.name} ⚠️ (Thiếu cột Parts Text)")
+                self.lbl_loaded_file.setToolTip(
+                    f"{file_path}\n"
+                    f"⚠️ Tệp BOM này chưa có cột 'Parts Text' (Tên linh kiện) từ Teamcenter PLM.\n"
+                    f"Tên linh kiện đang tạm lấy theo mã. Để hiển thị đầy đủ tên mô tả tiếng Anh,\n"
+                    f"vui lòng xuất lại trên Teamcenter với cấu hình cột 'KTCT_Trong'."
+                )
+            else:
+                self.lbl_loaded_file.setText(f"📁 {file_path.name}")
+                self.lbl_loaded_file.setToolTip(str(file_path))
 
             # Auto-detect model if empty
             if not self.current_model:
@@ -1034,7 +1050,32 @@ class BOMVisualRuleBuilderDialog(QDialog):
     ) -> QTreeWidgetItem:
         """Create a tree item for node, match rules, set text, and recurse for children."""
         item = QTreeWidgetItem()
-        item_display_name = node.item_name or node.item_id or "(Chưa đặt tên)"
+        item_name = (node.item_name or "").strip()
+        item_id = (node.item_id or "").strip()
+
+        # If item_name exists and is distinct from item_id, use it
+        if item_name and item_name.upper() != item_id.upper():
+            item_display_name = item_name
+        else:
+            # Fallback when BOM export lacks 'Parts Text' description in PLM export
+            mach_info = (
+                self._machine_dict.extract_and_lookup_material(item_id)
+                if (node.level == 0 and hasattr(self, "_machine_dict"))
+                else None
+            )
+            if mach_info and mach_info.machine_name:
+                item_display_name = f"{item_id} [{mach_info.machine_name}] (Chưa có tên PLM)"
+            elif item_id:
+                item_display_name = f"{item_id} (Chưa có tên PLM)"
+            else:
+                item_display_name = "(Chưa đặt tên)"
+            item.setToolTip(
+                0,
+                f"Mã linh kiện: {item_id or 'N/A'}\n"
+                f"⚠️ Tệp BOM này chưa có cột 'Parts Text' (Tên linh kiện) từ Teamcenter PLM.\n"
+                f"Vui lòng xuất trên Teamcenter với cấu hình cột 'KTCT_Trong' để có đầy đủ tên mô tả tiếng Anh.",
+            )
+
         item.setText(0, item_display_name)
         item.setText(1, f"L{node.level}")
         item.setText(2, node.item_id or "")
@@ -1071,6 +1112,10 @@ class BOMVisualRuleBuilderDialog(QDialog):
             clean_name = node.item_name.strip().upper()
             if clean_name not in self.item_part_codes or not self.item_part_codes[clean_name]:
                 self.item_part_codes[clean_name] = node.item_id
+        elif node.item_id:
+            clean_id = node.item_id.strip().upper()
+            if clean_id not in self.item_part_codes or not self.item_part_codes[clean_id]:
+                self.item_part_codes[clean_id] = node.item_id
 
         # Check existing action
         current_action = self.node_rule_actions.get(node_key)
