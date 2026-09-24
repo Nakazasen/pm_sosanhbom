@@ -440,12 +440,20 @@ class PCDPlanService:
                             machine_code_4char = c.upper()
                             break
 
-                # 2. Fallback by position (supports both T1/11 prefix and T10/110 prefix)
+                # 2. Extract 4-char machine code by Kyocera standard:
+                # Material code starts with T1 (Trial) or 11 (MP).
+                # 4-char machine code starts from character 3 (index 2: val_mat[2:6]),
+                # e.g., T10C452US0 -> 0C45, 110C3M3AK0 -> 0C3M, T10C0P3NL0 -> 0C0P.
+                # For codes with two zeros like 11002YJNL0, index 3:7 matches 02YJ.
                 if not machine_code_4char:
-                    if len(val_mat) >= 7 and (val_mat.startswith("110") or val_mat.startswith("T10")):
-                        machine_code_4char = val_mat[3:7]
-                    elif len(val_mat) >= 6:
-                        machine_code_4char = val_mat[2:6]
+                    c2 = val_mat[2:6] if len(val_mat) >= 6 else ""
+                    c3 = val_mat[3:7] if len(val_mat) >= 7 else ""
+                    if c2.startswith(("0C", "02", "03")):
+                        machine_code_4char = c2
+                    elif c3.startswith(("0C", "02", "03")):
+                        machine_code_4char = c3
+                    elif c2:
+                        machine_code_4char = c2
 
                 item = PCDPlanItem(
                     material_code=val_mat,
