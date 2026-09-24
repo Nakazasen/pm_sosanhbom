@@ -452,3 +452,308 @@ class TestBOMVisualRuleBuilderDialog:
         combo = tree.itemWidget(item, 6)
         assert isinstance(combo, QComboBox)
 
+    def test_search_by_level_variations(self, visual_builder_fixture):
+        """Verify search box supports L1, L2, cấp 1, cấp 2, level 2, and combined level+keyword."""
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # Search 'L1'
+        dlg._on_search_tree("L1")
+        assert len(dlg._search_matching_items) == 3
+        names_l1 = {it.text(0) for it in dlg._search_matching_items}
+        assert "LSU UNIT" in names_l1
+        assert "FUSER UNIT" in names_l1
+
+        # Search 'L2'
+        dlg._on_search_tree("L2")
+        assert len(dlg._search_matching_items) >= 2
+        for it in dlg._search_matching_items:
+            assert it.text(1) == "L2"
+
+        # Search 'cấp 2'
+        dlg._on_search_tree("cấp 2")
+        assert len(dlg._search_matching_items) >= 2
+        for it in dlg._search_matching_items:
+            assert it.text(1) == "L2"
+
+        # Search 'cap 1' (unaccented Vietnamese)
+        dlg._on_search_tree("cap 1")
+        assert len(dlg._search_matching_items) == 3
+
+        # Search 'level 2'
+        dlg._on_search_tree("level 2")
+        assert len(dlg._search_matching_items) >= 2
+
+        # Combined level + keyword: 'L2 POLYGON'
+        dlg._on_search_tree("L2 POLYGON")
+        assert len(dlg._search_matching_items) == 1
+        assert dlg._search_matching_items[0].text(0) == "POLYGON MOTOR ASSY"
+
+    def test_search_phantom_and_has_children(self, visual_builder_fixture):
+        """Verify search box supports #phantom, phantom, #has_children, có con, and không con."""
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # '#phantom'
+        dlg._on_search_tree("#phantom")
+        assert len(dlg._search_matching_items) > 0
+        for it in dlg._search_matching_items:
+            data = it.data(0, Qt.ItemDataRole.UserRole)
+            assert data.get("has_children") is True or "phantom" in it.text(0).lower()
+
+        # 'có con' (Vietnamese for has children)
+        dlg._on_search_tree("có con")
+        assert len(dlg._search_matching_items) > 0
+        for it in dlg._search_matching_items:
+            assert it.text(5) == "Có"
+
+        # 'không con' (Vietnamese for leaf nodes)
+        dlg._on_search_tree("không con")
+        assert len(dlg._search_matching_items) > 0
+        for it in dlg._search_matching_items:
+            assert it.text(5) == "Không"
+
+    def test_search_by_rule_action(self, visual_builder_fixture):
+        """Verify search box matches configured rule actions like cắt con, bỏ cả cụm, đã chọn."""
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # Configure 2 rules
+        dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
+        dlg._on_action_changed("FUSER UNIT", "prune_node")
+
+        # Search 'cắt con'
+        dlg._on_search_tree("cắt con")
+        assert len(dlg._search_matching_items) == 1
+        assert dlg._search_matching_items[0].text(0) == "POLYGON MOTOR ASSY"
+
+        # Search 'bỏ cả cụm'
+        dlg._on_search_tree("bỏ cả cụm")
+        assert len(dlg._search_matching_items) == 1
+        assert dlg._search_matching_items[0].text(0) == "FUSER UNIT"
+
+        # Search 'đã chọn'
+        dlg._on_search_tree("đã chọn")
+        assert len(dlg._search_matching_items) == 2
+        names = {it.text(0) for it in dlg._search_matching_items}
+        assert names == {"POLYGON MOTOR ASSY", "FUSER UNIT"}
+
+    def test_enter_key_cycles_matches_and_never_triggers_file_browser(self, visual_builder_fixture):
+        """Verify Enter cycles through search matches without opening file browser."""
+        from unittest.mock import MagicMock
+        from PyQt6.QtGui import QKeyEvent
+
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # Verify autoDefault safety
+        assert dlg.btn_load_file.autoDefault() is False
+        assert dlg.btn_load_file.isDefault() is False
+        assert dlg.btn_save.autoDefault() is False
+        assert dlg.btn_save.isDefault() is False
+
+        # Mock _on_browse_file to ensure it is NEVER called
+        browse_mock = MagicMock()
+        dlg._on_browse_file = browse_mock
+
+        # Search for 'ASSY' which has multiple matches
+        dlg.txt_search.setText("ASSY")
+        total_matches = len(dlg._search_matching_items)
+        assert total_matches >= 2
+        assert dlg._search_match_index == 0
+
+        # Press Enter on txt_search
+        dlg.txt_search.setFocus()
+        enter_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        dlg.keyPressEvent(enter_event)
+
+        # Advanced to next match
+        assert dlg._search_match_index == 1
+        # browse_file was NOT called
+        browse_mock.assert_not_called()
+
+        # Press Shift+Enter to cycle backwards
+        shift_enter_event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier
+        )
+        dlg.keyPressEvent(shift_enter_event)
+        assert dlg._search_match_index == 0
+        browse_mock.assert_not_called()
+
+    def test_rule_review_audit_mode_toggle_and_filter(self, visual_builder_fixture):
+        """Verify Rule Review / Audit Mode shows only configured nodes and updates count."""
+        mgr, dlg, sample_file = visual_builder_fixture
+
+        # Initially 0 rules
+        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm đã chọn quy tắc (0)"
+
+        # Set 2 rules
+        dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
+        dlg._on_action_changed("FUSER UNIT", "prune_node")
+        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm đã chọn quy tắc (2)"
+
+        # Enable Review Mode
+        dlg.chk_review_rules.setChecked(True)
+        assert dlg.combo_rule_filter.isEnabled() is True
+
+        root0 = dlg.tree_widget.topLevelItem(0)  # LSU UNIT (ancestor of polygon)
+        polygon = root0.child(0)                 # POLYGON MOTOR ASSY (configured)
+        lens = root0.child(1)                    # F-THETA LENS (unconfigured sibling)
+        root1 = dlg.tree_widget.topLevelItem(1)  # FUSER UNIT (configured)
+        root2 = dlg.tree_widget.topLevelItem(2)  # High voltage (unconfigured root)
+
+        # Polygon and FUSER are visible
+        assert polygon.isHidden() is False
+        assert root1.isHidden() is False
+        # Ancestor LSU UNIT is visible and expanded to reveal polygon
+        assert root0.isHidden() is False
+        assert root0.isExpanded() is True
+        # Unconfigured sibling lens and unconfigured root2 are hidden
+        assert lens.isHidden() is True
+        assert root2.isHidden() is True
+
+        # Filter specifically to "Chỉ Cắt con" (Rule 2)
+        dlg.combo_rule_filter.setCurrentIndex(1)
+        assert polygon.isHidden() is False
+        assert root1.isHidden() is True
+
+        # Filter specifically to "Chỉ Bỏ cả cụm" (Rule 1)
+        dlg.combo_rule_filter.setCurrentIndex(2)
+        assert polygon.isHidden() is True
+        assert root1.isHidden() is False
+
+        # Turn OFF review mode: everything is restored
+        dlg.chk_review_rules.setChecked(False)
+        assert root2.isHidden() is False
+        assert lens.isHidden() is False
+
+    def test_visual_builder_syncs_rules_to_parent_filter_dialog(self, qapp, sample_plm_excel_file: Path, tmp_path: Path):
+        """Verify saving rules from Visual Builder updates parent BOMFilterConfigDialog rules table instantly."""
+        from src.gui.bom_filter_dialog import BOMFilterConfigDialog
+
+        db_path = tmp_path / "sync_test.db"
+        mgr = BOMFilterManager(base_dir=tmp_path, remote_db_path=db_path)
+
+        parent_dlg = BOMFilterConfigDialog(filter_manager=mgr, initial_model="TestModel")
+        try:
+            assert parent_dlg.current_model != "TestModel"
+
+            builder_dlg = BOMVisualRuleBuilderDialog(
+                filter_manager=mgr,
+                initial_model="TestModel",
+                initial_file=sample_plm_excel_file,
+                parent=parent_dlg,
+            )
+            builder_dlg.rules_saved.connect(parent_dlg._on_visual_rules_saved)
+
+            # Configure a rule on the tree
+            builder_dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
+
+            # Save rules with mocked confirmation
+            with patch("PyQt6.QtWidgets.QMessageBox.question", return_value=pytest.importorskip("PyQt6.QtWidgets").QMessageBox.StandardButton.Yes):
+                with patch("PyQt6.QtWidgets.QMessageBox.information"):
+                    builder_dlg._on_save_rules()
+
+            # Verify parent dialog immediately received signal and updated table 2
+            assert parent_dlg.current_model == "TestModel"
+            assert parent_dlg.rules_table.rowCount() == 1
+            assert parent_dlg.rules_table.item(0, 1).text() == "POLYGON MOTOR ASSY"
+            assert "Cắt con" in parent_dlg.rules_table.item(0, 4).text()
+        finally:
+            parent_dlg.close()
+
+    def test_part_code_search_not_hijacked_by_level_regex(self, visual_builder_fixture):
+        """Verify that part codes like L1024-001, L1-MOTOR, or names like CAP 10UF match without false level rejection."""
+        from src.gui.bom_visual_builder_dialog import _node_matches_query
+
+        # Part with L1024-001 at level 2
+        assert _node_matches_query("POLYGON MOTOR", "L1024-001", 2, False, "", "none", "L1024-001") is True
+        # Part with L1-MOTOR at level 2
+        assert _node_matches_query("POLYGON MOTOR", "L1-MOTOR", 2, False, "", "none", "L1-MOTOR") is True
+        # Part with CAP 100UF at level 2
+        assert _node_matches_query("CAP 100UF", "C100", 2, False, "", "none", "CAP 100UF") is True
+        # Cụm ảo synonym matching
+        assert _node_matches_query("CỤM TRỐNG DRUM", "DRUM-01", 2, True, "", "none", "cụm ảo") is True
+        # Bỏ cụm synonym matching
+        assert _node_matches_query("FUSER UNIT", "FU-01", 1, True, "", "prune_node", "bỏ cụm") is True
+
+    def test_enter_key_respects_focused_button_and_does_not_hijack(self, visual_builder_fixture):
+        """Verify that when a button or control is focused, Enter activates that button instead of cycling search."""
+        from PyQt6.QtGui import QKeyEvent
+
+        mgr, dlg, sample_file = visual_builder_fixture
+        dlg.txt_search.setText("ASSY")
+        assert len(dlg._search_matching_items) >= 2
+
+        # 1. Test with btn_expand_l2 (non-modal)
+        expanded_called = False
+        def on_expand():
+            nonlocal expanded_called
+            expanded_called = True
+        dlg.btn_expand_l2.clicked.connect(on_expand)
+
+        dlg.btn_expand_l2.setFocus()
+        enter_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        dlg.keyPressEvent(enter_event)
+        assert expanded_called is True
+
+        # 2. Test with btn_save (with mocked warning)
+        with patch("PyQt6.QtWidgets.QMessageBox.warning") as mock_warn:
+            dlg.btn_save.setFocus()
+            enter_event2 = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+            dlg.keyPressEvent(enter_event2)
+            mock_warn.assert_called_once()
+
+    def test_rule1_preview_styling_active_on_target_node(self, visual_builder_fixture):
+        """Verify that Rule 1 (prune_node) target node receives rule1 styling (_set_item_rule1_highlight), not generic dimmed."""
+        mgr, dlg, sample_file = visual_builder_fixture
+        root1 = dlg.tree_widget.topLevelItem(1)  # FUSER UNIT
+
+        dlg._on_action_changed("FUSER UNIT", "prune_node")
+        assert getattr(root1, "_visual_state", None) == "rule1"
+        assert root1.font(0).strikeOut() is True
+
+    def test_review_mode_allows_child_inspection_when_expanded(self, visual_builder_fixture):
+        """Verify that in review mode, rule nodes start collapsed, but when expanded their children are visible for inspection."""
+        mgr, dlg, sample_file = visual_builder_fixture
+        root0 = dlg.tree_widget.topLevelItem(0)  # LSU UNIT
+        polygon = root0.child(0)                 # POLYGON MOTOR ASSY
+
+        dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
+        dlg.chk_review_rules.setChecked(True)
+
+        # Polygon itself is visible and starts collapsed in review mode
+        assert polygon.isHidden() is False
+        assert polygon.isExpanded() is False
+
+        # Its child (dimmed pruned component) is unhidden so user can inspect upon expansion
+        poly_child = polygon.child(0)
+        assert poly_child.isHidden() is False
+        # And child has dimmed visual state
+        assert getattr(poly_child, "_visual_state", None) == "dimmed"
+
+    def test_save_rules_preserves_external_module_rules(self, visual_builder_fixture):
+        """Verify that saving rules from a sub-BOM preserves existing rules belonging to other modules of the model."""
+        mgr, dlg, sample_file = visual_builder_fixture
+        model = "TestModel"
+
+        # Pre-seed a rule for an unrepresented module (e.g. CASSETTE UNIT not in this BOM file)
+        mgr.add_rule(
+            model_name=model,
+            item_name="PWB CASSETTE ASSY",
+            match_mode="Full_name",
+            part_code="999CASSETTE",
+            notes="Module khác đã tạo trước đó",
+        )
+        dlg.existing_model_rules = mgr.get_rules_for_model(model)
+
+        # Configure rule in current visual session
+        dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
+
+        with patch("PyQt6.QtWidgets.QMessageBox.question", return_value=pytest.importorskip("PyQt6.QtWidgets").QMessageBox.StandardButton.Yes):
+            with patch("PyQt6.QtWidgets.QMessageBox.information"):
+                dlg._on_save_rules()
+
+        # Verify that BOTH the current visual rule AND the external module rule are preserved in DB
+        rules_in_db = mgr.get_rules_for_model(model)
+        names = {r.item_name for r in rules_in_db}
+        assert "POLYGON MOTOR ASSY" in names
+        assert "PWB CASSETTE ASSY" in names
+
+

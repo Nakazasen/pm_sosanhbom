@@ -313,6 +313,10 @@ class BOMFilterConfigDialog(QDialog):
 
         main_layout.addWidget(self.bottom_frame, 0)
 
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+
     def _apply_theme(self) -> None:
         """Apply theme styling consistent with Kyocera Dark/Light standard."""
         is_dark = get_theme_manager().is_dark()
@@ -526,8 +530,11 @@ class BOMFilterConfigDialog(QDialog):
 
         if selected_row >= 0:
             self.model_list.setCurrentRow(selected_row)
+            self.current_model = models[selected_row]
         elif self.model_list.count() > 0:
             self.model_list.setCurrentRow(0)
+            if models:
+                self.current_model = models[0]
 
     def _filter_model_list(self, query: str) -> None:
         """Filter models in the left list widget."""
@@ -895,6 +902,16 @@ class BOMFilterConfigDialog(QDialog):
             initial_model=self.current_model,
             parent=self,
         )
+        dlg.rules_saved.connect(self._on_visual_rules_saved)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._load_models(select_model=dlg.current_model)
+            target_model = dlg.current_model or self.current_model
+            self.current_model = target_model
+            self._load_models(select_model=target_model)
+            self._refresh_rules_table()
+
+    def _on_visual_rules_saved(self, model_name: str, rule_count: int) -> None:
+        """Handle rules_saved signal emitted by BOMVisualRuleBuilderDialog."""
+        if model_name:
+            self.current_model = model_name
+            self._load_models(select_model=model_name)
             self._refresh_rules_table()

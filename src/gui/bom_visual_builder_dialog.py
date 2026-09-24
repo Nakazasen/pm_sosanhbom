@@ -18,9 +18,10 @@ import logging
 from pathlib import Path
 import re
 from typing import Any
+import unicodedata
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QFont
+from PyQt6.QtGui import QBrush, QColor, QFont, QKeyEvent
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -56,6 +57,184 @@ ACTION_DISPLAY_TEXT: dict[str, str] = {
     "prune_children": "✂️ Cắt con (Rule 2)",
     "prune_node": "❌ Bỏ cả cụm (Rule 1/4)",
 }
+
+
+LEVEL_REGEX = re.compile(
+    r"(?<![a-zA-Z0-9_-])(?:(?:level|lvl|cấp|cap)\s*[:=]?|[lL]\s*[:=]?)\s*([0-9]|1[0-9]|20)(?![a-zA-Z0-9_-])",
+    re.IGNORECASE,
+)
+
+
+def _normalize_vietnamese(text: str) -> str:
+    """Normalize Vietnamese accented text to lowercase unaccented text."""
+    nfkd = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).replace("đ", "d")
+
+
+def _node_matches_query(
+    name: str,
+    code: str,
+    level: int,
+    has_children: bool,
+    item_type: str,
+    action: str,
+    raw_query: str,
+) -> bool:
+    """Evaluate whether a BOM node matches the multi-criteria search query."""
+    q = raw_query.strip().lower()
+    if not q:
+        return True
+
+    # Fast-path 1: Exact part code match
+    clean_code = code.strip().lower()
+    if clean_code and q == clean_code:
+        return True
+
+    # 1. Level matching: e.g. "l1", "l2", "level 2", "lvl 2", "cấp 2", "cap 2", "level: 2"
+    level_match = LEVEL_REGEX.search(q)
+    if level_match:
+        req_level = int(level_match.group(1))
+        # If the level doesn't match, verify that the query isn't an exact part code or name match
+        if level != req_level:
+            if q not in clean_code and q not in name.lower():
+                return False
+        # Remove level pattern from query for subsequent keyword matching
+        q = (q[:level_match.start()] + " " + q[level_match.end():]).strip()
+        if not q:
+            return level == req_level
+
+    # 2. Phantom / Has Children matching
+    is_phantom = (
+        has_children
+        or (item_type.strip().lower() == "phantom")
+        or ("phantom" in name.lower())
+        or ("phantom" in item_type.lower())
+    )
+    phantom_keywords = (
+        "#phantom",
+        "phantom",
+        "#cụm ảo",
+        "cụm ảo",
+        "#cum ao",
+        "cum ao",
+        "#has_children",
+        "has_children",
+        "#có con",
+        "#co con",
+        "có con",
+        "co con",
+        "#cụm",
+        "#cum",
+    )
+    for kw in phantom_keywords:
+        if kw in q:
+            if not is_phantom:
+                return False
+            q = q.replace(kw, " ").strip()
+            if not q:
+                return True
+            break
+
+    # 3. No children matching
+    no_child_keywords = (
+        "#không con",
+        "không con",
+        "#khong con",
+        "khong con",
+        "không có con",
+        "khong co con",
+        "#leaf",
+        "leaf",
+    )
+    for kw in no_child_keywords:
+        if kw in q:
+            if has_children:
+                return False
+            q = q.replace(kw, " ").strip()
+            if not q:
+                return True
+            break
+
+    # 4. Action / Rule status matching
+    rule2_keywords = (
+        "#cắt con",
+        "#cat con",
+        "#cắt",
+        "#cat",
+        "#prune_children",
+        "cắt con",
+        "cat con",
+        "prune_children",
+    )
+    for kw in rule2_keywords:
+        if kw in q:
+            if action != "prune_children":
+                return False
+            q = q.replace(kw, " ").strip()
+            if not q:
+                return True
+            break
+
+    rule1_keywords = (
+        "#bỏ cả cụm",
+        "#bo ca cum",
+        "#bỏ cụm",
+        "#bo cum",
+        "#prune_node",
+        "bỏ cả cụm",
+        "bo ca cum",
+        "bỏ cụm",
+        "bo cum",
+        "prune_node",
+    )
+    for kw in rule1_keywords:
+        if kw in q:
+            if action != "prune_node":
+                return False
+            q = q.replace(kw, " ").strip()
+            if not q:
+                return True
+            break
+
+    any_rule_keywords = (
+        "#rule",
+        "#rules",
+        "#quy tắc",
+        "#quy tac",
+        "#đã chọn",
+        "#da chon",
+        "đã chọn",
+        "da chon",
+        "quy tắc",
+        "quy tac",
+    )
+    for kw in any_rule_keywords:
+        if kw in q:
+            if action not in ("prune_children", "prune_node"):
+                return False
+            q = q.replace(kw, " ").strip()
+            if not q:
+                return True
+            break
+
+    # 5. Remaining keywords matching against (name, code, item_type)
+    name_norm = name.lower()
+    code_norm = clean_code
+    type_norm = item_type.lower()
+    name_no_acc = _normalize_vietnamese(name)
+    tokens = q.split()
+    for tok in tokens:
+        tok_no_acc = _normalize_vietnamese(tok)
+        match_tok = (
+            (tok in name_norm)
+            or (tok in code_norm)
+            or (tok in type_norm)
+            or (tok_no_acc in name_no_acc)
+        )
+        if not match_tok:
+            return False
+
+    return True
 
 
 class FastBOMTreeWidget(QTreeWidget):
@@ -172,6 +351,10 @@ class BOMVisualRuleBuilderDialog(QDialog):
         # Part code mapping: {item_name: part_code}
         self.item_part_codes: dict[str, str | None] = {}
 
+        # Search navigation state
+        self._search_matching_items: list[QTreeWidgetItem] = []
+        self._search_match_index: int = -1
+
         self._init_ui()
         self._apply_theme()
 
@@ -226,47 +409,118 @@ class BOMVisualRuleBuilderDialog(QDialog):
         main_layout.addWidget(self.header_frame, 0)
 
         # 2. Control Toolbar
-        toolbar_group = QGroupBox("1. Thao Tác Nạp Tệp & Điều Khiển Cây BOM")
-        tb_layout = QHBoxLayout(toolbar_group)
-        tb_layout.setContentsMargins(8, 8, 8, 8)
-        tb_layout.setSpacing(8)
+        toolbar_group = QGroupBox("1. Thao Tác Nạp Tệp, Tìm Kiếm & Kiểm Tra Quy Tắc")
+        tb_main_vbox = QVBoxLayout(toolbar_group)
+        tb_main_vbox.setContentsMargins(8, 8, 8, 8)
+        tb_main_vbox.setSpacing(6)
+
+        # Row 1: File loading & level navigation
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(8)
 
         self.btn_load_file = QPushButton("📂 Nạp Tệp BOM PLM Full (.xlsx / .xlsm)")
         self.btn_load_file.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_load_file.setStyleSheet(
             "background-color: #2563EB; color: white; padding: 6px 14px; border-radius: 4px;"
         )
+        self.btn_load_file.setAutoDefault(False)
+        self.btn_load_file.setDefault(False)
         self.btn_load_file.clicked.connect(self._on_browse_file)
-        tb_layout.addWidget(self.btn_load_file)
+        row1_layout.addWidget(self.btn_load_file)
 
         self.lbl_loaded_file = QLabel("Chưa nạp tệp BOM nào")
         self.lbl_loaded_file.setFont(QFont("Calibri", 9, QFont.Weight.Medium))
         self.lbl_loaded_file.setStyleSheet("color: #64748B;")
-        tb_layout.addWidget(self.lbl_loaded_file)
+        row1_layout.addWidget(self.lbl_loaded_file)
 
-        tb_layout.addStretch()
+        row1_layout.addStretch()
 
-        # Tree navigation buttons
         self.btn_expand_l2 = QPushButton("🔽 Cấp 1-2")
         self.btn_expand_l2.setToolTip("Mở rộng các cụm đến Level 2")
+        self.btn_expand_l2.setAutoDefault(False)
+        self.btn_expand_l2.setDefault(False)
         self.btn_expand_l2.clicked.connect(self._expand_to_level_2)
-        tb_layout.addWidget(self.btn_expand_l2)
+        row1_layout.addWidget(self.btn_expand_l2)
 
         self.btn_expand_all = QPushButton("🔽 Mở rộng tất cả")
+        self.btn_expand_all.setAutoDefault(False)
+        self.btn_expand_all.setDefault(False)
         self.btn_expand_all.clicked.connect(lambda: self.tree_widget.expandAll())
-        tb_layout.addWidget(self.btn_expand_all)
+        row1_layout.addWidget(self.btn_expand_all)
 
         self.btn_collapse_all = QPushButton("🔼 Thu gọn tất cả")
+        self.btn_collapse_all.setAutoDefault(False)
+        self.btn_collapse_all.setDefault(False)
         self.btn_collapse_all.clicked.connect(lambda: self.tree_widget.collapseAll())
-        tb_layout.addWidget(self.btn_collapse_all)
+        row1_layout.addWidget(self.btn_collapse_all)
 
-        # Search bar
+        tb_main_vbox.addLayout(row1_layout)
+
+        # Row 2: Audit Review Toggle + Search Bar + Search Navigation
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(8)
+
+        self.chk_review_rules = QCheckBox("📋 Chỉ xem cụm đã chọn quy tắc (0)")
+        self.chk_review_rules.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
+        self.chk_review_rules.setStyleSheet("color: #D97706; font-weight: bold;")
+        self.chk_review_rules.setToolTip(
+            "Bật chế độ rà soát: Chỉ xem các cụm đã chọn quy tắc (Cắt con / Bỏ cả cụm) "
+            "để kiểm tra xem có nhầm lẫn không hoặc điều chỉnh nhanh."
+        )
+        self.chk_review_rules.toggled.connect(self._on_review_mode_toggled)
+        row2_layout.addWidget(self.chk_review_rules)
+
+        self.combo_rule_filter = QComboBox()
+        self.combo_rule_filter.addItem("Tất cả quy tắc (Cắt con & Bỏ cụm)", "all")
+        self.combo_rule_filter.addItem("✂️ Chỉ Cắt con (Rule 2)", "prune_children")
+        self.combo_rule_filter.addItem("❌ Chỉ Bỏ cả cụm (Rule 1/4)", "prune_node")
+        self.combo_rule_filter.setEnabled(False)
+        self.combo_rule_filter.setToolTip("Lọc theo loại quy tắc khi đang ở chế độ xem lại")
+        self.combo_rule_filter.currentIndexChanged.connect(lambda: self._apply_tree_filters())
+        row2_layout.addWidget(self.combo_rule_filter)
+
+        row2_layout.addSpacing(6)
+
         self.txt_search = QLineEdit()
-        self.txt_search.setPlaceholderText("🔍 Tìm tên linh kiện hoặc mã part...")
-        self.txt_search.setMinimumWidth(220)
-        self.txt_search.textChanged.connect(self._on_search_tree)
-        tb_layout.addWidget(self.txt_search)
+        self.txt_search.setPlaceholderText(
+            "🔍 Tìm tên, mã part, cấp (L1, L2, cấp 1...), #phantom, có con, cắt con... (Nhấn Enter để chuyển)"
+        )
+        self.txt_search.setMinimumWidth(320)
+        self.txt_search.textChanged.connect(self._on_search_text_changed)
+        self.txt_search.returnPressed.connect(self._on_search_next)
+        self.txt_search.installEventFilter(self)
+        row2_layout.addWidget(self.txt_search, 1)
 
+        self.btn_search_prev = QPushButton("◀")
+        self.btn_search_prev.setFixedWidth(30)
+        self.btn_search_prev.setToolTip("Kết quả trước (Shift+Enter)")
+        self.btn_search_prev.setAutoDefault(False)
+        self.btn_search_prev.setDefault(False)
+        self.btn_search_prev.clicked.connect(self._on_search_prev)
+        row2_layout.addWidget(self.btn_search_prev)
+
+        self.btn_search_next = QPushButton("▶")
+        self.btn_search_next.setFixedWidth(30)
+        self.btn_search_next.setToolTip("Kết quả kế tiếp (Enter)")
+        self.btn_search_next.setAutoDefault(False)
+        self.btn_search_next.setDefault(False)
+        self.btn_search_next.clicked.connect(self._on_search_next)
+        row2_layout.addWidget(self.btn_search_next)
+
+        self.btn_search_clear = QPushButton("✖")
+        self.btn_search_clear.setFixedWidth(30)
+        self.btn_search_clear.setToolTip("Xóa tìm kiếm")
+        self.btn_search_clear.setAutoDefault(False)
+        self.btn_search_clear.setDefault(False)
+        self.btn_search_clear.clicked.connect(lambda: self.txt_search.clear())
+        row2_layout.addWidget(self.btn_search_clear)
+
+        self.lbl_search_status = QLabel("")
+        self.lbl_search_status.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
+        self.lbl_search_status.setStyleSheet("color: #0284C7;")
+        row2_layout.addWidget(self.lbl_search_status)
+
+        tb_main_vbox.addLayout(row2_layout)
         main_layout.addWidget(toolbar_group, 0)
 
         # 3. Main Tree View
@@ -339,19 +593,75 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
         self.btn_save = QPushButton("💾 Lưu Vào Bộ Lọc Của Model")
         self.btn_save.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_save.setToolTip(
+            "Lưu các cụm đã chọn thành các quy tắc lọc trong 'Danh Sách Quy Tắc Lọc' của Model"
+        )
         self.btn_save.setStyleSheet(
             "background-color: #059669; color: white; padding: 7px 18px; border-radius: 4px;"
         )
+        self.btn_save.setAutoDefault(False)
+        self.btn_save.setDefault(False)
         self.btn_save.clicked.connect(self._on_save_rules)
         bottom_box.addWidget(self.btn_save)
 
         self.btn_close = QPushButton("Đóng")
         self.btn_close.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
         self.btn_close.setStyleSheet("padding: 7px 14px; border-radius: 4px;")
+        self.btn_close.setAutoDefault(False)
+        self.btn_close.setDefault(False)
         self.btn_close.clicked.connect(self.reject)
         bottom_box.addWidget(self.btn_close)
 
         main_layout.addWidget(self.bottom_frame, 0)
+
+        # Prevent all QPushButtons from being triggered automatically on Enter key
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+
+    def eventFilter(self, watched: Any, event: Any) -> bool:
+        """Filter events on search bar to handle Enter / Shift+Enter navigation."""
+        if watched == self.txt_search and event.type() == QKeyEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self._on_search_prev()
+                else:
+                    self._on_search_next()
+                return True
+            elif event.key() == Qt.Key.Key_Escape:
+                if self.txt_search.text():
+                    self.txt_search.clear()
+                    return True
+        return super().eventFilter(watched, event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle dialog-level key press events to avoid unwanted default button triggers."""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            focus = self.focusWidget()
+            if focus == self.txt_search or self.txt_search.hasFocus():
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self._on_search_prev()
+                else:
+                    self._on_search_next()
+                event.accept()
+                return
+            if isinstance(focus, QPushButton):
+                focus.click()
+                event.accept()
+                return
+            if isinstance(focus, QCheckBox):
+                focus.toggle()
+                event.accept()
+                return
+            # Prevent default QDialog accept() on Enter
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_Escape:
+            if self.txt_search.text():
+                self.txt_search.clear()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def _apply_theme(self) -> None:
         """Apply dark/light styling consistent with Kyocera enterprise theme."""
@@ -558,7 +868,9 @@ class BOMVisualRuleBuilderDialog(QDialog):
             self._load_existing_model_rules()
             self._build_tree_widget()
             self._expand_to_level_2()
+            self._update_review_mode_ui()
             self._apply_simulation_preview()
+            self._apply_tree_filters()
 
     def _on_browse_file(self) -> None:
         """Open file dialog to choose PLM BOM file."""
@@ -598,7 +910,9 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
             self._build_tree_widget()
             self._expand_to_level_2()
+            self._update_review_mode_ui()
             self._apply_simulation_preview()
+            self._apply_tree_filters()
         except Exception as ex:
             logger.error("Error loading BOM tree from %s: %s", file_path, ex)
             QMessageBox.critical(self, "Lỗi nạp BOM", f"Không thể phân tích cây BOM từ tệp:\n{ex}")
@@ -651,6 +965,8 @@ class BOMVisualRuleBuilderDialog(QDialog):
                             self._rule_lookup_branch_name[(expected_parent, clean_name)] = act
                         else:
                             self._rule_lookup_name[clean_name] = act
+
+        self._update_review_mode_ui()
 
     def _find_matching_model_rule_action(
         self,
@@ -744,6 +1060,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
             "item_name": node.item_name or node.item_id or "",
             "item_id": node.item_id,
             "has_children": node.has_children,
+            "item_type": getattr(node, "item_type", "") or "",
             "row_index": node.row_index,
             "parent_part_code": parent_part_code,
             "parent_path": parent_path,
@@ -843,8 +1160,12 @@ class BOMVisualRuleBuilderDialog(QDialog):
         act_text = ACTION_DISPLAY_TEXT.get(new_action, ACTION_DISPLAY_TEXT["none"])
         item.setText(6, act_text)
 
-        # Re-run simulation preview & stats (without affecting other branches)
+        # Update review mode UI count
+        self._update_review_mode_ui()
+
+        # Re-run simulation preview & tree filters
         self._apply_simulation_preview()
+        self._apply_tree_filters()
 
     def _on_action_changed(self, item_name: str | None, new_action: str) -> None:
         """Programmatic helper to set action for nodes matching item_name (backward compatibility)."""
@@ -896,10 +1217,14 @@ class BOMVisualRuleBuilderDialog(QDialog):
         for i in range(self.tree_widget.topLevelItemCount()):
             visit(self.tree_widget.topLevelItem(i))
 
-        # Re-run simulation preview & stats
-        self._apply_simulation_preview()
+        # Update review mode UI count
+        self._update_review_mode_ui()
 
-    def _apply_simulation_preview(self) -> None:
+        # Re-run simulation preview & tree filters
+        self._apply_simulation_preview()
+        self._apply_tree_filters()
+
+    def _apply_simulation_preview(self, preserve_hidden: bool = False) -> None:
         """Apply visual styling (highlighting, dimming, or hiding) according to current rule actions."""
         preview_enabled = self.chk_preview.isChecked()
         hide_pruned = self.chk_hide_pruned.isChecked()
@@ -935,15 +1260,14 @@ class BOMVisualRuleBuilderDialog(QDialog):
                 # Visual state determination
                 if not preview_enabled:
                     target_state = "normal"
+                elif node_action == "prune_node":
+                    target_state = "hidden" if hide_pruned else "rule1"
+                elif node_action == "prune_children":
+                    target_state = "rule2"
                 elif is_pruned:
                     target_state = "hidden" if hide_pruned else "dimmed"
                 else:
-                    if node_action == "prune_children":
-                        target_state = "rule2"
-                    elif node_action == "prune_node":
-                        target_state = "rule1"
-                    else:
-                        target_state = "normal"
+                    target_state = "normal"
 
                 current_state = getattr(item, "_visual_state", None)
                 if current_state != target_state:
@@ -951,19 +1275,19 @@ class BOMVisualRuleBuilderDialog(QDialog):
                     if target_state == "hidden":
                         item.setHidden(True)
                     elif target_state == "dimmed":
-                        if item.isHidden():
+                        if not preserve_hidden or not item.isHidden():
                             item.setHidden(False)
                         self._set_item_dimmed(item)
                     elif target_state == "rule2":
-                        if item.isHidden():
+                        if not preserve_hidden or not item.isHidden():
                             item.setHidden(False)
                         self._set_item_rule2_highlight(item)
                     elif target_state == "rule1":
-                        if item.isHidden():
+                        if not preserve_hidden or not item.isHidden():
                             item.setHidden(False)
                         self._set_item_rule1_highlight(item)
                     else:  # normal
-                        if item.isHidden():
+                        if not preserve_hidden or not item.isHidden():
                             item.setHidden(False)
                         self._reset_item_visuals(item)
 
@@ -1077,54 +1401,193 @@ class BOMVisualRuleBuilderDialog(QDialog):
         finally:
             self.tree_widget.setUpdatesEnabled(True)
 
-    def _on_search_tree(self, query: str) -> None:
-        """Filter / highlight matching nodes on tree."""
-        q = query.strip().lower()
-        if not q:
-            def restore(item: QTreeWidgetItem) -> None:
-                item._visual_state = None
-                item.setBackground(0, QColor(0, 0, 0, 0))
-                for i in range(item.childCount()):
-                    restore(item.child(i))
+    def _update_review_mode_ui(self) -> None:
+        """Update review mode checkbox text with current rule count."""
+        count = len(self.configured_nodes) if self.configured_nodes else len(self.rule_actions)
+        self.chk_review_rules.setText(f"📋 Chỉ xem cụm đã chọn quy tắc ({count})")
 
+    def _on_review_mode_toggled(self, checked: bool) -> None:
+        """Handle toggle of review / audit mode."""
+        self.combo_rule_filter.setEnabled(checked)
+        self._apply_tree_filters()
+
+    def _on_search_text_changed(self, text: str) -> None:
+        """Triggered when search input text changes."""
+        self._apply_tree_filters()
+
+    def _on_search_next(self) -> None:
+        """Cycle to next search match in tree."""
+        if not self._search_matching_items:
+            return
+        total = len(self._search_matching_items)
+        self._search_match_index = (self._search_match_index + 1) % total
+        item = self._search_matching_items[self._search_match_index]
+        self.tree_widget.setCurrentItem(item)
+        self.tree_widget.scrollToItem(item)
+        if self.txt_search.text().strip():
+            self.lbl_search_status.setText(f"🔍 {self._search_match_index + 1}/{total} kết quả")
+
+    def _on_search_prev(self) -> None:
+        """Cycle to previous search match in tree."""
+        if not self._search_matching_items:
+            return
+        total = len(self._search_matching_items)
+        self._search_match_index = (self._search_match_index - 1) % total
+        item = self._search_matching_items[self._search_match_index]
+        self.tree_widget.setCurrentItem(item)
+        self.tree_widget.scrollToItem(item)
+        if self.txt_search.text().strip():
+            self.lbl_search_status.setText(f"🔍 {self._search_match_index + 1}/{total} kết quả")
+
+    def _on_search_tree(self, query: str) -> None:
+        """Filter / highlight matching nodes on tree (backward-compatible API)."""
+        if self.txt_search.text() != query:
+            self.txt_search.blockSignals(True)
+            self.txt_search.setText(query)
+            self.txt_search.blockSignals(False)
+        self._apply_tree_filters()
+
+    def _apply_tree_filters(self) -> None:
+        """Filter and highlight tree nodes based on search query and review mode toggle."""
+        query = self.txt_search.text().strip()
+        review_mode = self.chk_review_rules.isChecked()
+        rule_filter_type = self.combo_rule_filter.currentData() if review_mode else "all"
+
+        self._search_matching_items = []
+
+        if not query and not review_mode:
+            # Full normal view
+            self.lbl_search_status.setText("")
+            self._search_match_index = -1
             self.tree_widget.setUpdatesEnabled(False)
             try:
+                def restore(item: QTreeWidgetItem) -> None:
+                    item._visual_state = None
+                    item.setBackground(0, QColor(0, 0, 0, 0))
+                    item.setHidden(False)
+                    for i in range(item.childCount()):
+                        restore(item.child(i))
+
                 for i in range(self.tree_widget.topLevelItemCount()):
                     restore(self.tree_widget.topLevelItem(i))
             finally:
                 self.tree_widget.setUpdatesEnabled(True)
 
-            self._apply_simulation_preview()
+            self._apply_simulation_preview(preserve_hidden=False)
             return
 
         self.tree_widget.setUpdatesEnabled(False)
         try:
-            def visit(item: QTreeWidgetItem) -> bool:
-                name = item.text(0).lower()
-                code = item.text(2).lower()
-                matches = q in name or q in code
+            def visit(item: QTreeWidgetItem, under_rule_node: bool = False) -> tuple[bool, bool]:
+                data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+                node_key = data.get("node_key", "")
+                name = item.text(0)
+                code = item.text(2)
+                level = data.get("level", 1)
+                has_children = data.get("has_children", False)
+                item_type = data.get("item_type", "")
+                action = self.node_rule_actions.get(node_key, "none")
+                if action == "none" and not self.node_rule_actions:
+                    clean_name = (data.get("item_name") or "").strip().upper()
+                    action = self.rule_actions.get(clean_name, "none")
+
+                # Review mode check
+                is_rule_node = False
+                if action != "none":
+                    if rule_filter_type == "all":
+                        is_rule_node = True
+                    elif rule_filter_type == "prune_children" and action == "prune_children":
+                        is_rule_node = True
+                    elif rule_filter_type == "prune_node" and action == "prune_node":
+                        is_rule_node = True
+
+                # Search query check
+                matches_search = True
+                if query:
+                    matches_search = _node_matches_query(
+                        name=name,
+                        code=code,
+                        level=level,
+                        has_children=has_children,
+                        item_type=item_type,
+                        action=action,
+                        raw_query=query,
+                    )
+
+                if review_mode and query:
+                    is_direct_match = is_rule_node and matches_search
+                elif review_mode:
+                    is_direct_match = is_rule_node
+                elif query:
+                    is_direct_match = matches_search
+                else:
+                    is_direct_match = True
+
+                if is_direct_match:
+                    self._search_matching_items.append(item)
 
                 child_matches = False
+                next_under_rule = under_rule_node or is_direct_match
                 for i in range(item.childCount()):
-                    if visit(item.child(i)):
+                    c_matches, _ = visit(item.child(i), under_rule_node=next_under_rule)
+                    if c_matches:
                         child_matches = True
 
-                should_show = matches or child_matches
-                item.setHidden(not should_show)
-                if should_show and child_matches:
-                    item.setExpanded(True)
+                has_or_contains_rule = is_direct_match or child_matches
 
-                if matches:
-                    item.setBackground(0, QColor("#38BDF844"))
+                if review_mode and not query:
+                    should_show = has_or_contains_rule or under_rule_node
+                    item.setHidden(not should_show)
+                    if child_matches:
+                        item.setExpanded(True)
+                    elif is_direct_match and not child_matches:
+                        item.setExpanded(False)
+                else:
+                    should_show = is_direct_match or child_matches
+                    item.setHidden(not should_show)
+                    if should_show and child_matches:
+                        item.setExpanded(True)
+
+                if is_direct_match and query:
+                    item.setBackground(0, QColor("#38BDF855"))
                 else:
                     item.setBackground(0, QColor(0, 0, 0, 0))
 
-                return should_show
+                return has_or_contains_rule, should_show
 
             for i in range(self.tree_widget.topLevelItemCount()):
                 visit(self.tree_widget.topLevelItem(i))
         finally:
             self.tree_widget.setUpdatesEnabled(True)
+
+        total_matches = len(self._search_matching_items)
+        if query:
+            if total_matches > 0:
+                self._search_match_index = 0
+                curr = self._search_matching_items[0]
+                self.tree_widget.setCurrentItem(curr)
+                self.tree_widget.scrollToItem(curr)
+                self.lbl_search_status.setText(f"🔍 1/{total_matches} kết quả")
+            else:
+                self._search_match_index = -1
+                self.lbl_search_status.setText("🔍 0 kết quả")
+        elif review_mode:
+            self.lbl_search_status.setText(f"📋 {total_matches} cụm đã chọn quy tắc")
+            if total_matches > 0:
+                self._search_match_index = 0
+                curr = self._search_matching_items[0]
+                self.tree_widget.setCurrentItem(curr)
+                self.tree_widget.scrollToItem(curr)
+            else:
+                self._search_match_index = -1
+        else:
+            self.lbl_search_status.setText("")
+            self._search_match_index = -1
+
+        self._apply_simulation_preview(preserve_hidden=True)
+        if query:
+            for m_item in self._search_matching_items:
+                m_item.setBackground(0, QColor("#38BDF855"))
 
     def _on_save_rules(self) -> None:
         """Extract all chosen pruning rules and persist them into SQLite bolocbom_rules."""
@@ -1134,22 +1597,35 @@ class BOMVisualRuleBuilderDialog(QDialog):
             self.combo_model.setFocus()
             return
 
-        # Collect rules to save from configured nodes or rule_actions
+        # Collect rules to save from configured nodes or rule_actions (deduplicating identical rules)
         rules_to_save: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, str, str, str]] = set()
+
         if self.configured_nodes:
             for node_key, n_info in self.configured_nodes.items():
                 act = n_info.get("action")
                 if act and act != "none":
-                    rules_to_save.append(n_info)
+                    item_name = (n_info.get("item_name") or "").strip().upper()
+                    part_code = (n_info.get("part_code") or "").strip().upper()
+                    parent_part_code = (n_info.get("parent_part_code") or "").strip().upper()
+                    dedup_key = (item_name, part_code, act, parent_part_code)
+                    if dedup_key not in seen_keys:
+                        seen_keys.add(dedup_key)
+                        rules_to_save.append(n_info)
         elif self.rule_actions:
             for item_name, act in self.rule_actions.items():
                 if act and act != "none":
-                    rules_to_save.append({
-                        "item_name": item_name,
-                        "part_code": self.item_part_codes.get(item_name),
-                        "action": act,
-                        "parent_part_code": None,
-                    })
+                    clean_name = item_name.strip().upper()
+                    part_code = (self.item_part_codes.get(item_name) or "").strip().upper()
+                    dedup_key = (clean_name, part_code, act, "")
+                    if dedup_key not in seen_keys:
+                        seen_keys.add(dedup_key)
+                        rules_to_save.append({
+                            "item_name": item_name,
+                            "part_code": self.item_part_codes.get(item_name),
+                            "action": act,
+                            "parent_part_code": None,
+                        })
 
         if not rules_to_save:
             QMessageBox.warning(
@@ -1162,18 +1638,46 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
         reply = QMessageBox.question(
             self,
-            "Xác nhận lưu bộ lọc",
-            f"Bạn có muốn lưu {len(rules_to_save)} quy tắc lọc vừa chọn vào CSDL cho dòng máy '{model_name}'?\n\n"
-            "Các quy tắc này sẽ được tự động áp dụng khi thực hiện lọc BOM cho model này.",
+            "Xác nhận lưu quy tắc vào bộ lọc Model",
+            f"Bạn có muốn tạo và lưu {len(rules_to_save)} quy tắc lọc vừa chọn vào 'Danh Sách Quy Tắc Lọc' của Model '{model_name}'?\n\n"
+            "Các quy tắc này sẽ trở thành từ khóa bộ lọc chuẩn trong CSDL và tự động áp dụng khi so sánh / lọc BOM của model này.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        # Collect all part codes and names present in the current tree
+        all_tree_codes: set[str] = set()
+        all_tree_names: set[str] = set()
+
+        def collect_tree_parts(item: QTreeWidgetItem) -> None:
+            c = item.text(2).strip().upper()
+            if c:
+                all_tree_codes.add(c)
+            d = item.data(0, Qt.ItemDataRole.UserRole) or {}
+            nm = (d.get("item_name") or item.text(0) or "").strip().upper()
+            if nm:
+                all_tree_names.add(nm)
+            for i in range(item.childCount()):
+                collect_tree_parts(item.child(i))
+
+        for i in range(self.tree_widget.topLevelItemCount()):
+            collect_tree_parts(self.tree_widget.topLevelItem(i))
+
+        # Preserve existing rules from DB that belong to other units not present in this loaded BOM
+        preserved_external_rules: list[Any] = []
+        if getattr(self, "existing_model_rules", None):
+            for r in self.existing_model_rules:
+                r_code = (r.part_code or "").strip().upper()
+                r_name = (r.item_name or "").strip().upper()
+                in_this_tree = (r_code and r_code in all_tree_codes) or (r_name and r_name in all_tree_names)
+                if not in_this_tree:
+                    preserved_external_rules.append(r)
+
         saved_count = 0
         try:
-            # First, delete previous rules for this model to prevent duplicates
+            # Delete previous rules for this model and save the consolidated set
             self.filter_manager.delete_model(model_name)
 
             for r_info in rules_to_save:
@@ -1200,12 +1704,23 @@ class BOMVisualRuleBuilderDialog(QDialog):
                 if rule_id > 0:
                     saved_count += 1
 
+            # Re-save preserved rules from other units/modules of this model
+            for prev_r in preserved_external_rules:
+                mm = prev_r.match_mode.value if hasattr(prev_r.match_mode, "value") else str(prev_r.match_mode or "Full_name")
+                self.filter_manager.add_rule(
+                    model_name=model_name,
+                    item_name=prev_r.item_name,
+                    match_mode=mm,
+                    part_code=prev_r.part_code,
+                    notes=prev_r.notes or "Quy tắc lưu trước đó",
+                )
+
             self.rules_saved.emit(model_name, saved_count)
             QMessageBox.information(
                 self,
                 "Lưu thành công",
                 f"Đã lưu thành công {saved_count} quy tắc lọc vào CSDL cho dòng máy '{model_name}'.\n\n"
-                "Bạn có thể mở cửa sổ 'Quản lý Bộ lọc BOM' để xem bảng danh sách hoặc tinh chỉnh bất kỳ lúc nào.",
+                "Danh sách từ khóa quy tắc đã được đồng bộ vào '2. Danh Sách Quy Tắc Lọc' của Model.",
             )
             self.accept()
         except Exception as ex:
