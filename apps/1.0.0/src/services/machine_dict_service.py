@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -170,12 +171,21 @@ class MachineDictService:
             self.load()
         return dict(self._email_groups)
 
+    def _get_local_settings_path(self) -> Path:
+        cand = Path("config/settings.json")
+        if cand.exists():
+            return cand
+        cand_up = Path("../config/settings.json")
+        if cand_up.exists():
+            return cand_up
+        return Path("config/settings.json")
+
     def get_model_names(self) -> list[str]:
-        """Return sorted list of all unique machine/model names from Excel dictionary.
+        """Return sorted list of all unique machine/model names from Excel dictionary and local config.
 
         Includes all machine models from Column A in file_loaimay_nhommail.xlsx with all
         whitespace removed (e.g. 'Iris 2024' -> 'Iris2024', 'Polaris Next' -> 'PolarisNext'),
-        plus baseline models for complete backward compatibility.
+        plus baseline models and any user-configured custom models from settings.json.
         """
         if not self._is_loaded:
             self.load()
@@ -188,7 +198,75 @@ class MachineDictService:
         legacy_defaults = ["Virgo", "Libra2", "Iris2024", "Sirius2", "Mebius", "Polaris"]
         for leg in legacy_defaults:
             names.add(re.sub(r"\s+", "", leg))
+
+        # Include custom models and project configs from settings.json
+        cfg_path = self._get_local_settings_path()
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                for c in cfg.get("custom_models", []):
+                    cleaned = re.sub(r"\s+", "", str(c).strip())
+                    if cleaned:
+                        names.add(cleaned)
+                for p in cfg.get("project_configs", {}).keys():
+                    cleaned = re.sub(r"\s+", "", str(p).strip())
+                    if cleaned:
+                        names.add(cleaned)
+            except Exception as e:
+                logger.debug("Could not read custom models from %s: %s", cfg_path, e)
+
         return sorted(names, key=lambda s: s.lower())
+
+    def add_model_name(self, model_name: str) -> bool:
+        """Register a new machine model both locally in settings.json and in master Excel if accessible."""
+        cleaned = re.sub(r"\s+", "", model_name.strip())
+        if not cleaned:
+            return False
+
+        # 1. Save to settings.json
+        cfg_path = self._get_local_settings_path()
+        try:
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            custom_models = cfg.get("custom_models", [])
+            if not isinstance(custom_models, list):
+                custom_models = []
+            if cleaned not in custom_models:
+                custom_models.append(cleaned)
+                cfg["custom_models"] = custom_models
+
+                cfg_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = cfg_path.with_suffix(".tmp")
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2, ensure_ascii=False)
+                tmp_path.replace(cfg_path)
+                logger.info("Saved custom model '%s' to %s", cleaned, cfg_path)
+        except Exception as exc:
+            logger.warning("Could not persist custom model to %s: %s", cfg_path, exc)
+
+        # 2. Try to sync to Master Excel if accessible
+        if self.excel_path.exists():
+            try:
+                if not self._is_loaded:
+                    self.load()
+                exists_in_excel = any(m.machine_name.lower() == cleaned.lower() for m in self._machines)
+                if not exists_in_excel:
+                    wb = openpyxl.load_workbook(str(self.excel_path))
+                    sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
+                    ws = wb[sheet_name]
+                    target_row = ws.max_row + 1
+                    ws.cell(row=target_row, column=1, value=cleaned)
+                    wb.save(str(self.excel_path))
+                    wb.close()
+                    logger.info("Synced new model '%s' to master Excel %s", cleaned, self.excel_path)
+                    self.load(force_reload=True)
+            except Exception as e:
+                logger.warning("Could not sync model to master Excel %s: %s", self.excel_path, e)
+
+        return True
 
     def add_or_update_machine_code(
         self,
@@ -198,68 +276,141 @@ class MachineDictService:
         brand_segment: str = "",
         specs: str = "",
     ) -> bool:
-        """2-way write-back: Add a new machine code to file_loaimay_nhommail.xlsx."""
-        if not self.excel_path.exists():
-            logger.error("Dictionary file does not exist for write-back: %s", self.excel_path)
-            return False
-
+        """Add or update a machine code in local configuration and sync to file_loaimay_nhommail.xlsx if accessible."""
         cleaned_code = new_code.strip().upper()
         if not cleaned_code:
             return False
 
-        try:
-            # Backup before writing
-            backup_path = self.excel_path.with_suffix(".xlsx.bak")
-            try:
-                shutil.copy2(str(self.excel_path), str(backup_path))
-            except Exception as e:
-                logger.warning("Could not create backup of dictionary: %s", e)
-
-            wb = openpyxl.load_workbook(str(self.excel_path))
-            sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
-            ws = wb[sheet_name]
-
-            target_row = -1
-            found_existing = False
-
-            # Search if machine_name already exists in Column A
-            clean_search_name = re.sub(r"\s+", "", machine_name).lower()
-            for r_idx in range(2, ws.max_row + 1):
-                val_a = ws.cell(row=r_idx, column=1).value
-                val_b = ws.cell(row=r_idx, column=2).value
-
-                if val_a and re.sub(r"\s+", "", str(val_a)).lower() == clean_search_name:
-                    # If variant is specified, try to match variant as well
-                    if variant and val_b and str(val_b).strip().lower() != variant.strip().lower():
-                        continue
-
-                    target_row = r_idx
-                    found_existing = True
-                    break
-
-            if found_existing:
-                # Append to existing row Column D
-                current_codes_val = ws.cell(row=target_row, column=4).value or ""
-                current_codes = [c.strip().upper() for c in str(current_codes_val).split(";") if c.strip()]
-                if cleaned_code not in current_codes:
-                    current_codes.append(cleaned_code)
-                    ws.cell(row=target_row, column=4, value="; ".join(current_codes))
-            else:
-                # Append a new row at the end with whitespace-free machine name
-                target_row = ws.max_row + 1
-                ws.cell(row=target_row, column=1, value=re.sub(r"\s+", "", machine_name.strip()))
-                ws.cell(row=target_row, column=2, value=variant.strip())
-                ws.cell(row=target_row, column=3, value=brand_segment.strip())
-                ws.cell(row=target_row, column=4, value=cleaned_code)
-                ws.cell(row=target_row, column=5, value=specs.strip())
-
-            wb.save(str(self.excel_path))
-            wb.close()
-            logger.info("Successfully updated machine code %s for machine %s in %s", cleaned_code, machine_name, self.excel_path)
-
-            # Reload internal cache
-            self.load(force_reload=True)
-            return True
-        except Exception as exc:
-            logger.error("Failed to write machine code to %s: %s", self.excel_path, exc)
+        clean_m = re.sub(r"\s+", "", machine_name.strip())
+        if not clean_m:
             return False
+
+        # 1. Persist to local settings.json custom_model_codes (works offline, in tests, or read-only LAN)
+        cfg_path = self._get_local_settings_path()
+        try:
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            custom_model_codes = cfg.get("custom_model_codes", {})
+            if not isinstance(custom_model_codes, dict):
+                custom_model_codes = {}
+            curr_list = custom_model_codes.get(clean_m, [])
+            if not isinstance(curr_list, list):
+                curr_list = []
+            if cleaned_code not in curr_list:
+                curr_list.append(cleaned_code)
+                custom_model_codes[clean_m] = curr_list
+                cfg["custom_model_codes"] = custom_model_codes
+
+                cfg_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = cfg_path.with_suffix(".tmp")
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2, ensure_ascii=False)
+                tmp_path.replace(cfg_path)
+                logger.info("Saved code '%s' for model '%s' to %s", cleaned_code, clean_m, cfg_path)
+        except Exception as exc:
+            logger.warning("Could not persist code to %s: %s", cfg_path, exc)
+
+        # 2. Try 2-way write-back to file_loaimay_nhommail.xlsx if accessible
+        if self.excel_path.exists():
+            try:
+                # Backup before writing
+                backup_path = self.excel_path.with_suffix(".xlsx.bak")
+                try:
+                    shutil.copy2(str(self.excel_path), str(backup_path))
+                except Exception as e:
+                    logger.warning("Could not create backup of dictionary: %s", e)
+
+                wb = openpyxl.load_workbook(str(self.excel_path))
+                sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
+                ws = wb[sheet_name]
+
+                target_row = -1
+                found_existing = False
+
+                # Search if machine_name already exists in Column A
+                clean_search_name = clean_m.lower()
+                for r_idx in range(2, ws.max_row + 1):
+                    val_a = ws.cell(row=r_idx, column=1).value
+                    val_b = ws.cell(row=r_idx, column=2).value
+
+                    if val_a and re.sub(r"\s+", "", str(val_a)).lower() == clean_search_name:
+                        # If variant is specified, try to match variant as well
+                        if variant and val_b and str(val_b).strip().lower() != variant.strip().lower():
+                            continue
+
+                        target_row = r_idx
+                        found_existing = True
+                        break
+
+                if found_existing:
+                    # Append to existing row Column D
+                    current_codes_val = ws.cell(row=target_row, column=4).value or ""
+                    current_codes = [c.strip().upper() for c in str(current_codes_val).split(";") if c.strip()]
+                    if cleaned_code not in current_codes:
+                        current_codes.append(cleaned_code)
+                        ws.cell(row=target_row, column=4, value="; ".join(current_codes))
+                else:
+                    # Append a new row at the end with whitespace-free machine name
+                    target_row = ws.max_row + 1
+                    ws.cell(row=target_row, column=1, value=clean_m)
+                    ws.cell(row=target_row, column=2, value=variant.strip())
+                    ws.cell(row=target_row, column=3, value=brand_segment.strip())
+                    ws.cell(row=target_row, column=4, value=cleaned_code)
+                    ws.cell(row=target_row, column=5, value=specs.strip())
+
+                wb.save(str(self.excel_path))
+                wb.close()
+                logger.info("Successfully updated machine code %s for machine %s in %s", cleaned_code, clean_m, self.excel_path)
+
+                # Reload internal cache
+                self.load(force_reload=True)
+            except Exception as exc:
+                logger.error("Failed to write machine code to %s: %s", self.excel_path, exc)
+        else:
+            logger.debug("Dictionary file does not exist, skipping Excel sync: %s", self.excel_path)
+
+        return True
+
+    def get_machine_codes_for_model(self, model_name: str) -> list[str]:
+        """Return all 4-character machine codes associated with this model."""
+        if not self._is_loaded:
+            self.load()
+        cleaned_search = re.sub(r"\s+", "", model_name.strip()).lower()
+        codes: set[str] = set()
+
+        # 1. From loaded Excel dictionary
+        for m in self._machines:
+            if m.machine_name and re.sub(r"\s+", "", m.machine_name.strip()).lower() == cleaned_search:
+                for c in m.machine_codes:
+                    clean_c = c.strip().upper()
+                    if clean_c:
+                        codes.add(clean_c)
+
+        # 2. From settings.json custom_model_codes
+        cfg_path = self._get_local_settings_path()
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                custom_codes_map = cfg.get("custom_model_codes", {})
+                if isinstance(custom_codes_map, dict):
+                    for k, v in custom_codes_map.items():
+                        if re.sub(r"\s+", "", k.strip()).lower() == cleaned_search:
+                            if isinstance(v, list):
+                                for c in v:
+                                    clean_c = str(c).strip().upper()
+                                    if clean_c:
+                                        codes.add(clean_c)
+            except Exception as e:
+                logger.debug("Could not read custom_model_codes from %s: %s", cfg_path, e)
+
+        return sorted(codes)
+
+    def get_model_info_by_name(self, model_name: str) -> list[MachineInfo]:
+        """Return all MachineInfo entries for this model."""
+        if not self._is_loaded:
+            self.load()
+        cleaned = re.sub(r"\s+", "", model_name.strip()).lower()
+        return [m for m in self._machines if re.sub(r"\s+", "", m.machine_name.strip()).lower() == cleaned]

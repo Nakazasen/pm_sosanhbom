@@ -304,26 +304,65 @@ def is_macro_file(file_path: Path) -> bool:
 
 
 def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
-    """Ensure that the 'KTCT_Trong' column arrangement is selected in the Export panel."""
+    """Ensure that Template is 'Custom' and 'KTCT_Trong' column arrangement is selected.
+
+    Directly implements Slide 6 (BOM-EXPORT-CONFIG-01) from tai_lieu_huong_dan_download_BOM.pptx:
+    - Step 10: Select Template -> 'Custom'
+    - Step 11: Click Column Arrangement button -> Select 'KTCT_Trong'
+    """
     try:
         from selenium.webdriver.common.by import By
+
+        # 1. Step 10: Ensure Template is 'Custom'
+        try:
+            tmpl_containers = panel.find_elements(
+                By.XPATH,
+                ".//*[contains(text(),'Template')]/following::div[contains(@class,'sw-lov-container')][1]"
+                " | .//div[@data-locator='Template']"
+                " | .//input[@placeholder='Template' or @aria-label='Template']/.."
+            )
+            if tmpl_containers:
+                tmpl_input = tmpl_containers[0].find_elements(By.CSS_SELECTOR, "input")
+                curr_val = (tmpl_input[0].get_attribute("value") or tmpl_containers[0].text or "").strip() if tmpl_input else tmpl_containers[0].text.strip()
+                if "Custom" not in curr_val:
+                    tmpl_click = tmpl_input[0] if tmpl_input else tmpl_containers[0]
+                    tmpl_click.click()
+                    time.sleep(1)
+                    custom_opts = driver.find_elements(
+                        By.XPATH,
+                        "//div[contains(@class,'sw-lov')]//li[normalize-space()='Custom' or contains(.,'Custom')]"
+                        " | //div[contains(@class,'aw-popup')]//li[normalize-space()='Custom' or contains(.,'Custom')]"
+                    )
+                    if custom_opts:
+                        custom_opts[0].click()
+                        time.sleep(1.5)
+        except Exception as t_err:
+            logger.debug("Template selection error: %s", t_err)
+
         panel_text = getattr(panel, "text", "")
         if "KTCT_Trong" in panel_text:
             return True
 
+        # 2. Step 11: Click Column Arrangement icon and select KTCT_Trong
         arr_btns = panel.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
         if not arr_btns:
             arr_btns = driver.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
+        if not arr_btns:
+            arr_btns = panel.find_elements(
+                By.XPATH,
+                ".//*[contains(text(),'Arrangement')]/following::button[1]"
+                " | .//button[contains(@title,'Column') or contains(@aria-label,'Column') or contains(@command-id,'Arrange')]"
+            )
         if arr_btns:
             arr_btns[0].click()
             time.sleep(2)
 
             menu_items = driver.find_elements(
                 By.CSS_SELECTOR,
-                "div.aw-popup div.aw-widgets-cellListItem, div.aw-popup li, div.sw-popup li, div.sw-popup div",
+                "div.aw-popup div.aw-widgets-cellListItem, div.aw-popup li, div.sw-popup li, div.sw-popup div, div.sw-popupContent li",
             )
             for m in menu_items:
-                if "KTCT_Trong" in (m.text or ""):
+                if (m.text or "").strip() == "KTCT_Trong" or "KTCT_Trong" in (m.text or ""):
                     m.click()
                     time.sleep(2)
                     return True
@@ -819,10 +858,11 @@ class UnifiedBOMDownloadWorker(QObject):
                                     (By.CSS_SELECTOR, "form.sw-command-panel, div.sw-right-dialog form, form")
                                 )
                             )
-                            if tc_user == "vn_pe02":
-                                has_ktct = ensure_ktct_trong_arrangement(driver, panel, wait)
-                                if has_ktct:
-                                    self.log_message.emit("   [+] Đã áp dụng quy tắc xuất KTCT_Trong (luật của KTCT_Trọng).")
+                            has_ktct = ensure_ktct_trong_arrangement(driver, panel, wait)
+                            if has_ktct:
+                                self.log_message.emit("   [+] Đã áp dụng quy tắc xuất KTCT_Trong (luật của KTCT_Trọng).")
+                            else:
+                                self.log_message.emit("   [-] CẢNH BÁO: Chưa chọn được preset 'KTCT_Trong'. Tệp xuất có thể thiếu cột Parts Text!")
 
                             # Uncheck background for direct download
                             cbs = panel.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")

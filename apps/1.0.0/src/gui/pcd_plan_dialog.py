@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, List, Optional
 
-from PyQt6.QtCore import QDate, Qt, pyqtSignal
+from PyQt6.QtCore import QDate, QObject, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -47,6 +47,32 @@ DEFAULT_MEMBER_TEMPLATE = (
     r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)"
     r"\Hang muc can luu\Vinh\Pm_sosanhBOM\formnguoidung.xlsm"
 )
+
+
+class PCDSharePointDownloadWorker(QThread):
+    """Background worker to download PCD plan from SharePoint Online using headless Edge."""
+
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(Path)
+    error = pyqtSignal(str)
+
+    def __init__(self, year: int, month: int, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self.year = year
+        self.month = month
+
+    def run(self) -> None:
+        try:
+            from src.services.pcd_sharepoint_automation import download_pcd_plan_from_sharepoint
+
+            file_path = download_pcd_plan_from_sharepoint(
+                year=self.year,
+                month=self.month,
+                progress_callback=lambda msg: self.progress.emit(msg),
+            )
+            self.finished.emit(file_path)
+        except Exception as exc:
+            self.error.emit(str(exc))
 
 
 class PCDPlanScanDialog(QDialog):
@@ -123,6 +149,25 @@ class PCDPlanScanDialog(QDialog):
         self.btn_browse_plan.clicked.connect(self._browse_plan_file)
         h_file.addWidget(self.btn_browse_plan)
 
+        self.btn_auto_download = QPushButton("🚀 Tải Tự Động Từ SharePoint")
+        self.btn_auto_download.setToolTip("Tự động điều khiển trình duyệt Edge chạy ngầm kết nối SharePoint PCD, tìm và tải file kế hoạch của tháng được chọn")
+        self.btn_auto_download.setStyleSheet(
+            "QPushButton { background-color: #107C41; color: white; font-weight: bold; padding: 4px 12px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0B5A2F; }"
+            "QPushButton:disabled { background-color: #94A3B8; color: #FFFFFF; }"
+        )
+        self.btn_auto_download.clicked.connect(self._on_auto_download_clicked)
+        h_file.addWidget(self.btn_auto_download)
+
+        self.btn_open_sharepoint = QPushButton("🌐 Mở SharePoint PCD...")
+        self.btn_open_sharepoint.setToolTip("Mở trang web Kế hoạch R3 tổng của phòng Quản lý sản xuất (PCD) trên trình duyệt")
+        self.btn_open_sharepoint.setStyleSheet(
+            "QPushButton { background-color: #0F6CBD; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #115EA3; }"
+        )
+        self.btn_open_sharepoint.clicked.connect(self._on_open_sharepoint_clicked)
+        h_file.addWidget(self.btn_open_sharepoint)
+
         self.btn_scan = QPushButton("Quét Dữ Liệu (Sheet 詳細日程)")
         self.btn_scan.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_scan.setStyleSheet("background-color: #0078D4; color: white; padding: 4px 14px; border-radius: 4px;")
@@ -130,6 +175,27 @@ class PCDPlanScanDialog(QDialog):
         h_file.addWidget(self.btn_scan)
 
         top_layout.addLayout(h_file)
+
+        # Progress and status bar for SharePoint download
+        h_status = QHBoxLayout()
+        self.pbar_download = QProgressBar()
+        self.pbar_download.setRange(0, 0)
+        self.pbar_download.setFixedHeight(12)
+        self.pbar_download.setVisible(False)
+        h_status.addWidget(self.pbar_download, stretch=1)
+
+        self.lbl_download_status = QLabel("")
+        self.lbl_download_status.setStyleSheet("font-size: 11px;")
+        h_status.addWidget(self.lbl_download_status)
+        top_layout.addLayout(h_status)
+
+        lbl_hint = QLabel(
+            "💡 <b>Tự động hóa phòng ban:</b> Bấm <b>'🚀 Tải Tự Động Từ SharePoint'</b> để phần mềm tự động lấy file kế hoạch mới nhất từ SharePoint PCD mà không cần cấu hình thủ công. Hoặc mở SharePoint và bấm <b>'Thêm lối tắt vào OneDrive'</b> để tự đồng bộ về máy."
+        )
+        lbl_hint.setWordWrap(True)
+        lbl_hint.setStyleSheet("color: #94A3B8; font-size: 11px; padding: 2px 4px;")
+        top_layout.addWidget(lbl_hint)
+
         layout.addWidget(top_group)
 
         # 2. Results Table: Detected NEW materials
@@ -245,7 +311,8 @@ class PCDPlanScanDialog(QDialog):
                 self.lbl_file_type.setText("📄 Đã phát hiện tệp kế hoạch")
                 self.lbl_file_type.setStyleSheet("color: #333; font-weight: bold;")
         else:
-            self.lbl_file_type.setText("⚠️ Chưa tìm thấy file tự động trong OneDrive. Vui lòng bấm 'Chọn tệp...'.")
+            self.edit_plan_file.clear()
+            self.lbl_file_type.setText("⚠️ Chưa tìm thấy file kế hoạch cho tháng đang chọn. Vui lòng bấm 'Chọn tệp...'.")
             self.lbl_file_type.setStyleSheet("color: #D32F2F;")
 
     def _browse_plan_file(self) -> None:
@@ -258,6 +325,7 @@ class PCDPlanScanDialog(QDialog):
         )
         if path:
             self.edit_plan_file.setText(path)
+            self._save_pcd_base_dir_to_settings(Path(path))
             if "定期計画後明細計画" in path:
                 self.lbl_file_type.setText("⭐ Ưu tiên: File kế hoạch cuối kỳ (*定期計画後明細計画)")
                 self.lbl_file_type.setStyleSheet("color: #2E7D32; font-weight: bold;")
@@ -267,6 +335,93 @@ class PCDPlanScanDialog(QDialog):
             else:
                 self.lbl_file_type.setText("📄 Đã chọn tệp kế hoạch thủ công")
                 self.lbl_file_type.setStyleSheet("color: #333; font-weight: bold;")
+
+    def _save_pcd_base_dir_to_settings(self, file_path: Path) -> None:
+        """Persist directory of selected plan file to settings.json so next scans find it automatically."""
+        import json
+        try:
+            cfg_path = Path("config/settings.json")
+            if not cfg_path.exists():
+                cfg_path = Path("../config/settings.json")
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            if "paths" not in cfg or not isinstance(cfg["paths"], dict):
+                cfg["paths"] = {}
+            parent_dir = str(file_path.parent)
+            cfg["paths"]["pcd_base_dir"] = parent_dir
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cfg_path.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            tmp.replace(cfg_path)
+            logger.info("Saved custom pcd_base_dir to %s: %s", cfg_path, parent_dir)
+        except Exception as e:
+            logger.debug("Could not save pcd_base_dir to settings: %s", e)
+
+    def _on_auto_download_clicked(self) -> None:
+        """Trigger background browser automation to download plan from SharePoint."""
+        year = self.spin_year.value()
+        month = self.combo_month.currentData()
+
+        self.btn_auto_download.setEnabled(False)
+        self.btn_scan.setEnabled(False)
+        self.btn_browse_plan.setEnabled(False)
+        self.pbar_download.setVisible(True)
+        self.lbl_download_status.setText(f"Đang kết nối SharePoint PCD Tháng {month:02d}/{year}...")
+        self.lbl_download_status.setStyleSheet("color: #0F6CBD; font-weight: bold;")
+
+        self._download_worker = PCDSharePointDownloadWorker(year=year, month=month, parent=self)
+        self._download_worker.progress.connect(self._on_download_progress)
+        self._download_worker.finished.connect(self._on_download_finished)
+        self._download_worker.error.connect(self._on_download_error)
+        self._download_worker.start()
+
+    def _on_download_progress(self, msg: str) -> None:
+        """Update status label with current download step."""
+        clean_msg = msg.replace("[*]", "").replace("[+]", "").strip()
+        self.lbl_download_status.setText(clean_msg)
+
+    def _on_download_finished(self, file_path: Path) -> None:
+        """Handle successful SharePoint download: populate input, save dir, and scan."""
+        self.pbar_download.setVisible(False)
+        self.btn_auto_download.setEnabled(True)
+        self.btn_scan.setEnabled(True)
+        self.btn_browse_plan.setEnabled(True)
+        self.lbl_download_status.setText(f"✓ Đã tải xong: {file_path.name}")
+        self.lbl_download_status.setStyleSheet("color: #2E7D32; font-weight: bold;")
+
+        self.edit_plan_file.setText(str(file_path))
+        self._save_pcd_base_dir_to_settings(file_path)
+        # Automatically trigger scanning the downloaded plan file!
+        self._on_scan_clicked()
+
+    def _on_download_error(self, err_msg: str) -> None:
+        """Handle download failure with actionable notice."""
+        self.pbar_download.setVisible(False)
+        self.btn_auto_download.setEnabled(True)
+        self.btn_scan.setEnabled(True)
+        self.btn_browse_plan.setEnabled(True)
+        self.lbl_download_status.setText("Tải thất bại.")
+        self.lbl_download_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+        QMessageBox.warning(
+            self,
+            "Tải Kế Hoạch SharePoint",
+            f"Không thể tự động tải tệp kế hoạch từ SharePoint PCD:\n\n{err_msg}\n\n"
+            f"Bạn có thể bấm '🌐 Mở SharePoint PCD...' để kiểm tra trên trình duyệt hoặc tự chọn tệp kế hoạch bằng nút 'Chọn tệp...'.",
+        )
+
+    def _on_open_sharepoint_clicked(self) -> None:
+        """Open official PCD SharePoint library in default web browser."""
+        from src.services.pcd_plan_service import open_pcd_sharepoint_url, OFFICIAL_PCD_SHAREPOINT_URL
+        success = open_pcd_sharepoint_url()
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Không thể mở trình duyệt",
+                f"Không thể tự động mở trình duyệt web. Vui lòng truy cập đường dẫn:\n{OFFICIAL_PCD_SHAREPOINT_URL}",
+            )
 
     def _on_scan_clicked(self) -> None:
         file_path = self.edit_plan_file.text().strip()
@@ -279,10 +434,62 @@ class PCDPlanScanDialog(QDialog):
             result = self.plan_service.parse_plan_file(file_path)
             self._scanned_items = result.items
             self._populate_table()
-            self.lbl_stats.setText(f"Đã tìm thấy {len(self._scanned_items)} mã máy mới (NEW) thỏa mãn điều kiện.")
+            if self._scanned_items:
+                self.lbl_stats.setText(f"Đã tìm thấy {len(self._scanned_items)} mã máy mới (NEW) thỏa mãn điều kiện.")
+            else:
+                self.lbl_stats.setText("Quét xong: Không có mã máy mới (NEW) nào trong tệp này.")
+                QMessageBox.information(
+                    self,
+                    "Kết quả quét",
+                    f"Đã đọc thành công tệp nhưng không tìm thấy dòng nào thỏa mãn:\n"
+                    f"• Cột H (履歴) = 'NEW'\n"
+                    f"• Cột D (Material) bắt đầu bằng '11' hoặc 'T1'\n\n"
+                    f"Tổng số dòng đã quét: {result.total_rows_scanned}.",
+                )
         except Exception as exc:
             logger.error("Error scanning plan file: %s", exc)
-            QMessageBox.critical(self, "Lỗi quét tệp", f"Không thể đọc tệp kế hoạch:\n{exc}")
+            self._handle_scan_error(file_path, exc)
+
+    def _handle_scan_error(self, file_path: str, exc: Exception) -> None:
+        p = Path(file_path)
+        from src.services.pcd_plan_service import is_cloud_placeholder, is_onedrive_running, start_onedrive
+
+        if is_cloud_placeholder(p) and not is_onedrive_running():
+            reply = QMessageBox.question(
+                self,
+                "Tệp chưa tải về từ OneDrive",
+                f"Tệp '{p.name}' đang ở chế độ lưu trữ trực tuyến trên đám mây (Cloud-only) "
+                f"và ứng dụng OneDrive hiện chưa được mở trên máy tính.\n\n"
+                f"Bạn có muốn khởi động OneDrive ngay bây giờ để tải tệp về máy không?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                started = start_onedrive()
+                if started:
+                    QMessageBox.information(
+                        self,
+                        "Đã khởi động OneDrive",
+                        "Đã khởi động tiến trình OneDrive trong nền.\n"
+                        "Vui lòng đợi vài giây để OneDrive đồng bộ tệp về máy rồi bấm 'Quét Dữ Liệu' lại.",
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Không thể mở OneDrive",
+                        "Không tìm thấy file thực thi OneDrive.exe. Vui lòng mở OneDrive từ Start Menu của Windows.",
+                    )
+            return
+
+        QMessageBox.critical(
+            self,
+            "Lỗi quét tệp kế hoạch",
+            f"Không thể đọc tệp kế hoạch:\n{p.name}\n\n"
+            f"Nguyên nhân:\n{exc}\n\n"
+            f"Gợi ý khắc phục:\n"
+            f"1. Đảm bảo bạn đã chọn đúng tệp Kế hoạch Sản xuất Tháng (có chứa sheet '詳細日程').\n"
+            f"2. Nếu tệp đang lưu trên OneDrive, hãy mở tệp trực tiếp trong Microsoft Excel để tải về máy trước khi quét.",
+        )
 
     def _populate_table(self) -> None:
         self.table.setRowCount(0)

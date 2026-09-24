@@ -10,6 +10,7 @@ Implements the complete 4-step sequential workflow for Engineering Team Leads:
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import os
 import re
@@ -512,6 +513,219 @@ def sanitize_machine_code(code: str) -> str:
 
 
 # =============================================================================
+# Model & Machine Code Dictionary Management Dialog
+# =============================================================================
+
+class ModelMachineManagerDialog(QDialog):
+    """Dialog to manage machine models, 4-character machine codes, and sync with file_loaimay_nhommail.xlsx."""
+
+    model_selected = pyqtSignal(str)  # Emits chosen or created model
+    populate_codes_requested = pyqtSignal(str, list)  # Emits (model_name, list_of_codes)
+
+    def __init__(
+        self,
+        dict_service: MachineDictService,
+        current_model: str = "Virgo",
+        current_stage: str = "MP (ma1 - tiền tố 110)",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.dict_service = dict_service
+        self.current_model = current_model
+        self.current_stage = current_stage
+
+        self.setWindowTitle("Quản Lý Model Máy & Mã Máy Từ Điển (file_loaimay_nhommail.xlsx)")
+        self.resize(580, 440)
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        # 1. Model Selector Row
+        model_box = QGroupBox("1. Chọn hoặc Tạo Model Máy Mới")
+        model_layout = QVBoxLayout(model_box)
+        h_sel = QHBoxLayout()
+        h_sel.addWidget(QLabel("Model máy:"))
+        self.combo_model = QComboBox()
+        self.combo_model.setEditable(False)
+        self._reload_model_list()
+        self.combo_model.currentTextChanged.connect(self._on_model_selection_changed)
+        h_sel.addWidget(self.combo_model, stretch=1)
+
+        self.btn_new_model = QPushButton("+ Tạo Model Mới")
+        self.btn_new_model.setIcon(get_theme_manager().get_styled_icon("layers"))
+        self.btn_new_model.setStyleSheet("background-color: #1E3A8A; color: white; font-weight: bold; padding: 5px 10px;")
+        self.btn_new_model.clicked.connect(self._prompt_new_model)
+        h_sel.addWidget(self.btn_new_model)
+        model_layout.addLayout(h_sel)
+        layout.addWidget(model_box)
+
+        # 2. Model Details & Existing 4-Char Machine Codes
+        detail_box = QGroupBox("2. Danh Sách Mã Máy 4 Ký Tự Đã Đăng Ký")
+        detail_layout = QVBoxLayout(detail_box)
+
+        self.lbl_info = QLabel()
+        self.lbl_info.setStyleSheet("color: #64748B; font-size: 11px;")
+        detail_layout.addWidget(self.lbl_info)
+
+        self.text_codes = QTextBrowser()
+        self.text_codes.setMaximumHeight(85)
+        self.text_codes.setStyleSheet("background-color: rgba(255, 255, 255, 0.05); font-weight: bold; font-size: 12px;")
+        detail_layout.addWidget(self.text_codes)
+
+        # Sub-row: Add new 4-char code to current model
+        h_add = QHBoxLayout()
+        h_add.addWidget(QLabel("Mã máy mới (4 ký tự):"))
+        self.edit_new_code = QLineEdit()
+        self.edit_new_code.setPlaceholderText("VD: 02Z8, C2L9, 0C0T...")
+        self.edit_new_code.setMaxLength(8)
+        self.edit_new_code.returnPressed.connect(self._add_code_to_current_model)
+        h_add.addWidget(self.edit_new_code)
+
+        self.btn_add_code = QPushButton("+ Bổ sung mã vào Model")
+        self.btn_add_code.setStyleSheet("background-color: #059669; color: white; font-weight: bold; padding: 5px 10px;")
+        self.btn_add_code.clicked.connect(self._add_code_to_current_model)
+        h_add.addWidget(self.btn_add_code)
+        detail_layout.addLayout(h_add)
+
+        layout.addWidget(detail_box)
+
+        # 3. Email and Info Summary
+        email_box = QGroupBox("3. Nhóm Email Phụ Trách (Theo Từ Điển Master)")
+        email_layout = QVBoxLayout(email_box)
+        self.lbl_email_summary = QLabel("Đang tra cứu...")
+        self.lbl_email_summary.setWordWrap(True)
+        self.lbl_email_summary.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        email_layout.addWidget(self.lbl_email_summary)
+        layout.addWidget(email_box)
+
+        # 4. Action Buttons
+        btn_layout = QHBoxLayout()
+
+        self.btn_populate = QPushButton("👉 Đưa Danh Sách Mã Này Vào Bảng 1.2")
+        self.btn_populate.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
+        self.btn_populate.setStyleSheet("background-color: #D97706; color: white; font-weight: bold; padding: 8px 14px;")
+        self.btn_populate.setToolTip("Tự động ghép tiền tố (110 hoặc T10) với các mã 4 ký tự trên để điền vào Bảng 1.2")
+        self.btn_populate.clicked.connect(self._on_populate_table_clicked)
+        btn_layout.addWidget(self.btn_populate)
+
+        btn_layout.addStretch()
+
+        self.btn_apply = QPushButton("Chọn Model Này")
+        self.btn_apply.setStyleSheet("background-color: #0078D4; color: white; font-weight: bold; padding: 8px 16px;")
+        self.btn_apply.clicked.connect(self._on_apply_clicked)
+        btn_layout.addWidget(self.btn_apply)
+
+        self.btn_close = QPushButton("Đóng")
+        self.btn_close.clicked.connect(self.reject)
+        btn_layout.addWidget(self.btn_close)
+
+        layout.addLayout(btn_layout)
+
+        # Load initial model info
+        self._refresh_display()
+
+    def _reload_model_list(self) -> None:
+        models = self.dict_service.get_model_names()
+        self.combo_model.blockSignals(True)
+        self.combo_model.clear()
+        self.combo_model.addItems(models)
+        idx = self.combo_model.findText(self.current_model)
+        if idx >= 0:
+            self.combo_model.setCurrentIndex(idx)
+        elif models:
+            self.combo_model.setCurrentIndex(0)
+            self.current_model = self.combo_model.currentText()
+        self.combo_model.blockSignals(False)
+
+    def _on_model_selection_changed(self, text: str) -> None:
+        self.current_model = text.strip()
+        self._refresh_display()
+
+    def _refresh_display(self) -> None:
+        model = self.current_model
+        codes = self.dict_service.get_machine_codes_for_model(model)
+        if codes:
+            self.text_codes.setPlainText("; ".join(codes))
+            self.lbl_info.setText(f"Dòng máy '{model}' có {len(codes)} mã máy 4 ký tự đã khai báo:")
+            self.btn_populate.setEnabled(True)
+        else:
+            self.text_codes.setPlainText("(Chưa có mã máy 4 ký tự nào được khai báo cho Model này)")
+            self.lbl_info.setText(f"Dòng máy '{model}' chưa có mã máy 4 ký tự:")
+            self.btn_populate.setEnabled(False)
+
+        # Email info
+        groups = self.dict_service.get_all_email_groups()
+        to_email = groups.get("To", None)
+        to_str = to_email.clean_email if to_email else "KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com"
+        self.lbl_email_summary.setText(f"• Email Nhóm Phụ Trách: {to_str}\n• Tệp Master lưu trữ: {self.dict_service.excel_path}")
+
+    def _prompt_new_model(self) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(
+            self,
+            "Tạo Model Máy Mới",
+            "Nhập tên Model máy mới cần thêm:\n(Ví dụ: Corvus, Crux, Iris2025...)",
+        )
+        if ok and text and text.strip():
+            cleaned = re.sub(r"\s+", "", text.strip())
+            self.dict_service.add_model_name(cleaned)
+            self.current_model = cleaned
+            self._reload_model_list()
+            self._refresh_display()
+            QMessageBox.information(
+                self,
+                "Đã tạo Model",
+                f"Đã tạo Model '{cleaned}'. Bạn có thể nhập mã máy 4 ký tự cho Model này ở ô bên dưới.",
+            )
+
+    def _add_code_to_current_model(self) -> None:
+        code = self.edit_new_code.text().strip().upper()
+        if not code:
+            QMessageBox.warning(self, "Thiếu mã", "Vui lòng nhập mã máy 4 ký tự!")
+            return
+        clean_code = re.sub(r"[^A-Za-z0-9]", "", code)
+        if len(clean_code) < 3:
+            QMessageBox.warning(self, "Mã không hợp lệ", "Mã máy thường có 4 ký tự (ví dụ: 02Z8, C2L9)!")
+            return
+
+        success = self.dict_service.add_or_update_machine_code(
+            machine_name=self.current_model,
+            new_code=clean_code,
+        )
+        if success:
+            self.edit_new_code.clear()
+            self._refresh_display()
+            QMessageBox.information(
+                self,
+                "Thành công",
+                f"Đã bổ sung mã '{clean_code}' vào Model '{self.current_model}'.\n"
+                f"Dữ liệu đã được lưu trữ và đồng bộ.",
+            )
+        else:
+            QMessageBox.warning(self, "Lỗi", "Không thể ghi mã vào từ điển!")
+
+    def _on_populate_table_clicked(self) -> None:
+        codes = self.dict_service.get_machine_codes_for_model(self.current_model)
+        if not codes:
+            QMessageBox.warning(self, "Trống", "Model này chưa có mã máy nào để đưa vào bảng!")
+            return
+
+        prefix = "T10" if "maT" in self.current_stage else "110"
+        full_codes = [f"{prefix}{c}NL0" for c in codes]
+
+        self.model_selected.emit(self.current_model)
+        self.populate_codes_requested.emit(self.current_model, full_codes)
+        self.accept()
+
+    def _on_apply_clicked(self) -> None:
+        self.model_selected.emit(self.current_model)
+        self.accept()
+
+
+# =============================================================================
 # Step 1 Widget: Lập Dự Án & Phân Công (Setup & Staffing)
 # =============================================================================
 
@@ -527,6 +741,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.mailer = mailer or OutlookMailer()
         self.dict_service = MachineDictService()
         self._is_updating_machine_table: bool = False
+        self._is_switching_model: bool = False
         self._init_ui()
         self._populate_defaults()
 
@@ -550,13 +765,42 @@ class Step1ProjectSetupWidget(QWidget):
         self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         models = self.dict_service.get_model_names()
         self.model_combo.addItems(models)
-        idx = self.model_combo.findText("Virgo")
+
+        # Check last selected model in settings.json
+        cfg_path = self._get_settings_path()
+        last_model = None
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                last_model = cfg.get("last_selected_model")
+            except Exception:
+                pass
+
+        target_model = last_model if (last_model and self.model_combo.findText(last_model) >= 0) else "Virgo"
+        idx = self.model_combo.findText(target_model)
         if idx >= 0:
             self.model_combo.setCurrentIndex(idx)
         elif models:
             self.model_combo.setCurrentIndex(0)
+        self.state.model_name = self.model_combo.currentText().strip()
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
+        if self.model_combo.lineEdit():
+            self.model_combo.lineEdit().returnPressed.connect(self._on_model_combo_return_pressed)
         row1_layout.addWidget(self.model_combo)
+
+        self.btn_manage_models = QPushButton("⚙ Quản lý Model && Mã máy...")
+        self.btn_manage_models.setIcon(get_theme_manager().get_styled_icon("settings"))
+        self.btn_manage_models.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_manage_models.setMinimumHeight(28)
+        self.btn_manage_models.setToolTip("Quản lý danh sách Model máy, bổ sung mã máy 4 ký tự và đồng bộ từ điển Master")
+        self.btn_manage_models.setStyleSheet(
+            "QPushButton { background-color: #1E3A8A; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #1D4ED8; }"
+        )
+        self.btn_manage_models.clicked.connect(self._open_model_machine_manager_dialog)
+        row1_layout.addWidget(self.btn_manage_models)
+        self.btn_add_model = self.btn_manage_models
 
         row1_layout.addWidget(QLabel("Giai đoạn:"))
         self.stage_combo = QComboBox()
@@ -840,17 +1084,163 @@ class Step1ProjectSetupWidget(QWidget):
         self._sync_staff_machine_options()
         self._filter_staff_table(self.combo_dept_filter.currentText())
 
-    def _populate_defaults(self) -> None:
-        """Populate initial machine codes and roster."""
+    def _get_settings_path(self) -> Path:
+        base_dir = getattr(self.state, "base_dir", None)
+        if base_dir:
+            base_path = Path(base_dir)
+            if (base_path / "config").exists() or "pytest" in str(base_path).lower() or "temp" in str(base_path).lower():
+                return base_path / "config" / "settings.json"
+        cand_local = Path("config/settings.json")
+        if cand_local.parent.exists():
+            return cand_local
+        return Path("config/settings.json")
+
+    def _save_project_config(self) -> None:
+        model = self.model_combo.currentText().strip()
+        if model:
+            self._save_project_config_for_model(model)
+
+    def _save_project_config_for_model(self, model: str) -> None:
+        if getattr(self, "_is_updating_machine_table", False):
+            return
+        if not model:
+            return
+
+        stage = self.stage_combo.currentText().strip()
+        machines_data: list[dict[str, Any]] = []
+        for r in range(self.machine_table.rowCount()):
+            code_item = self.machine_table.item(r, 1)
+            code = code_item.text().strip().upper() if code_item else ""
+            if not code:
+                continue
+
+            chk_w = self.machine_table.cellWidget(r, 2)
+            is_excluded = False
+            if chk_w:
+                chk = chk_w.findChild(QCheckBox)
+                if chk:
+                    is_excluded = chk.isChecked()
+
+            note_item = self.machine_table.item(r, 3)
+            note = note_item.text().strip() if note_item else ""
+
+            machines_data.append({
+                "code": code,
+                "is_excluded": is_excluded,
+                "note": note,
+            })
+
+        cfg_path = self._get_settings_path()
+        try:
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            if "project_configs" not in cfg or not isinstance(cfg["project_configs"], dict):
+                cfg["project_configs"] = {}
+
+            cfg["project_configs"][model] = {
+                "stage": stage,
+                "machines": machines_data,
+            }
+            cfg["last_selected_model"] = model
+
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = cfg_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            tmp_path.replace(cfg_path)
+            logger.debug("Saved project config for model %s to %s", model, cfg_path)
+        except Exception as exc:
+            logger.warning("Could not save project config to %s: %s", cfg_path, exc)
+
+    def _load_project_config_for_model(self, model: str) -> bool:
+        """Load saved machines and stage for the model from settings.json.
+
+        Returns True if a saved configuration exists for this model (even if machines is empty).
+        Returns False if no prior configuration exists.
+        """
+        cfg_path = self._get_settings_path()
+        if not cfg_path.exists():
+            return False
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            project_configs = cfg.get("project_configs", {})
+            if not isinstance(project_configs, dict) or model not in project_configs:
+                return False
+
+            m_cfg = project_configs[model]
+            if not isinstance(m_cfg, dict):
+                return False
+
+            saved_stage = m_cfg.get("stage")
+            if saved_stage:
+                idx = self.stage_combo.findText(saved_stage)
+                if idx >= 0:
+                    self.stage_combo.blockSignals(True)
+                    self.stage_combo.setCurrentIndex(idx)
+                    self.stage_combo.blockSignals(False)
+                    is_mat = "maT" in saved_stage
+                    self.state.stage = ProjectStage.MA_T if is_mat else ProjectStage.MA_1
+
+            saved_machines = m_cfg.get("machines", [])
+            was_updating = self._is_updating_machine_table
+            self._is_updating_machine_table = True
+            try:
+                self.machine_table.setRowCount(0)
+                for m in saved_machines:
+                    if isinstance(m, dict):
+                        code = m.get("code", "")
+                        note = m.get("note", "")
+                        is_excluded = bool(m.get("is_excluded", False))
+                        self._add_machine_row(code=code, note=note, is_excluded=is_excluded)
+            finally:
+                self._is_updating_machine_table = was_updating
+
+            self._sync_staff_machine_options()
+            return True
+        except Exception as exc:
+            logger.warning("Could not load project config for model %s: %s", model, exc)
+            return False
+
+    def _populate_defaults_for_model(self, model: str) -> None:
+        """Fallback when no configuration is saved for this model."""
         was_updating = self._is_updating_machine_table
         self._is_updating_machine_table = True
         try:
-            # Initial machine codes
-            default_machines = ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
-            for code in default_machines:
-                self._add_machine_row(code=code)
+            self.machine_table.setRowCount(0)
+            discovered_codes: list[str] = []
+            base_dir = getattr(self.state, "base_dir", None)
+            if base_dir and model:
+                model_dir = Path(base_dir) / model
+                if model_dir.exists() and model_dir.is_dir():
+                    for f in model_dir.glob("PLM_*.xlsx"):
+                        m = re.match(r"^PLM_([A-Za-z0-9]+)\.xlsx$", f.name, re.IGNORECASE)
+                        if m:
+                            code = m.group(1).upper()
+                            if code not in discovered_codes:
+                                discovered_codes.append(code)
+
+            if discovered_codes:
+                for code in discovered_codes:
+                    self._add_machine_row(code=code)
+            else:
+                default_machines = ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
+                prefix = "T10" if "maT" in self.stage_combo.currentText() else "110"
+                for code in default_machines:
+                    adjusted = prefix + code[3:] if len(code) > 3 else code
+                    self._add_machine_row(code=adjusted)
         finally:
             self._is_updating_machine_table = was_updating
+
+        self._sync_staff_machine_options()
+
+    def _populate_defaults(self) -> None:
+        """Populate initial machine codes and roster."""
+        has_saved = self._load_project_config_for_model(self.state.model_name)
+        if not has_saved:
+            self._populate_defaults_for_model(self.state.model_name)
 
         # Try loading roster from MemberDatabaseManager
         base_dir = getattr(self.state, "base_dir", None)
@@ -884,7 +1274,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.state.staff_roster.clear()
 
         sub_unit_cycle = list(STANDARD_SUB_UNITS)
-        active_machines = self.get_active_machine_codes() or default_machines
+        active_machines = self.get_active_machine_codes() or ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
 
         for idx, (eng, dept, def_sub) in enumerate(roster_data):
             assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
@@ -929,7 +1319,7 @@ class Step1ProjectSetupWidget(QWidget):
         # Synchronize dynamic dropdown options for column "Mã máy"
         self._sync_staff_machine_options()
 
-    def _add_machine_row(self, code: str = "", note: str = "") -> None:
+    def _add_machine_row(self, code: str = "", note: str = "", is_excluded: bool = False) -> None:
         was_updating = self._is_updating_machine_table
         self._is_updating_machine_table = True
         try:
@@ -944,6 +1334,8 @@ class Step1ProjectSetupWidget(QWidget):
             self.machine_table.setItem(r, 1, QTableWidgetItem(init_code))
 
             chk_exclude = QCheckBox()
+            if is_excluded:
+                chk_exclude.setChecked(True)
             chk_exclude.toggled.connect(self._on_machine_exclude_toggled)
             chk_widget = QWidget()
             chk_layout = QHBoxLayout(chk_widget)
@@ -958,6 +1350,7 @@ class Step1ProjectSetupWidget(QWidget):
 
         if not was_updating:
             self._sync_staff_machine_options()
+            self._save_project_config()
 
     def _del_machine_row(self) -> None:
         curr = self.machine_table.currentRow()
@@ -965,6 +1358,7 @@ class Step1ProjectSetupWidget(QWidget):
             self.machine_table.removeRow(curr)
             self._reindex_machine_stt()
             self._sync_staff_machine_options()
+            self._save_project_config()
 
     def _reindex_machine_stt(self) -> None:
         was_updating = self._is_updating_machine_table
@@ -997,9 +1391,121 @@ class Step1ProjectSetupWidget(QWidget):
                 self._is_updating_machine_table = False
             self._reindex_machine_stt()
             self._sync_staff_machine_options()
+            self._save_project_config()
+
+    def _open_model_machine_manager_dialog(self) -> None:
+        """Open the Model & Machine Code management dialog."""
+        dlg = ModelMachineManagerDialog(
+            dict_service=self.dict_service,
+            current_model=self.model_combo.currentText().strip(),
+            current_stage=self.stage_combo.currentText().strip(),
+            parent=self,
+        )
+        dlg.model_selected.connect(self._on_model_selected_from_dialog)
+        dlg.populate_codes_requested.connect(self._on_populate_codes_from_dialog)
+        dlg.exec()
+
+    def _on_model_selected_from_dialog(self, model_name: str) -> None:
+        """Handle model selection from management dialog."""
+        all_models = self.dict_service.get_model_names()
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItems(all_models)
+        self.model_combo.blockSignals(False)
+        self.model_combo.setCurrentText(model_name)
+
+    def _on_populate_codes_from_dialog(self, model_name: str, full_codes: list[str]) -> None:
+        """Populate machine codes directly into Table 1.2."""
+        self._on_model_selected_from_dialog(model_name)
+        was_updating = self._is_updating_machine_table
+        self._is_updating_machine_table = True
+        try:
+            self.machine_table.setRowCount(0)
+            for code in full_codes:
+                self._add_machine_row(code=code)
+        finally:
+            self._is_updating_machine_table = was_updating
+
+        self._reindex_machine_stt()
+        self._sync_staff_machine_options()
+        self._save_project_config()
+
+    def _on_add_new_model(self) -> None:
+        """Prompt user to add a new model name."""
+        from PyQt6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(
+            self,
+            "Thêm Model Máy Mới",
+            "Nhập tên Model máy cần thêm vào hệ thống:\n(Ví dụ: Corvus, Crux, Iris2025, PolarisNext...)",
+        )
+        if ok and text and text.strip():
+            self._register_new_model(text.strip())
+
+    def _on_model_combo_return_pressed(self) -> None:
+        """Handle Enter key pressed inside editable model_combo line edit."""
+        text = self.model_combo.currentText().strip()
+        if not text:
+            return
+        idx = self.model_combo.findText(text)
+        if idx < 0:
+            reply = QMessageBox.question(
+                self,
+                "Xác nhận thêm Model mới",
+                f"Model máy '{text}' chưa có trong danh sách.\nBạn có muốn thêm Model này vào hệ thống không?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._register_new_model(text)
+
+    def _register_new_model(self, model_name: str) -> None:
+        """Register, persist, and select a new model."""
+        cleaned = re.sub(r"\s+", "", model_name.strip())
+        if not cleaned:
+            return
+
+        # Register via MachineDictService
+        self.dict_service.add_model_name(cleaned)
+
+        # Add to combo if not present
+        existing_idx = self.model_combo.findText(cleaned)
+        if existing_idx < 0:
+            self.model_combo.blockSignals(True)
+            self.model_combo.addItem(cleaned)
+            # Keep sorted
+            items = [self.model_combo.itemText(i) for i in range(self.model_combo.count())]
+            items.sort(key=lambda s: s.lower())
+            self.model_combo.clear()
+            self.model_combo.addItems(items)
+            self.model_combo.blockSignals(False)
+
+        # Set as current model (triggers _on_model_changed)
+        self.model_combo.setCurrentText(cleaned)
+
+        QMessageBox.information(
+            self,
+            "Thêm Model thành công",
+            f"Đã thêm thành công Model máy '{cleaned}'.\n"
+            f"Bạn có thể bắt đầu cấu hình và nhập danh sách mã máy tại bảng 1.2 bên dưới.",
+        )
 
     def _on_model_changed(self, text: str) -> None:
-        self.state.model_name = text.strip()
+        new_model = text.strip()
+        if not new_model:
+            return
+        if getattr(self, "_is_switching_model", False):
+            return
+        self._is_switching_model = True
+        try:
+            old_model = getattr(self.state, "model_name", "")
+            if old_model and old_model != new_model:
+                self._save_project_config_for_model(old_model)
+            self.state.model_name = new_model
+            loaded = self._load_project_config_for_model(new_model)
+            if not loaded:
+                self._populate_defaults_for_model(new_model)
+        finally:
+            self._is_switching_model = False
 
     def _on_stage_changed(self, text: str) -> None:
         is_mat = "maT" in text
@@ -1014,17 +1520,22 @@ class Step1ProjectSetupWidget(QWidget):
         finally:
             self._is_updating_machine_table = False
         self._sync_staff_machine_options()
+        self._save_project_config()
 
     def _on_machine_table_item_changed(self, item: QTableWidgetItem) -> None:
         if getattr(self, "_is_updating_machine_table", False):
             return
         if item.column() == 1:
             self._sync_staff_machine_options()
+            self._save_project_config()
+        elif item.column() == 3:
+            self._save_project_config()
 
     def _on_machine_exclude_toggled(self, checked: bool) -> None:
         if getattr(self, "_is_updating_machine_table", False):
             return
         self._sync_staff_machine_options()
+        self._save_project_config()
 
     def get_active_machine_codes(self) -> list[str]:
         """Extract active machine codes from machine_table (excluding rows marked X)."""
