@@ -56,17 +56,6 @@
         }
       ]
     },
-    "Polaris": {
-      "stage": "MP (ma1 - tiền tố 110)",
-      "machines": [
-        {
-          "code": "1100001NL0",
-          "model_name": "Polaris",
-          "is_excluded": false,
-          "note": ""
-        }
-      ]
-    },
     "PolarisEPlus": {
       "stage": "MP (ma1 - tiền tố 110)",
       "machines": [
@@ -107,19 +96,25 @@
         }
       ]
     },
-    "Sirius2": {
-      "stage": "MP (ma1 - tiền tố 110)",
+    "Libra235ppm": {
+      "stage": "DMT (maT - tiền tố T10)",
       "machines": [
         {
-          "code": "1100001NL0",
-          "model_name": "Sirius2",
+          "code": "T100C3CNL0",
+          "model_name": "Libra235ppm",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "T100C3DNL0",
+          "model_name": "Libra235ppm",
           "is_excluded": false,
           "note": ""
         }
       ]
     }
   },
-  "last_selected_model": "Sirius2",
+  "last_selected_model": "Libra235ppm",
   "email_groups": {
     "To": "pe_polaris@kdcf.com",
     "CC1": "pe_virgo@kdcf.com",

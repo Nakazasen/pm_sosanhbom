@@ -51,8 +51,10 @@ apps/*/data/
 Virgo/
 Iris2024/
 Libra2/
+Libra235ppm/
 Sirius2/
 Polaris/
 Mebius/
+Spica/
 backup_before_*_filter/
 *.bak

@@ -259,19 +259,6 @@ class MachineDictService:
                 return re.sub(r"\s+", "", info.machine_name.strip())
         return fallback_model
 
-    def get_machine_codes_for_model(self, model_name: str) -> list[str]:
-        """Return list of genuine 4-character machine codes associated with the given model name."""
-        if not self._is_loaded:
-            self.load()
-        target = re.sub(r"\s+", "", model_name.strip()).lower()
-        codes: list[str] = []
-        for m in self._machines:
-            if m.machine_name and re.sub(r"\s+", "", m.machine_name.strip()).lower() == target:
-                for c in m.machine_codes:
-                    if c not in codes:
-                        codes.append(c)
-        return codes
-
     def extract_and_lookup_material(self, material_code: str) -> Optional[MachineInfo]:
         """Extract machine code from material (e.g. 'T10C0TZUS0' -> '0C0T' or '1102Y43AX0' -> '02Y4').
 
@@ -628,21 +615,24 @@ class MachineDictService:
         return True
 
     def get_machine_codes_for_model(self, model_name: str) -> list[str]:
-        """Return all 4-character machine codes associated with this model."""
+        """Return all genuine 4-character machine codes associated with this model or model family."""
         if not self._is_loaded:
             self.load()
         cleaned_search = re.sub(r"\s+", "", model_name.strip()).lower()
-        codes: set[str] = set()
+        if not cleaned_search:
+            return []
 
-        # 1. From loaded Excel dictionary
+        codes: list[str] = []
+
+        # 1. Exact match from loaded Excel dictionary
         for m in self._machines:
             if m.machine_name and re.sub(r"\s+", "", m.machine_name.strip()).lower() == cleaned_search:
                 for c in m.machine_codes:
                     clean_c = c.strip().upper()
-                    if clean_c:
-                        codes.add(clean_c)
+                    if clean_c and clean_c not in codes:
+                        codes.append(clean_c)
 
-        # 2. From settings.json custom_model_codes
+        # 2. Exact match from settings.json custom_model_codes
         cfg_path = self._get_local_settings_path()
         if cfg_path.exists():
             try:
@@ -655,12 +645,43 @@ class MachineDictService:
                             if isinstance(v, list):
                                 for c in v:
                                     clean_c = str(c).strip().upper()
-                                    if clean_c:
-                                        codes.add(clean_c)
+                                    if clean_c and clean_c not in codes:
+                                        codes.append(clean_c)
             except Exception as e:
                 logger.debug("Could not read custom_model_codes from %s: %s", cfg_path, e)
 
-        return sorted(codes)
+        # 3. If no exact match found, match by model family prefix / substring
+        # (e.g. 'Sirius2' matches 'Sirius 2 (21ppm)', 'Sirius 2 (26ppm)';
+        #       'Polaris' matches 'Polaris Next', 'Polaris E Model', 'Polaris E Plus';
+        #       'Mebius' matches 'Mebius E', 'Mebius E Plus';
+        #       '6thA4' matches '6th A4 Next', '6th A4 Plus', '6th A4 E')
+        if not codes:
+            for m in self._machines:
+                m_clean = re.sub(r"\s+", "", m.machine_name.strip()).lower() if m.machine_name else ""
+                if m_clean and (m_clean.startswith(cleaned_search) or cleaned_search.startswith(m_clean)):
+                    for c in m.machine_codes:
+                        clean_c = c.strip().upper()
+                        if clean_c and clean_c not in codes:
+                            codes.append(clean_c)
+
+            if cfg_path.exists():
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    custom_codes_map = cfg.get("custom_model_codes", {})
+                    if isinstance(custom_codes_map, dict):
+                        for k, v in custom_codes_map.items():
+                            k_clean = re.sub(r"\s+", "", k.strip()).lower()
+                            if k_clean and (k_clean.startswith(cleaned_search) or cleaned_search.startswith(k_clean)):
+                                if isinstance(v, list):
+                                    for c in v:
+                                        clean_c = str(c).strip().upper()
+                                        if clean_c and clean_c not in codes:
+                                            codes.append(clean_c)
+                except Exception:
+                    pass
+
+        return codes
 
     def get_model_info_by_name(self, model_name: str) -> list[MachineInfo]:
         """Return all MachineInfo entries for this model."""

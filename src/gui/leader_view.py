@@ -891,7 +891,15 @@ class ModelMachineManagerDialog(QDialog):
 
         stage_code = self._get_selected_stage_code()
         prefix = "T10" if stage_code in ("DMT", "PMT") else "110"
-        full_codes = [f"{prefix}{c}NL0" for c in codes]
+        full_codes = []
+        for c in codes:
+            clean_c = c.strip().upper()
+            if clean_c.startswith("0") and len(clean_c) == 4:
+                full_codes.append(f"{prefix}{clean_c[1:]}3NL0")
+            elif len(clean_c) == 3:
+                full_codes.append(f"{prefix}{clean_c}3NL0")
+            else:
+                full_codes.append(f"{prefix}{clean_c}NL0")
 
         self.stage_selected.emit(stage_code)
         self.model_selected.emit(self.current_model)
@@ -1465,6 +1473,20 @@ class Step1ProjectSetupWidget(QWidget):
                     self.state.stage = ProjectStage.MA_T if is_mat else ProjectStage.MA_1
 
             saved_machines = m_cfg.get("machines", [])
+            # If saved_machines only contains legacy auto-generated placeholder dummy codes (e.g. 1100001NL0, T100001NL0)
+            # and real codes exist in the dictionary for this model, ignore the dummy config and regenerate genuine codes!
+            has_only_dummy = (
+                bool(saved_machines) and all(
+                    bool(re.match(r"^(110|T10)000\d", str(m.get("code", "")).strip().upper()))
+                    for m in saved_machines if isinstance(m, dict)
+                )
+            )
+            if has_only_dummy:
+                dict_codes = self.dict_service.get_machine_codes_for_model(model)
+                if dict_codes:
+                    logger.info("Ignoring legacy dummy placeholder codes for model %s; will populate genuine codes", model)
+                    return False
+
             was_updating = self._is_updating_machine_table
             self._is_updating_machine_table = True
             try:
@@ -1511,7 +1533,13 @@ class Step1ProjectSetupWidget(QWidget):
                 model_codes = self.dict_service.get_machine_codes_for_model(model)
                 if model_codes:
                     for c_4char in model_codes[:3]:
-                        init_code = f"{prefix}{c_4char}3NL0"
+                        clean_c = c_4char.strip().upper()
+                        if clean_c.startswith("0") and len(clean_c) == 4:
+                            init_code = f"{prefix}{clean_c[1:]}3NL0"
+                        elif len(clean_c) == 3:
+                            init_code = f"{prefix}{clean_c}3NL0"
+                        else:
+                            init_code = f"{prefix}{clean_c}NL0"
                         self._add_machine_row(code=init_code, model_name=model)
                 else:
                     self._add_machine_row(code=f"{prefix}0001NL0", model_name=model)

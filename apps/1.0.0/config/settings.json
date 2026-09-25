@@ -1,58 +1,124 @@
 {
-  "tc14": {
-    "base_url": "http://tcmp3gwb:3000/",
-    "username": "vn_pe02",
-    "password": "vn_pe02",
-    "browser": "chrome",
-    "headless": true,
-    "timeout": 30
-  },
-  "sap": {
-    "system_id": "P1J(ERP60-AWS)-VN",
-    "client": "100",
-    "username": "v130474",
-    "password": "0123456789",
-    "language": "EN",
-    "plant": "2200",
-    "bom_usage": "pp01",
-    "alternative": "01",
-    "saplogon_path": "C:\\Program Files (x86)\\SAP\\FrontEnd\\SAPgui\\saplogon.exe"
-  },
+  "theme": "light",
   "paths": {
-    "base_dir": "D:\\Sandbox\\pm_sosanhbom",
-    "fix_serial_path": "D:\\Sandbox\\pm_sosanhbom\\FIX_SERIAL_DLTOOL_VER010.xls",
-    "reports_dir": "D:\\Sandbox\\pm_sosanhbom\\Reports",
     "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
     "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update",
-    "default_model": "Virgo",
-    "last_download_dir": "D:\\Sandbox\\pm_sosanhbom\\Virgo",
     "last_download_dirs_by_model": {
-      "Iris2024": "D:\\Sandbox\\pm_sosanhbom\\Iris2024",
       "Virgo": "D:\\Sandbox\\pm_sosanhbom\\Virgo",
-      "Libra235ppm": "D:\\Sandbox\\pm_sosanhbom\\downloads",
-      "Sirius2(21ppm)": "D:\\Sandbox\\pm_sosanhbom\\downloads"
+      "Libra235ppm": "D:\\Sandbox\\pm_sosanhbom\\Virgo"
     },
-    "pcd_base_dir": "D:\\Sandbox\\pm_sosanhbom\\apps\\1.0.0\\data\\pcd_plans\\202609"
+    "last_download_dir": "D:\\Sandbox\\pm_sosanhbom\\Virgo"
   },
-  "email": {
-    "test_mode": true,
-    "test_recipient": "vinh.bd@dtvn.kyocera.com",
-    "default_sender": "vinh.bd@dtvn.kyocera.com"
+  "custom_model_codes": {
+    "6thNext": [
+      "0C0Z"
+    ],
+    "PolarisNext": [
+      "0C0V"
+    ]
   },
-  "templates": {
-    "dict_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\file_loaimay_nhommail.xlsx",
-    "member_template": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\formnguoidung.xlsm",
-    "master_template": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\form_ssbom.xlsm"
+  "project_configs": {
+    "Virgo": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": []
+    },
+    "Spica": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100C0LNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0MNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0NNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "MebiusEPlus": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "11002ZL3NL0",
+          "model_name": "MebiusEPlus",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "PolarisEPlus": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "11002WF3NL0",
+          "model_name": "PolarisEPlus",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "11002X93NL0",
+          "model_name": "PolarisEPlus",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "PolarisNext": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100C0V3NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0Z3NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C103NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "Libra235ppm": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100C3CNL0",
+          "model_name": "Libra235ppm",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C3DNL0",
+          "model_name": "Libra235ppm",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    }
   },
-  "ui": {
-    "theme": "system"
-  },
-  "theme": "system",
+  "last_selected_model": "Libra235ppm",
   "email_groups": {
-    "Nhóm PTHTCT": "KDTVN-ProductionEngineering_ProductionSystemsDevelopment(Local) <KDTVN-ProductionEngineering_Mecha2_Local_@kdcf.onmicrosoft.com>",
-    "Nhóm cơ 2.1": "KDTVN-Production Engineering_Mecha 2.1(Local) <KDTVN-ProductionEngineering_Mecha3_Local_@kdcf.onmicrosoft.com>",
-    "Nhóm cơ 2.2": "KDTVN-Production Engineering_Mecha 2.2(Local) <KDTVN-ProductionEngineering_Mecha22@dtvn.kyocera.com>",
-    "Nhóm cơ 1.2": "KDTVN-Production Engineering_Mecha 1.2(Local) <KDTVN-Production_Engineering_Mecha1.2@dtvn.kyocera.com>",
-    "Nhóm mới 1.1": "KDTVN-Production Engineering_Mecha 1.1(Local) <KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com>"
+    "To": "pe_polaris@kdcf.com",
+    "CC1": "pe_virgo@kdcf.com",
+    "CC2": "pe_iris@kdcf.com",
+    "CC5(nhóm KTCT Điện)": "pe_electrical@kdcf.com"
   }
 }
