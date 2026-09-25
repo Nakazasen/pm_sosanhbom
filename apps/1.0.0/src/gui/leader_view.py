@@ -1192,11 +1192,13 @@ class Step1ProjectSetupWidget(QWidget):
     def _matches_model(self, machine_names: str, model_name: str) -> bool:
         """Check if member's assigned machine names match the project model."""
         if not machine_names or not machine_names.strip():
+            return False
+        tokens = [re.sub(r"\s+", "", t.strip()).lower() for t in machine_names.split(",") if t.strip()]
+        if any(t in ("(tấtcả)", "(tấtcảmodel)", "tấtcả", "all") for t in tokens):
             return True
         if not model_name or not model_name.strip() or model_name in ("(Tất cả)", "(Tất cả model)"):
             return True
         clean_target = re.sub(r"\s+", "", model_name.strip()).lower()
-        tokens = [re.sub(r"\s+", "", t.strip()).lower() for t in machine_names.split(",") if t.strip()]
         return any(clean_target == t or clean_target in t or t in clean_target for t in tokens)
 
     def _import_roster_from_excel_clicked(self) -> None:
@@ -1576,11 +1578,11 @@ class Step1ProjectSetupWidget(QWidget):
         if not members_data:
             from src.core.member_database import MemberRecord
             members_data = [
-                MemberRecord(account_id=eng, full_name=eng, department="Cơ 1", default_sub_unit="") for eng in ROSTER_MECHA_1
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 1", default_sub_unit="", machine_names="(Tất cả)") for eng in ROSTER_MECHA_1
             ] + [
-                MemberRecord(account_id=eng, full_name=eng, department="Cơ 2", default_sub_unit="") for eng in ROSTER_MECHA_2
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 2", default_sub_unit="", machine_names="(Tất cả)") for eng in ROSTER_MECHA_2
             ] + [
-                MemberRecord(account_id=eng, full_name=eng, department="Cơ 3", default_sub_unit="") for eng in ROSTER_MECHA_3
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 3", default_sub_unit="", machine_names="(Tất cả)") for eng in ROSTER_MECHA_3
             ]
 
         self.staff_table.setRowCount(0)

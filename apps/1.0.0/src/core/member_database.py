@@ -235,11 +235,11 @@ class MemberDatabaseManager:
 
                     seed_items: list[tuple[str, str, str, str, str, int, str, str, str]] = []
                     for name in SEED_ROSTER_MECHA_1:
-                        seed_items.append((name, name, "Cơ 1", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 1", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                     for name in SEED_ROSTER_MECHA_2:
-                        seed_items.append((name, name, "Cơ 2", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 2", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
                     for name in SEED_ROSTER_MECHA_3:
-                        seed_items.append((name, name, "Cơ 3", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        seed_items.append((name, name, "Cơ 3", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
 
                     conn.executemany(
                         """

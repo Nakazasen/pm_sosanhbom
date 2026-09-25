@@ -262,10 +262,10 @@ class TestMemberExcelTwoWaySync:
         chk_ly = table.cellWidget(ly_row, 0).findChild(QCheckBox)
         assert chk_ly.isChecked() is True
 
-        # Son has empty machine -> Checkbox should be checked (True - applies to all models)
+        # Son has empty machine -> Checkbox should NOT be checked (False - unassigned staff do not auto-match project)
         son_row = rows_by_acc["Son_mecha1"]
         chk_son = table.cellWidget(son_row, 0).findChild(QCheckBox)
-        assert chk_son.isChecked() is True
+        assert chk_son.isChecked() is False
 
         # Hai Dang (KTCT Điện) has model Corvus -> For project Virgo, Checkbox should NOT be checked (False)
         assert "HaiDang_dien" in rows_by_acc
@@ -411,4 +411,66 @@ class TestMemberExcelTwoWaySync:
         # Toggle uncheck chk_only_assigned_model -> all visible
         step1.chk_only_assigned_model.setChecked(False)
         assert not step1.staff_table.isRowHidden(row_libra)
+
+    def test_empty_machine_names_never_match_model_or_create_packages(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify that members with empty/None machine_names (like HaiDang_dien, Son_PTHTCT)
+        never match a selected model (e.g. Libra235ppm), are set to '(Không áp dụng)',
+        and never get .xlsm files generated in machine folders."""
+        from PyQt6.QtWidgets import QMessageBox
+        app = QApplication.instance() or QApplication([])
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+
+        db_path = tmp_path / "ssbom_master.db"
+        mgr = MemberDatabaseManager(base_dir=tmp_path, remote_db_path=db_path)
+        # Member with Libra assigned
+        mgr.add_member(MemberRecord(account_id="Phan_mecha1.1", full_name="Trần Đình Phan", department="Cơ 1.1", machine_names="Libra 1, Libra 2, 6th A3, 6th A3 KDC"))
+        # Member with empty/None machine_names
+        mgr.add_member(MemberRecord(account_id="HaiDang_dien", full_name="Phạm Hải Đăng", department="KTCT Điện", machine_names=""))
+        mgr.add_member(MemberRecord(account_id="Son_PTHTCT", full_name="Vũ Hoàng Sơn", department="PTHTCT", machine_names="   "))
+
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+
+        # 1. Direct unit verification of _matches_model
+        assert step1._matches_model("", "Libra235ppm") is False
+        assert step1._matches_model(None, "Libra235ppm") is False
+        assert step1._matches_model("   ", "Libra235ppm") is False
+        assert step1._matches_model("Libra 1, Libra 2, 6th A3, 6th A3 KDC", "Libra235ppm") is True
+        assert step1._matches_model("Spica, Virgo", "Libra235ppm") is False
+
+        # 2. Select Libra235ppm and reload
+        step1.model_combo.setCurrentText("Libra235ppm")
+        step1._reload_roster_from_db(force_model_match=True)
+
+        roster_map = {e.engineer_name: e for e in step1.state.staff_roster}
+        assert roster_map["Phan_mecha1.1"].is_applied is True
+        assert roster_map["Phan_mecha1.1"].machine_code == "Libra235ppm"
+
+        assert roster_map["HaiDang_dien"].is_applied is False
+        assert roster_map["HaiDang_dien"].machine_code == "(Không áp dụng)"
+
+        assert roster_map["Son_PTHTCT"].is_applied is False
+        assert roster_map["Son_PTHTCT"].machine_code == "(Không áp dụng)"
+
+        # 3. Test execution / folder & package creation
+        step1.machine_table.setRowCount(0)
+        step1._add_machine_row(code="1100C3CNL0", model_name="Libra235ppm")
+
+        step1.execute_create_folders_and_packages()
+
+        mach_dir = tmp_path / "Libra235ppm" / "1100C3CNL0"
+        assert mach_dir.exists()
+
+        # Phan_mecha1.1 package MUST exist
+        assert (mach_dir / "Phan_mecha1.1.xlsm").exists()
+
+        # HaiDang_dien and Son_PTHTCT packages MUST NEVER exist!
+        assert not (mach_dir / "HaiDang_dien.xlsm").exists()
+        assert not (mach_dir / "Son_PTHTCT.xlsm").exists()
+
 
