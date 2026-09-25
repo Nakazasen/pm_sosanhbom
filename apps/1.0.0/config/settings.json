@@ -47,5 +47,12 @@
   "ui": {
     "theme": "system"
   },
-  "theme": "system"
+  "theme": "system",
+  "email_groups": {
+    "Nhóm PTHTCT": "KDTVN-ProductionEngineering_ProductionSystemsDevelopment(Local) <KDTVN-ProductionEngineering_Mecha2_Local_@kdcf.onmicrosoft.com>",
+    "Nhóm cơ 2.1": "KDTVN-Production Engineering_Mecha 2.1(Local) <KDTVN-ProductionEngineering_Mecha3_Local_@kdcf.onmicrosoft.com>",
+    "Nhóm cơ 2.2": "KDTVN-Production Engineering_Mecha 2.2(Local) <KDTVN-ProductionEngineering_Mecha22@dtvn.kyocera.com>",
+    "Nhóm cơ 1.2": "KDTVN-Production Engineering_Mecha 1.2(Local) <KDTVN-Production_Engineering_Mecha1.2@dtvn.kyocera.com>",
+    "Nhóm mới 1.1": "KDTVN-Production Engineering_Mecha 1.1(Local) <KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com>"
+  }
 }

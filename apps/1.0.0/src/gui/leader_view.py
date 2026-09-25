@@ -75,6 +75,17 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# UI Helper Components
+# =============================================================================
+
+class NoScrollComboBox(QComboBox):
+    """QComboBox subclass that ignores mouse wheel events to prevent accidental value changes during scrolling."""
+
+    def wheelEvent(self, e):
+        e.ignore()
+
+
+# =============================================================================
 # Constants & Roster Data
 # =============================================================================
 
@@ -929,7 +940,7 @@ class Step1ProjectSetupWidget(QWidget):
         row1_layout = QHBoxLayout()
         row1_layout.setSpacing(8)
         row1_layout.addWidget(QLabel("Model máy:"))
-        self.model_combo = QComboBox()
+        self.model_combo = NoScrollComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         models = self.dict_service.get_model_names()
@@ -972,7 +983,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_add_model = self.btn_manage_models
 
         row1_layout.addWidget(QLabel("Giai đoạn:"))
-        self.stage_combo = QComboBox()
+        self.stage_combo = NoScrollComboBox()
         self.stage_combo.addItems([
             "MP (ma1 - tiền tố 110)",
             "PP (ma1 - tiền tố 110)",
@@ -1095,7 +1106,7 @@ class Step1ProjectSetupWidget(QWidget):
 
 
         # Right: Staffing Table (Sheet Lichsu)
-        staff_group = QGroupBox("1.3 Phân Công Nhân Sự (Sheet Lichsu && tenphong_pt)")
+        staff_group = QGroupBox("1.3 Phân Công Nhân Sự Phụ Trách (Theo Danhsachthanhvien.xlsx)")
         staff_layout = QVBoxLayout(staff_group)
         staff_layout.setContentsMargins(6, 4, 6, 4)
         staff_layout.setSpacing(4)
@@ -1103,10 +1114,20 @@ class Step1ProjectSetupWidget(QWidget):
         filter_layout = QHBoxLayout()
         filter_layout.setContentsMargins(0, 2, 0, 4)
         filter_layout.addWidget(QLabel("Lọc phòng ban:"))
-        self.combo_dept_filter = QComboBox()
+        self.combo_dept_filter = NoScrollComboBox()
         self.combo_dept_filter.addItems(["Tất cả", "Cơ 1", "Cơ 2", "Cơ 3"])
         self.combo_dept_filter.currentTextChanged.connect(self._filter_staff_table)
         filter_layout.addWidget(self.combo_dept_filter)
+
+        self.chk_only_assigned_model = QCheckBox("Chỉ hiện nhân sự phụ trách Model này")
+        self.chk_only_assigned_model.setChecked(True)
+        self.chk_only_assigned_model.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.chk_only_assigned_model.setToolTip(
+            "Khi tích chọn: Bảng 1.3 chỉ hiển thị các nhân sự có phụ trách Model đang chọn ở 1.1 / 1.2.\n"
+            "Bỏ tích để xem và gán toàn bộ nhân sự các bộ phận."
+        )
+        self.chk_only_assigned_model.toggled.connect(self._filter_staff_table)
+        filter_layout.addWidget(self.chk_only_assigned_model)
 
         self.btn_select_all_staff = QPushButton("Chọn tất cả")
         self.btn_select_all_staff.clicked.connect(lambda: self._set_all_staff_checked(True))
@@ -1276,7 +1297,7 @@ class Step1ProjectSetupWidget(QWidget):
             else:
                 is_app = model_matched
                 assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-                assigned_mach = default_model
+                assigned_mach = default_model if is_app else "(Không áp dụng)"
 
             assignment = StaffAssignment(
                 engineer_name=acc_id,
@@ -1299,6 +1320,7 @@ class Step1ProjectSetupWidget(QWidget):
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             chk_layout.setContentsMargins(0, 0, 0, 0)
             self.staff_table.setCellWidget(r, 0, chk_widget)
+            chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
 
             disp_name = f"{m.full_name} ({acc_id})" if m.full_name and m.full_name != acc_id else acc_id
             item_eng = QTableWidgetItem(disp_name)
@@ -1309,7 +1331,7 @@ class Step1ProjectSetupWidget(QWidget):
             self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
-            combo_sub = QComboBox()
+            combo_sub = NoScrollComboBox()
             combo_sub.setEditable(True)
             combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
             combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
@@ -1320,7 +1342,7 @@ class Step1ProjectSetupWidget(QWidget):
             combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
 
         self._sync_staff_machine_options()
-        self._filter_staff_table(self.combo_dept_filter.currentText())
+        self._filter_staff_table()
 
     def _get_settings_path(self) -> Path:
         base_dir = getattr(self.state, "base_dir", None)
@@ -1547,7 +1569,7 @@ class Step1ProjectSetupWidget(QWidget):
             model_matched = self._matches_model(m_mach, default_model)
 
             assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-            assigned_mach = default_model
+            assigned_mach = default_model if model_matched else "(Không áp dụng)"
             assignment = StaffAssignment(
                 engineer_name=eng,
                 department=dept,
@@ -1570,6 +1592,7 @@ class Step1ProjectSetupWidget(QWidget):
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             chk_layout.setContentsMargins(0, 0, 0, 0)
             self.staff_table.setCellWidget(r, 0, chk_widget)
+            chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
 
             disp_name = f"{m.full_name} ({eng})" if m.full_name and m.full_name != eng else eng
             item_eng = QTableWidgetItem(disp_name)
@@ -1579,7 +1602,7 @@ class Step1ProjectSetupWidget(QWidget):
             self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
-            combo_sub = QComboBox()
+            combo_sub = NoScrollComboBox()
             combo_sub.setEditable(True)
             combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
             combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
@@ -1591,6 +1614,7 @@ class Step1ProjectSetupWidget(QWidget):
 
         # Synchronize dynamic dropdown options for column "Mã máy"
         self._sync_staff_machine_options()
+        self._filter_staff_table()
 
     def _add_machine_row(self, code: str = "", note: str = "", is_excluded: bool = False, model_name: str = "") -> None:
         was_updating = self._is_updating_machine_table
@@ -1861,6 +1885,7 @@ class Step1ProjectSetupWidget(QWidget):
             loaded = self._load_project_config_for_model(new_model)
             if not loaded:
                 self._populate_defaults_for_model(new_model)
+            self._reload_roster_from_db(force_model_match=True)
         finally:
             self._is_switching_model = False
 
@@ -1960,8 +1985,8 @@ class Step1ProjectSetupWidget(QWidget):
 
         dict_models = self.dict_service.get_model_names()
 
-        # Build options: "(Tất cả)", then active models, then other dictionary models
-        options: list[str] = ["(Tất cả)"]
+        # Build options: "(Không áp dụng)", "(Tất cả)", then active models, then other dictionary models
+        options: list[str] = ["(Không áp dụng)", "(Tất cả)"]
         for m in active_models:
             if m not in options:
                 options.append(m)
@@ -1971,19 +1996,29 @@ class Step1ProjectSetupWidget(QWidget):
 
         for r in range(self.staff_table.rowCount()):
             combo = self.staff_table.cellWidget(r, 3)
-            if not isinstance(combo, QComboBox):
-                combo = QComboBox()
+            if not isinstance(combo, NoScrollComboBox):
+                combo = NoScrollComboBox()
                 combo.setEditable(True)
                 combo.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
                 self.staff_table.setCellWidget(r, 3, combo)
             else:
                 combo.setEditable(True)
 
+            chk_w = self.staff_table.cellWidget(r, 0)
+            is_checked = False
+            if chk_w:
+                chk = chk_w.findChild(QCheckBox)
+                if chk:
+                    is_checked = chk.isChecked()
+
             current_text = combo.currentText().strip()
             if not current_text:
                 item = self.staff_table.item(r, 3)
                 if item:
                     current_text = item.text().strip()
+
+            if not is_checked and (not current_text or current_text != "(Không áp dụng)"):
+                current_text = "(Không áp dụng)"
 
             combo.blockSignals(True)
             combo.clear()
@@ -1994,8 +2029,10 @@ class Step1ProjectSetupWidget(QWidget):
                 combo.setCurrentText(current_text)
             elif current_text:
                 combo.setEditText(current_text)
-            elif active_models:
+            elif active_models and is_checked:
                 combo.setCurrentText(active_models[0])
+            elif not is_checked:
+                combo.setCurrentText("(Không áp dụng)")
             else:
                 combo.setCurrentIndex(0)
 
@@ -2017,6 +2054,36 @@ class Step1ProjectSetupWidget(QWidget):
                 pass
             combo.currentTextChanged.connect(lambda txt, row=r: self._on_staff_machine_combo_changed(row, txt))
 
+    def _on_staff_checkbox_toggled(self, row: int, checked: bool) -> None:
+        """Handle toggling of 'Áp dụng' checkbox for a member."""
+        if row < len(self.state.staff_roster):
+            self.state.staff_roster[row].is_applied = checked
+
+        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
+        target_text = default_model if checked else "(Không áp dụng)"
+
+        combo = self.staff_table.cellWidget(row, 3)
+        if isinstance(combo, QComboBox):
+            combo.blockSignals(True)
+            if combo.findText(target_text) == -1:
+                combo.addItem(target_text)
+            combo.setCurrentText(target_text)
+            combo.blockSignals(False)
+
+        item = self.staff_table.item(row, 3)
+        if item:
+            item.setText(target_text)
+        else:
+            self.staff_table.setItem(row, 3, QTableWidgetItem(target_text))
+
+        if row < len(self.state.staff_roster):
+            self.state.staff_roster[row].machine_code = target_text
+
+        # If only_assigned_model filter is on, update row visibility
+        if getattr(self, "chk_only_assigned_model", None) and self.chk_only_assigned_model.isChecked():
+            if not checked:
+                self.staff_table.setRowHidden(row, True)
+
     def _browse_base_dir(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "Chọn thư mục gốc dự án", self.edit_base_dir.text())
         if d:
@@ -2032,27 +2099,65 @@ class Step1ProjectSetupWidget(QWidget):
         except Exception:
             subprocess.Popen(["explorer", str(p)], shell=True)
 
-    def _filter_staff_table(self, dept: str) -> None:
-        dept_clean = dept.strip()
+    def _filter_staff_table(self, dept_or_checked: Any = None) -> None:
+        if isinstance(dept_or_checked, str):
+            dept_clean = dept_or_checked.strip()
+        else:
+            dept_clean = self.combo_dept_filter.currentText().strip()
+
+        only_assigned = getattr(self, "chk_only_assigned_model", None) is not None and self.chk_only_assigned_model.isChecked()
         for r in range(self.staff_table.rowCount()):
             r_item = self.staff_table.item(r, 2)
             r_dept = r_item.text().strip() if r_item else ""
             if dept_clean == "Tất cả" or not dept_clean:
-                self.staff_table.setRowHidden(r, False)
+                dept_matches = True
             elif r_dept == dept_clean or r_dept.startswith(dept_clean):
-                self.staff_table.setRowHidden(r, False)
+                dept_matches = True
             else:
-                self.staff_table.setRowHidden(r, True)
+                dept_matches = False
+
+            model_matches = True
+            if only_assigned:
+                chk_w = self.staff_table.cellWidget(r, 0)
+                is_checked = False
+                if chk_w:
+                    chk = chk_w.findChild(QCheckBox)
+                    if chk:
+                        is_checked = chk.isChecked()
+                model_matches = is_checked
+
+            self.staff_table.setRowHidden(r, not (dept_matches and model_matches))
 
     def _set_all_staff_checked(self, checked: bool) -> None:
+        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
+        target_text = default_model if checked else "(Không áp dụng)"
         for r in range(self.staff_table.rowCount()):
             w = self.staff_table.cellWidget(r, 0)
             if w:
                 chk = w.findChild(QCheckBox)
                 if chk:
+                    chk.blockSignals(True)
                     chk.setChecked(checked)
+                    chk.blockSignals(False)
             if r < len(self.state.staff_roster):
                 self.state.staff_roster[r].is_applied = checked
+                self.state.staff_roster[r].machine_code = target_text
+
+            combo = self.staff_table.cellWidget(r, 3)
+            if isinstance(combo, QComboBox):
+                combo.blockSignals(True)
+                if combo.findText(target_text) == -1:
+                    combo.addItem(target_text)
+                combo.setCurrentText(target_text)
+                combo.blockSignals(False)
+
+            item = self.staff_table.item(r, 3)
+            if item:
+                item.setText(target_text)
+            else:
+                self.staff_table.setItem(r, 3, QTableWidgetItem(target_text))
+
+        self._filter_staff_table()
 
     def _auto_assign_subunits(self) -> None:
         sub_units = list(STANDARD_SUB_UNITS)

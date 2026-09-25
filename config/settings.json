@@ -44,9 +44,82 @@
           "note": ""
         }
       ]
+    },
+    "MebiusEPlus": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "11002ZL3NL0",
+          "model_name": "MebiusEPlus",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "Polaris": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100001NL0",
+          "model_name": "Polaris",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "PolarisEPlus": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "11002WF3NL0",
+          "model_name": "PolarisEPlus",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "11002X93NL0",
+          "model_name": "PolarisEPlus",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "PolarisNext": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100C0V3NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0Z3NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C103NL0",
+          "model_name": "PolarisNext",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    },
+    "Sirius2": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100001NL0",
+          "model_name": "Sirius2",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
     }
   },
-  "last_selected_model": "Spica",
+  "last_selected_model": "Sirius2",
   "email_groups": {
     "To": "pe_polaris@kdcf.com",
     "CC1": "pe_virgo@kdcf.com",

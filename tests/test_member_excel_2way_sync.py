@@ -338,3 +338,77 @@ class TestMemberExcelTwoWaySync:
 
         a3_members = mgr.get_members_for_machine("6th A3")
         assert any(m.account_id == "Phan_mecha1.1" for m in a3_members)
+
+    def test_noscroll_combobox_and_staff_table_auto_filter_by_model(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Verify NoScrollComboBox ignores wheel event and Table 1.3 auto-filters by selected model."""
+        from PyQt6.QtGui import QWheelEvent
+        from PyQt6.QtCore import QPointF, QPoint
+        from src.gui.leader_view import LeaderWorkspaceView, NoScrollComboBox
+
+        app = QApplication.instance() or QApplication([])
+
+        # 1. Test NoScrollComboBox ignores wheelEvent
+        combo = NoScrollComboBox()
+        combo.addItems(["Model 1", "Model 2", "Model 3"])
+        combo.setCurrentIndex(0)
+
+        event = QWheelEvent(
+            QPointF(10, 10),
+            QPointF(10, 10),
+            QPoint(0, 0),
+            QPoint(0, 120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        combo.wheelEvent(event)
+        assert combo.currentIndex() == 0
+        assert not event.isAccepted()
+
+        # 2. Setup mock DB with 2 members: one for Spica, one for Libra
+        db_path = tmp_path / "ssbom_master.db"
+        mgr = MemberDatabaseManager(base_dir=tmp_path, remote_db_path=db_path)
+        mgr.add_member(MemberRecord(account_id="SpicaEng", full_name="Kỹ Sư Spica", department="Cơ 2.1", machine_names="Spica, Virgo"))
+        mgr.add_member(MemberRecord(account_id="LibraEng", full_name="Kỹ Sư Libra", department="Cơ 1.1", machine_names="Libra 1, 6th A3"))
+
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+
+        # Select Spica
+        step1.model_combo.setCurrentText("Spica")
+        step1._reload_roster_from_db(force_model_match=True)
+
+        # chk_only_assigned_model is checked by default
+        assert step1.chk_only_assigned_model.isChecked()
+
+        # Check rows: SpicaEng is visible, LibraEng is hidden
+        row_spica = -1
+        row_libra = -1
+        for r in range(step1.staff_table.rowCount()):
+            eng_id = step1.staff_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
+            if eng_id == "SpicaEng":
+                row_spica = r
+            elif eng_id == "LibraEng":
+                row_libra = r
+
+        assert row_spica >= 0
+        assert row_libra >= 0
+        assert not step1.staff_table.isRowHidden(row_spica)
+        assert step1.staff_table.isRowHidden(row_libra)
+
+        # Verify unassigned staff has (Không áp dụng)
+        item_libra_mach = step1.staff_table.item(row_libra, 3)
+        assert item_libra_mach.text() == "(Không áp dụng)"
+
+        # Verify assigned staff has Spica
+        item_spica_mach = step1.staff_table.item(row_spica, 3)
+        assert item_spica_mach.text() == "Spica"
+
+        # Toggle uncheck chk_only_assigned_model -> all visible
+        step1.chk_only_assigned_model.setChecked(False)
+        assert not step1.staff_table.isRowHidden(row_libra)
+
