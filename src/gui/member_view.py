@@ -129,7 +129,7 @@ class MemberWorkflowStepper(QFrame):
     STEPS = [
         ("Bước 1: Chọn Model && BOM", "folder"),
         ("Bước 2: Kiểm Tra && Đối Chiếu BOM", "search"),
-        ("Bước 3: Xác Nhận && Nộp Kết Quả", "file-spreadsheet"),
+        ("Bước 3: Xác Nhận && Hoàn Thành File CTTT", "file-spreadsheet"),
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -346,8 +346,8 @@ class MemberWorkspaceView(QWidget):
         row_b.addWidget(self.lbl_department)
 
         row_b.addSpacing(16)
-        row_b.addWidget(QLabel("Trạng thái nộp:"))
-        self.lbl_submission_seal = QLabel("⏳ CHƯA NỘP (Q2 TRỐNG)")
+        row_b.addWidget(QLabel("Trạng thái hoàn thành:"))
+        self.lbl_submission_seal = QLabel("⏳ CHƯA HOÀN THÀNH (Q2 TRỐNG)")
         self.lbl_submission_seal.setStyleSheet(
             "background-color: #FFF3CD; color: #856404; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
         )
@@ -700,7 +700,7 @@ class MemberWorkspaceView(QWidget):
 
         action_bar.addStretch()
 
-        self.btn_unlock = QPushButton("Hủy nộp / Mở khóa")
+        self.btn_unlock = QPushButton("Mở khóa chỉnh sửa file")
         self.btn_unlock.setIcon(get_theme_manager().get_styled_icon("refresh", color="#FFFFFF"))
         self.btn_unlock.setMinimumHeight(44)
         self.btn_unlock.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
@@ -710,7 +710,7 @@ class MemberWorkspaceView(QWidget):
         self.btn_unlock.clicked.connect(self.unlock_submission)
         action_bar.addWidget(self.btn_unlock)
 
-        self.btn_submit = QPushButton("Xác nhận Nộp (Đóng dấu Q2 = OK)")
+        self.btn_submit = QPushButton("Xác nhận Hoàn Thành (Đóng dấu Q2 = OK)")
         self.btn_submit.setIcon(get_theme_manager().get_styled_icon("check-circle", color="#FFFFFF"))
         self.btn_submit.setMinimumHeight(44)
         self.btn_submit.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
@@ -786,14 +786,14 @@ class MemberWorkspaceView(QWidget):
                 q2_val = str(ws_cttt["Q2"].value).strip() if ws_cttt["Q2"].value is not None else ""
                 if q2_val.upper() == "OK":
                     self.is_submitted_ok = True
-                    self.lbl_submission_seal.setText("✅ ĐÃ NỘP BÀI (Q2 = OK)")
+                    self.lbl_submission_seal.setText("✅ ĐÃ HOÀN THÀNH (Q2 = OK)")
                     self.lbl_submission_seal.setStyleSheet(
                         "background-color: #C6EFCE; color: #006100; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
                     )
                     self.cttt_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
                 else:
                     self.is_submitted_ok = False
-                    self.lbl_submission_seal.setText("⏳ CHƯA NỘP (Q2 TRỐNG)")
+                    self.lbl_submission_seal.setText("⏳ CHƯA HOÀN THÀNH (Q2 TRỐNG)")
                     self.lbl_submission_seal.setStyleSheet(
                         "background-color: #FFF3CD; color: #856404; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
                     )
@@ -1690,7 +1690,7 @@ class MemberWorkspaceView(QWidget):
         """Validate, stamp CTTT!Q2='OK' (green fill), save assignment file, and emit signal."""
         rows = self.get_cttt_table_data()
         if not rows:
-            QMessageBox.warning(self, "Cảnh báo", "Bảng CTTT không có dữ liệu để nộp.")
+            QMessageBox.warning(self, "Cảnh báo", "Bảng CTTT không có dữ liệu để xác nhận hoàn thành.")
             return None
 
         # Check for unaddressed NG items without explanation
@@ -1701,7 +1701,7 @@ class MemberWorkspaceView(QWidget):
                 "Cảnh báo sai khác chưa giải trình",
                 f"Có {len(ng_items)} linh kiện bị NG nhưng chưa điền Giải thích:\n"
                 + ", ".join(ng_items[:5])
-                + "\n\nBạn có muốn tiếp tục nộp không?",
+                + "\n\nBạn có muốn tiếp tục lưu và xác nhận hoàn thành không?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.No:
@@ -1832,7 +1832,7 @@ class MemberWorkspaceView(QWidget):
             logger.info("Đã đóng dấu phê duyệt Q2='OK' thành công vào file: %s", target_file.name)
 
             self.is_submitted_ok = True
-            self.lbl_submission_seal.setText("✅ ĐÃ NỘP BÀI (Q2 = OK)")
+            self.lbl_submission_seal.setText("✅ ĐÃ HOÀN THÀNH (Q2 = OK)")
             self.lbl_submission_seal.setStyleSheet(
                 "background-color: #C6EFCE; color: #006100; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
             )
@@ -1859,7 +1859,7 @@ class MemberWorkspaceView(QWidget):
 
             QMessageBox.information(
                 self,
-                "Nộp dữ liệu thành công",
+                "Xác nhận hoàn thành thành công",
                 f"Đã đóng dấu Q2 = OK và lưu file thành công!\n"
                 f"Tệp lưu tại: {target_file.name}\n"
                 f"Số lượng linh kiện: {len(rows)}",
@@ -1867,11 +1867,11 @@ class MemberWorkspaceView(QWidget):
             return target_file
         except Exception as exc:
             logger.error("Failed to write submission workbook: %s", exc)
-            QMessageBox.critical(self, "Lỗi nộp dữ liệu", f"Không thể xuất tệp nộp dữ liệu:\n{exc}")
+            QMessageBox.critical(self, "Lỗi ghi dữ liệu", f"Không thể xuất tệp dữ liệu:\n{exc}")
             return None
 
     def unlock_submission(self) -> None:
-        """Execute 'Hủy nộp / Mở khóa': Clear Q2 cell, restore status, enable editing."""
+        """Execute 'Mở khóa chỉnh sửa file': Clear Q2 cell, restore status, enable editing."""
         if self.current_assignment_file is not None and self.current_assignment_file.exists():
             try:
                 wb = openpyxl.load_workbook(self.current_assignment_file)
@@ -1881,12 +1881,12 @@ class MemberWorkspaceView(QWidget):
                     ws_cttt["Q2"].fill = PatternFill(fill_type=None)
                     ws_cttt["Q2"].font = Font(name="Calibri", size=11)
                     wb.save(self.current_assignment_file)
-                    logger.info("Đã mở khóa bài nộp và xóa dấu cờ Q2 trong file: %s", self.current_assignment_file.name)
+                    logger.info("Đã mở khóa file và xóa dấu cờ Q2 trong file: %s", self.current_assignment_file.name)
             except Exception as exc:
                 logger.warning("Could not clear Q2 in file: %s", exc)
 
         self.is_submitted_ok = False
-        self.lbl_submission_seal.setText("⏳ CHƯA NỘP (Q2 TRỐNG)")
+        self.lbl_submission_seal.setText("⏳ CHƯA HOÀN THÀNH (Q2 TRỐNG)")
         self.lbl_submission_seal.setStyleSheet(
             "background-color: #FFF3CD; color: #856404; font-weight: bold; border-radius: 4px; padding: 4px 8px;"
         )
@@ -1905,4 +1905,4 @@ class MemberWorkspaceView(QWidget):
             self.stepper.set_step_completed(1, False)
             self.stepper.set_current_step(1)
 
-        QMessageBox.information(self, "Mở khóa thành công", "Đã hủy nộp và mở khóa để chỉnh sửa bài làm.")
+        QMessageBox.information(self, "Mở khóa thành công", "Đã đặt lại cờ Q2 và mở khóa để chỉnh sửa file CTTT.")

@@ -53,81 +53,182 @@ class MachineDictService:
         self._is_loaded = False
 
     def load(self, force_reload: bool = False) -> bool:
-        """Load and parse the Master sheet from file_loaimay_nhommail.xlsx."""
+        """Load and parse the Master sheet from file_loaimay_nhommail.xlsx or local cache."""
         if self._is_loaded and not force_reload:
             return True
 
-        if not self.excel_path.exists():
-            logger.warning("Machine dictionary file does not exist: %s", self.excel_path)
-            return False
+        target_path: Optional[Path] = None
+        if self.excel_path.exists():
+            target_path = self.excel_path
+        else:
+            # Check candidate fallback paths
+            candidates = [
+                Path("file_loaimay_nhommail.xlsx"),
+                Path("data/file_loaimay_nhommail.xlsx"),
+                Path("config/file_loaimay_nhommail.xlsx"),
+                Path("../config/file_loaimay_nhommail.xlsx"),
+            ]
+            for cand in candidates:
+                if cand.exists():
+                    target_path = cand
+                    break
 
-        try:
-            wb = openpyxl.load_workbook(str(self.excel_path), data_only=True)
-            sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
-            ws = wb[sheet_name]
+        if target_path and target_path.exists():
+            try:
+                wb = openpyxl.load_workbook(str(target_path), data_only=True)
+                sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
+                ws = wb[sheet_name]
 
-            machines: list[MachineInfo] = []
-            code_map: dict[str, MachineInfo] = {}
-            email_groups: dict[str, EmailGroupInfo] = {}
+                machines: list[MachineInfo] = []
+                code_map: dict[str, MachineInfo] = {}
+                email_groups: dict[str, EmailGroupInfo] = {}
 
-            # Read rows starting from row 2 (skipping header)
-            for r_idx in range(2, ws.max_row + 1):
-                col_a = ws.cell(row=r_idx, column=1).value
-                col_b = ws.cell(row=r_idx, column=2).value
-                col_c = ws.cell(row=r_idx, column=3).value
-                col_d = ws.cell(row=r_idx, column=4).value
-                col_e = ws.cell(row=r_idx, column=5).value
-                col_f = ws.cell(row=r_idx, column=6).value
-                col_g = ws.cell(row=r_idx, column=7).value
+                # Read rows starting from row 2 (skipping header)
+                for r_idx in range(2, ws.max_row + 1):
+                    col_a = ws.cell(row=r_idx, column=1).value
+                    col_b = ws.cell(row=r_idx, column=2).value
+                    col_c = ws.cell(row=r_idx, column=3).value
+                    col_d = ws.cell(row=r_idx, column=4).value
+                    col_e = ws.cell(row=r_idx, column=5).value
+                    col_f = ws.cell(row=r_idx, column=6).value
+                    col_g = ws.cell(row=r_idx, column=7).value
 
-                # Parse Email groups (Cols F & G)
-                if col_f and col_g:
-                    label = str(col_f).strip()
-                    raw_email = str(col_g).strip()
-                    match = re.search(r"<([^>]+)>", raw_email)
-                    clean_email = match.group(1).strip() if match else raw_email
-                    email_groups[label] = EmailGroupInfo(
-                        group_label=label,
-                        email_string=raw_email,
-                        clean_email=clean_email,
-                    )
+                    # Parse Email groups (Cols F & G)
+                    if col_f and col_g:
+                        label = str(col_f).strip()
+                        raw_email = str(col_g).strip()
+                        match = re.search(r"<([^>]+)>", raw_email)
+                        clean_email = match.group(1).strip() if match else raw_email
+                        email_groups[label] = EmailGroupInfo(
+                            group_label=label,
+                            email_string=raw_email,
+                            clean_email=clean_email,
+                        )
 
-                # Parse Machine Info (Cols A - E)
-                if col_a or col_d:
-                    raw_name = str(col_a).strip() if col_a else ""
-                    # Strip all whitespace from machine name: "Iris 2024" -> "Iris2024", "Polaris Next" -> "PolarisNext"
-                    machine_name = re.sub(r"\s+", "", raw_name)
-                    variant = str(col_b).strip() if col_b else ""
-                    brand_segment = str(col_c).strip() if col_c else ""
-                    raw_codes = str(col_d).strip() if col_d else ""
-                    specs = str(col_e).strip() if col_e else ""
+                    # Parse Machine Info (Cols A - E)
+                    if col_a or col_d:
+                        raw_name = str(col_a).strip() if col_a else ""
+                        machine_name = re.sub(r"\s+", "", raw_name)
+                        variant = str(col_b).strip() if col_b else ""
+                        brand_segment = str(col_c).strip() if col_c else ""
+                        raw_codes = str(col_d).strip() if col_d else ""
+                        specs = str(col_e).strip() if col_e else ""
 
-                    codes = [c.strip().upper() for c in raw_codes.split(";") if c.strip()]
+                        codes = [c.strip().upper() for c in raw_codes.split(";") if c.strip()]
 
-                    info = MachineInfo(
-                        machine_name=machine_name,
-                        variant=variant,
-                        brand_segment=brand_segment,
-                        machine_codes=codes,
-                        specs=specs,
-                        row_index=r_idx,
-                    )
-                    machines.append(info)
+                        info = MachineInfo(
+                            machine_name=machine_name,
+                            variant=variant,
+                            brand_segment=brand_segment,
+                            machine_codes=codes,
+                            specs=specs,
+                            row_index=r_idx,
+                        )
+                        machines.append(info)
 
-                    for code in codes:
-                        code_map[code] = info
+                        for code in codes:
+                            code_map[code] = info
 
-            wb.close()
+                wb.close()
 
-            self._machines = machines
-            self._code_to_machine = code_map
-            self._email_groups = email_groups
-            self._is_loaded = True
-            logger.info("Loaded %d machines and %d email groups from %s", len(machines), len(email_groups), self.excel_path)
-            return True
-        except Exception as exc:
-            logger.error("Failed to load machine dictionary from %s: %s", self.excel_path, exc)
-            return False
+                self._machines = machines
+                self._code_to_machine = code_map
+                self._email_groups = email_groups
+                self._is_loaded = True
+                logger.info("Loaded %d machines and %d email groups from %s", len(machines), len(email_groups), target_path)
+                return True
+            except Exception as exc:
+                logger.error("Failed to load machine dictionary from %s: %s", target_path, exc)
+
+        # Fallback to JSON cache if available
+        base_dir = Path(__file__).resolve().parent
+        json_candidates = [
+            Path("config/loaimay_cache.json"),
+            Path("../config/loaimay_cache.json"),
+            base_dir.parent.parent / "config" / "loaimay_cache.json",
+            base_dir.parent / "config" / "loaimay_cache.json",
+            Path("scratch/loaimay_data.json"),
+        ]
+        for jcand in json_candidates:
+            if jcand.exists():
+                try:
+                    with open(jcand, "r", encoding="utf-8") as f:
+                        jdata = json.load(f)
+                    master_rows = jdata.get("Master", [])
+                    machines = []
+                    code_map = {}
+                    email_groups = {}
+                    for r_idx, row in enumerate(master_rows[1:], start=2):
+                        col_a = row[0] if len(row) > 0 else None
+                        col_b = row[1] if len(row) > 1 else None
+                        col_c = row[2] if len(row) > 2 else None
+                        col_d = row[3] if len(row) > 3 else None
+                        col_e = row[4] if len(row) > 4 else None
+                        col_f = row[5] if len(row) > 5 else None
+                        col_g = row[6] if len(row) > 6 else None
+
+                        if col_f and col_g:
+                            label = str(col_f).strip()
+                            raw_email = str(col_g).strip()
+                            match = re.search(r"<([^>]+)>", raw_email)
+                            clean_email = match.group(1).strip() if match else raw_email
+                            email_groups[label] = EmailGroupInfo(
+                                group_label=label,
+                                email_string=raw_email,
+                                clean_email=clean_email,
+                            )
+
+                        if col_a or col_d:
+                            raw_name = str(col_a).strip() if col_a else ""
+                            machine_name = re.sub(r"\s+", "", raw_name)
+                            variant = str(col_b).strip() if col_b else ""
+                            brand_segment = str(col_c).strip() if col_c else ""
+                            raw_codes = str(col_d).strip() if col_d else ""
+                            specs = str(col_e).strip() if col_e else ""
+                            codes = [c.strip().upper() for c in raw_codes.split(";") if c.strip()]
+                            info = MachineInfo(
+                                machine_name=machine_name,
+                                variant=variant,
+                                brand_segment=brand_segment,
+                                machine_codes=codes,
+                                specs=specs,
+                                row_index=r_idx,
+                            )
+                            machines.append(info)
+                            for code in codes:
+                                code_map[code] = info
+
+                    self._machines = machines
+                    self._code_to_machine = code_map
+                    self._email_groups = email_groups
+                    self._is_loaded = True
+
+                    # Check settings.json override for email_groups
+                    cfg_path = self._get_local_settings_path()
+                    if cfg_path.exists():
+                        try:
+                            with open(cfg_path, "r", encoding="utf-8") as f:
+                                cfg = json.load(f)
+                            custom_eg = cfg.get("email_groups")
+                            if isinstance(custom_eg, dict):
+                                for label, raw_email in custom_eg.items():
+                                    match = re.search(r"<([^>]+)>", str(raw_email))
+                                    clean_email = match.group(1).strip() if match else str(raw_email).strip()
+                                    self._email_groups[str(label).strip()] = EmailGroupInfo(
+                                        group_label=str(label).strip(),
+                                        email_string=str(raw_email).strip(),
+                                        clean_email=clean_email,
+                                    )
+                        except Exception:
+                            pass
+
+                    logger.info("Loaded %d machines from JSON cache %s", len(machines), jcand)
+                    return True
+                except Exception as exc:
+                    logger.error("Failed loading JSON cache %s: %s", jcand, exc)
+
+        logger.warning("Machine dictionary file does not exist: %s and no local cache found", self.excel_path)
+        return False
 
     def lookup_machine_code(self, code_4char: str) -> Optional[MachineInfo]:
         """Lookup by 4-character machine code (e.g. '0C0T', '02Y4')."""
@@ -135,6 +236,41 @@ class MachineDictService:
             self.load()
         cleaned = code_4char.strip().upper()
         return self._code_to_machine.get(cleaned)
+
+    def get_model_for_machine_code(self, machine_code: str, fallback_model: str = "") -> str:
+        """Resolve machine code (e.g. '110C103NL0', 'T10C0TZUS0', '0C10') to canonical model name."""
+        if not self._is_loaded:
+            self.load()
+        cleaned = machine_code.strip().upper()
+        # 1. Try direct extract
+        info = self.extract_and_lookup_material(cleaned)
+        if info and info.machine_name:
+            return re.sub(r"\s+", "", info.machine_name.strip())
+        # 2. Try 4-char lookup
+        if len(cleaned) == 4:
+            info = self.lookup_machine_code(cleaned)
+            if info and info.machine_name:
+                return re.sub(r"\s+", "", info.machine_name.strip())
+        # 3. Try slicing chars 2..6
+        if len(cleaned) >= 6:
+            code_4 = cleaned[2:6]
+            info = self.lookup_machine_code(code_4)
+            if info and info.machine_name:
+                return re.sub(r"\s+", "", info.machine_name.strip())
+        return fallback_model
+
+    def get_machine_codes_for_model(self, model_name: str) -> list[str]:
+        """Return list of genuine 4-character machine codes associated with the given model name."""
+        if not self._is_loaded:
+            self.load()
+        target = re.sub(r"\s+", "", model_name.strip()).lower()
+        codes: list[str] = []
+        for m in self._machines:
+            if m.machine_name and re.sub(r"\s+", "", m.machine_name.strip()).lower() == target:
+                for c in m.machine_codes:
+                    if c not in codes:
+                        codes.append(c)
+        return codes
 
     def extract_and_lookup_material(self, material_code: str) -> Optional[MachineInfo]:
         """Extract machine code from material (e.g. 'T10C0TZUS0' -> '0C0T' or '1102Y43AX0' -> '02Y4').
@@ -170,6 +306,124 @@ class MachineDictService:
         if not self._is_loaded:
             self.load()
         return dict(self._email_groups)
+
+    def update_email_groups(self, email_groups: dict[str, str]) -> bool:
+        """Update email distribution groups in settings.json and 2-way write-back to Excel."""
+        if not email_groups:
+            return False
+
+        # 1. Update in-memory
+        new_groups: dict[str, EmailGroupInfo] = {}
+        for label, raw_email in email_groups.items():
+            clean_label = str(label).strip()
+            clean_raw = str(raw_email).strip()
+            if not clean_label or not clean_raw:
+                continue
+            match = re.search(r"<([^>]+)>", clean_raw)
+            clean_email = match.group(1).strip() if match else clean_raw
+            new_groups[clean_label] = EmailGroupInfo(
+                group_label=clean_label,
+                email_string=clean_raw,
+                clean_email=clean_email,
+            )
+        if not new_groups:
+            return False
+
+        self._email_groups = new_groups
+
+        # 2. Persist to settings.json
+        cfg_path = self._get_local_settings_path()
+        try:
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            cfg["email_groups"] = {lbl: info.email_string for lbl, info in new_groups.items()}
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cfg_path.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            tmp.replace(cfg_path)
+            logger.info("Saved email groups to %s", cfg_path)
+        except Exception as e:
+            logger.warning("Could not persist email groups to %s: %s", cfg_path, e)
+
+        # 3. Write-back to file_loaimay_nhommail.xlsx if exists
+        target_path: Optional[Path] = None
+        if self.excel_path.exists():
+            target_path = self.excel_path
+        else:
+            candidates = [
+                Path("file_loaimay_nhommail.xlsx"),
+                Path("data/file_loaimay_nhommail.xlsx"),
+                Path("config/file_loaimay_nhommail.xlsx"),
+                Path("../config/file_loaimay_nhommail.xlsx"),
+            ]
+            for c in candidates:
+                if c.exists():
+                    target_path = c
+                    break
+
+        if target_path and target_path.exists():
+            try:
+                backup_path = target_path.with_suffix(".xlsx.bak")
+                try:
+                    shutil.copy2(str(target_path), str(backup_path))
+                except Exception:
+                    pass
+
+                wb = openpyxl.load_workbook(str(target_path))
+                sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
+                ws = wb[sheet_name]
+
+                # Clear previous email columns F and G from row 2 onwards
+                for r in range(2, max(ws.max_row + 1, len(new_groups) + 2)):
+                    ws.cell(row=r, column=6).value = None
+                    ws.cell(row=r, column=7).value = None
+
+                # Write new email groups
+                for r_idx, (lbl, info) in enumerate(new_groups.items(), start=2):
+                    ws.cell(row=r_idx, column=6).value = lbl
+                    ws.cell(row=r_idx, column=7).value = info.email_string
+
+                wb.save(str(target_path))
+                wb.close()
+                logger.info("Wrote %d email groups to %s", len(new_groups), target_path)
+            except Exception as e:
+                logger.error("Failed writing email groups to %s: %s", target_path, e)
+
+        # 4. Also update loaimay_cache.json if present
+        cache_paths = [Path("config/loaimay_cache.json"), Path("../config/loaimay_cache.json")]
+        for cp in cache_paths:
+            if cp.exists():
+                try:
+                    with open(cp, "r", encoding="utf-8") as f:
+                        cdata = json.load(f)
+                    master = cdata.get("Master", [])
+                    email_list = list(new_groups.items())
+                    for idx, row in enumerate(master[1:], start=0):
+                        while len(row) < 7:
+                            row.append(None)
+                        if idx < len(email_list):
+                            lbl, info = email_list[idx]
+                            row[5] = lbl
+                            row[6] = info.email_string
+                        else:
+                            row[5] = None
+                            row[6] = None
+                    if len(email_list) > len(master) - 1:
+                        for idx in range(len(master) - 1, len(email_list)):
+                            lbl, info = email_list[idx]
+                            new_row = [None, None, None, None, None, lbl, info.email_string]
+                            master.append(new_row)
+                    cdata["Master"] = master
+                    with open(cp, "w", encoding="utf-8") as f:
+                        json.dump(cdata, f, indent=2, ensure_ascii=False)
+                    logger.info("Updated cache %s with new email groups", cp)
+                except Exception as e:
+                    logger.debug("Could not update cache %s: %s", cp, e)
+
+        return True
 
     def _get_local_settings_path(self) -> Path:
         cand = Path("config/settings.json")

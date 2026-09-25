@@ -385,8 +385,8 @@ class SSBOMMainWindow(QMainWindow):
         unit = info.get("sub_unit", "")
         author = info.get("author", "")
         count = info.get("item_count", 0)
-        self.lbl_status_msg.setText(f"Đã nhận nộp bài từ công đoạn '{unit}' ({author}, {count} linh kiện)")
-        logger.info("Thành viên công đoạn đã hoàn tất nộp bài: %s (Công đoạn: %s, %d linh kiện)", author, unit, count)
+        self.lbl_status_msg.setText(f"Đã nhận file CTTT từ công đoạn '{unit}' ({author}, {count} linh kiện)")
+        logger.info("Thành viên công đoạn đã hoàn tất cập nhật file CTTT: %s (Công đoạn: %s, %d linh kiện)", author, unit, count)
 
         # Refresh leader's submission board
         self.leader_view.scan_member_submissions()

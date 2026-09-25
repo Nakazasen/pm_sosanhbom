@@ -274,7 +274,7 @@ class PCDPlanScanDialog(QDialog):
         bot_layout.addLayout(h_opt)
 
         h_action = QHBoxLayout()
-        self.btn_execute = QPushButton("Khởi Tạo Thư Mục & Sinh Gói Nộp Cho Mã Đã Chọn")
+        self.btn_execute = QPushButton("Khởi Tạo Thư Mục & Sinh Gói File Làm Việc Cho Mã Đã Chọn")
         self.btn_execute.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
         self.btn_execute.setMinimumHeight(36)
         self.btn_execute.setStyleSheet(
@@ -738,28 +738,41 @@ class PCDPlanScanDialog(QDialog):
             msg += f"\n(Đã bỏ qua {skipped_count} thư mục có sẵn theo lựa chọn của bạn)"
         QMessageBox.information(self, "Khởi tạo Hoàn tất", msg)
 
-        # Prompt to send Email if checked
+        # Prompt to send Email if checked - strictly separated by Model!
         if self.chk_send_email.isChecked() and created_folders:
-            first_folder = created_folders[0]
-            first_model = self.table.item(selected_indices[0], 4).text() if self.table.item(selected_indices[0], 4) else "Model"
-            first_phase = self.table.cellWidget(selected_indices[0], 5).currentText() if isinstance(self.table.cellWidget(selected_indices[0], 5), QComboBox) else "MP"
-
-            # Set mailer test mode
             self.mailer.test_mode = self.chk_test_mode.isChecked()
 
-            preview = self.mailer.build_task_assignment_email(
-                machine_type=first_model,
-                start_date=now_str,
-                quantity=len(created_folders),
-                phase=first_phase,
-                deadline_copy=(datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%d.%m.%Y"),
-                deadline_verify=(datetime.datetime.now() + datetime.timedelta(days=5)).strftime("%d.%m.%Y"),
-                attachment_path=first_folder,
-            )
+            from collections import defaultdict
+            model_groups: dict[str, list[tuple[str, Path]]] = defaultdict(list)
+            for r in selected_indices:
+                model_item = self.table.item(r, 4)
+                mod_name = model_item.text().strip() if model_item else "Unknown_Model"
+                phase_combo = self.table.cellWidget(r, 5)
+                phase_str = phase_combo.currentText().strip() if isinstance(phase_combo, QComboBox) else "MP"
+                path_item = self.table.item(r, 6)
+                p = Path(path_item.text().strip()) if path_item else Path()
+                model_groups[mod_name].append((phase_str, p))
 
             from src.gui.leader_view import EmailPreviewDialog
-            dlg = EmailPreviewDialog(preview=preview, mailer=self.mailer, parent=self)
-            dlg.exec()
+            total_groups = len(model_groups)
+            for idx, (mod_name, row_list) in enumerate(model_groups.items(), start=1):
+                qty = len(row_list)
+                first_phase, first_folder = row_list[0]
+                # The attachment path should be the model's base folder (parent of the machine code folder)
+                att_dir = first_folder.parent if first_folder.parent and first_folder.parent != first_folder else first_folder
+
+                preview = self.mailer.build_task_assignment_email(
+                    machine_type=mod_name,
+                    start_date=now_str,
+                    quantity=qty,
+                    phase=first_phase,
+                    deadline_copy=(datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%d.%m.%Y"),
+                    deadline_verify=(datetime.datetime.now() + datetime.timedelta(days=5)).strftime("%d.%m.%Y"),
+                    attachment_path=att_dir,
+                )
+                dlg = EmailPreviewDialog(preview=preview, mailer=self.mailer, parent=self)
+                dlg.setWindowTitle(f"Xem trước Email Phân Công ({idx}/{total_groups}) - Model: {mod_name} ({qty} mã)")
+                dlg.exec()
 
         self.projects_created.emit(created_folders)
         self.accept()

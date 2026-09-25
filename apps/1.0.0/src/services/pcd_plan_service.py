@@ -41,12 +41,12 @@ def is_cloud_placeholder(path: Path) -> bool:
 
 
 def is_onedrive_running() -> bool:
-    """Check if OneDrive.exe process is currently active."""
+    """Check if OneDrive process is currently active."""
     try:
         import psutil
         for proc in psutil.process_iter(["name"]):
             name = proc.info.get("name") or ""
-            if name.lower() in ("onedrive.exe", "onedrive"):
+            if "onedrive" in name.lower():
                 return True
     except Exception:
         pass
@@ -167,7 +167,6 @@ class PCDPlanService:
         base_dir: str | Path | None = None,
         dict_service: MachineDictService | None = None,
     ) -> None:
-        self._is_custom_base = base_dir is not None
         self.base_dir = Path(base_dir or DEFAULT_ONEDRIVE_BASE)
         self.dict_service = dict_service or MachineDictService()
 
@@ -197,17 +196,26 @@ class PCDPlanService:
 
         candidate_paths: list[Path] = []
 
-        # 1. If base_dir was not explicitly provided by caller, check user configured custom pcd_base_dir
-        if not self._is_custom_base:
-            conf_dir = _get_configured_pcd_base_dir()
-            if conf_dir:
-                candidate_paths.extend([
-                    conf_dir / "Theo tháng (月別)" / year_str / month_str,
-                    conf_dir / year_str / month_str,
-                    conf_dir,
-                ])
+        # 1. Check user configured custom pcd_base_dir
+        conf_dir = _get_configured_pcd_base_dir()
+        if conf_dir:
+            candidate_paths.extend([
+                conf_dir / "Theo tháng (月別)" / year_str / month_str,
+                conf_dir / year_str / month_str,
+                conf_dir,
+            ])
 
-        # 2. Check in OneDrive sync locations (Personal & SharePoint shortcut roots)
+        # 2. Check local workspace pcd_plans directories
+        candidate_paths.extend([
+            Path("data/pcd_plans") / month_str,
+            Path("data/pcd_plans") / year_str / month_str,
+            Path("data/pcd_plans"),
+            Path("apps/1.0.0/data/pcd_plans") / month_str,
+            Path("apps/1.0.0/data/pcd_plans") / year_str / month_str,
+            Path("apps/1.0.0/data/pcd_plans"),
+        ])
+
+        # 3. Check in OneDrive sync locations (Personal & SharePoint shortcut roots)
         user_home = Path(os.path.expanduser("~"))
         candidate_paths.extend([
             self.base_dir / "Theo tháng (月別)" / year_str / month_str,

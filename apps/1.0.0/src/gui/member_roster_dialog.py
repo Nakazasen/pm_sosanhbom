@@ -45,16 +45,16 @@ from src.services.machine_dict_service import MachineDictService
 
 
 def normalize_machine_tokens(raw_text: str) -> str:
-    """Normalize comma-separated machine model names by removing all internal spaces.
+    """Normalize comma-separated machine model names preserving standard spaces.
 
-    e.g. 'Virgo, Iris 2024, 6th Next' -> 'Virgo, Iris2024, 6thNext'
+    e.g. 'Virgo, Iris 2024, Sirius 2 (21ppm)' -> 'Virgo, Iris 2024, Sirius 2 (21ppm)'
     """
     if not raw_text:
         return ""
     tokens: list[str] = []
     seen: set[str] = set()
     for item in raw_text.split(","):
-        cleaned = re.sub(r"\s+", "", item.strip())
+        cleaned = " ".join(item.strip().split())
         if cleaned and cleaned.lower() not in seen:
             tokens.append(cleaned)
             seen.add(cleaned.lower())
@@ -338,7 +338,8 @@ class MemberRosterDialog(QDialog):
 
         self.combo_dept = QComboBox()
         self.combo_dept.setEditable(True)
-        self.combo_dept.addItems(["Cơ 1", "Cơ 2", "Cơ 3"])
+        depts = self.db_manager.get_departments()
+        self.combo_dept.addItems(depts if depts else ["Cơ 1", "Cơ 2", "Cơ 3"])
         form_layout.addRow("Phòng ban (*):", self.combo_dept)
 
         self.combo_sub_unit = QComboBox()
@@ -421,6 +422,21 @@ class MemberRosterDialog(QDialog):
         self.btn_sync.clicked.connect(self._load_roster_data)
         bottom_bar.addWidget(self.btn_sync)
 
+        self.btn_import_excel = QPushButton("📥 Nạp từ Danhsachthanhvien.xlsm")
+        self.btn_import_excel.setToolTip("Đọc danh sách nhân sự từ file Danhsachthanhvien.xlsm trên mạng LAN")
+        self.btn_import_excel.clicked.connect(self._on_import_excel_clicked)
+        bottom_bar.addWidget(self.btn_import_excel)
+
+        self.btn_export_excel = QPushButton("📤 Ghi sang Danhsachthanhvien.xlsm")
+        self.btn_export_excel.setToolTip("Ghi đè/cập nhật danh sách từ CSDL sang file Danhsachthanhvien.xlsm (tự động tạo backup .xlsm.bak)")
+        self.btn_export_excel.clicked.connect(self._on_export_excel_clicked)
+        bottom_bar.addWidget(self.btn_export_excel)
+
+        self.btn_open_excel = QPushButton("📂 Mở File Excel")
+        self.btn_open_excel.setToolTip("Mở file Danhsachthanhvien.xlsm bằng ứng dụng mặc định")
+        self.btn_open_excel.clicked.connect(self._on_open_excel_clicked)
+        bottom_bar.addWidget(self.btn_open_excel)
+
         self.lbl_stats = QLabel("Tổng số: 0 thành viên")
         self.lbl_stats.setStyleSheet("color: #64748B; font-weight: 500;")
         bottom_bar.addWidget(self.lbl_stats)
@@ -437,7 +453,7 @@ class MemberRosterDialog(QDialog):
     def _open_machine_selector(self) -> None:
         """Open modal dialog to check/select multiple machine models."""
         current_text = self.txt_machine_names.text()
-        current_tokens = [re.sub(r"\s+", "", t.strip()) for t in current_text.split(",") if t.strip()]
+        current_tokens = [" ".join(t.strip().split()) for t in current_text.split(",") if t.strip()]
         if not self.known_models:
             self.known_models = self.dict_service.get_model_names()
         dlg = SelectMachinesDialog(self.known_models, current_tokens, self)
@@ -445,21 +461,86 @@ class MemberRosterDialog(QDialog):
             selected = dlg.get_selected()
             self.txt_machine_names.setText(normalize_machine_tokens(", ".join(selected)))
 
-    def _load_roster_data(self) -> None:
-        """Fetch records from SQLite and render onto table."""
-        self._all_records = self.db_manager.get_members()
-        self._apply_filters()
-
-        # Update department filter choices
-        current_filter = self.combo_dept_filter.currentText()
-        depts = ["Tất cả"] + self.db_manager.get_departments()
+    def _reload_departments(self) -> None:
+        """Reload department lists in filter combo and form combo from database."""
+        depts = self.db_manager.get_departments()
+        curr_filter = self.combo_dept_filter.currentText()
         self.combo_dept_filter.blockSignals(True)
         self.combo_dept_filter.clear()
+        self.combo_dept_filter.addItem("Tất cả")
         self.combo_dept_filter.addItems(depts)
-        idx = self.combo_dept_filter.findText(current_filter)
+        idx = self.combo_dept_filter.findText(curr_filter)
         if idx >= 0:
             self.combo_dept_filter.setCurrentIndex(idx)
         self.combo_dept_filter.blockSignals(False)
+
+        curr_form_dept = self.combo_dept.currentText()
+        self.combo_dept.blockSignals(True)
+        self.combo_dept.clear()
+        self.combo_dept.addItems(depts if depts else ["Cơ 1", "Cơ 2", "Cơ 3"])
+        if curr_form_dept:
+            self.combo_dept.setEditText(curr_form_dept)
+        self.combo_dept.blockSignals(False)
+
+    def _on_import_excel_clicked(self) -> None:
+        """Import roster data from Danhsachthanhvien.xlsx / .xlsm."""
+        path = self.db_manager.get_member_excel_path()
+        if not path.exists():
+            QMessageBox.warning(
+                self,
+                "Không tìm thấy file",
+                f"Không tìm thấy file Excel nhân sự tại:\n{path}\n\nVui lòng kiểm tra kết nối mạng LAN hoặc cấu hình đường dẫn.",
+            )
+            return
+
+        total, updated, msg = self.db_manager.import_from_excel(path, clean_legacy_seeds=True)
+        if total > 0:
+            QMessageBox.information(self, "Nạp thành công", msg)
+            self._load_roster_data()
+            self.roster_changed.emit()
+        else:
+            QMessageBox.warning(self, "Kết quả nạp", msg)
+
+    def _on_export_excel_clicked(self) -> None:
+        """Export current roster in DB to Danhsachthanhvien.xlsx / .xlsm."""
+        path = self.db_manager.get_member_excel_path()
+        confirm = QMessageBox.question(
+            self,
+            "Xác nhận ghi file Excel",
+            f"Hệ thống sẽ cập nhật 2 chiều vào file Master nhân sự trên LAN:\n{path}\n(Tự động tạo file dự phòng .bak)\n\nCẢNH BÁO: Thao tác này sẽ cập nhật trực tiếp vào file của phòng KDTVN.\nBạn có chắc chắn muốn xuất dữ liệu?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        ok, msg = self.db_manager.export_to_excel(path)
+        if ok:
+            QMessageBox.information(self, "Ghi thành công", msg)
+        else:
+            QMessageBox.warning(self, "Lỗi ghi file", msg)
+
+    def _on_open_excel_clicked(self) -> None:
+        """Open Danhsachthanhvien.xlsm in default system application."""
+        import os
+        import subprocess
+        path = self.db_manager.get_member_excel_path()
+        if not path.exists():
+            QMessageBox.warning(self, "Không tìm thấy file", f"File không tồn tại:\n{path}")
+            return
+        try:
+            os.startfile(str(path))
+        except Exception:
+            try:
+                subprocess.Popen(["start", "", str(path)], shell=True)
+            except Exception as err:
+                QMessageBox.warning(self, "Lỗi mở file", f"Không thể mở file:\n{err}")
+
+    def _load_roster_data(self) -> None:
+        """Fetch records from SQLite and render onto table."""
+        self._all_records = self.db_manager.get_members()
+        self._reload_departments()
+        self._apply_filters()
 
         # Update connection badge
         _, is_remote = self.db_manager.get_active_db_path()

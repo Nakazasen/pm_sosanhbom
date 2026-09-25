@@ -41,12 +41,12 @@ def is_cloud_placeholder(path: Path) -> bool:
 
 
 def is_onedrive_running() -> bool:
-    """Check if OneDrive.exe process is currently active."""
+    """Check if OneDrive process is currently active."""
     try:
         import psutil
         for proc in psutil.process_iter(["name"]):
             name = proc.info.get("name") or ""
-            if name.lower() in ("onedrive.exe", "onedrive"):
+            if "onedrive" in name.lower():
                 return True
     except Exception:
         pass
@@ -205,7 +205,17 @@ class PCDPlanService:
                 conf_dir,
             ])
 
-        # 2. Check in OneDrive sync locations (Personal & SharePoint shortcut roots)
+        # 2. Check local workspace pcd_plans directories
+        candidate_paths.extend([
+            Path("data/pcd_plans") / month_str,
+            Path("data/pcd_plans") / year_str / month_str,
+            Path("data/pcd_plans"),
+            Path("apps/1.0.0/data/pcd_plans") / month_str,
+            Path("apps/1.0.0/data/pcd_plans") / year_str / month_str,
+            Path("apps/1.0.0/data/pcd_plans"),
+        ])
+
+        # 3. Check in OneDrive sync locations (Personal & SharePoint shortcut roots)
         user_home = Path(os.path.expanduser("~"))
         candidate_paths.extend([
             self.base_dir / "Theo tháng (月別)" / year_str / month_str,

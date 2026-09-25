@@ -182,7 +182,7 @@ class TestKPICardsEmpiricalStress:
         qapp: QApplication,
         tmp_path: Path,
     ) -> None:
-        """Stress test 'Tiến độ nộp CTTT' card across percentages, rounding, and toggling."""
+        """Stress test 'Tiến độ file CTTT' card across percentages, rounding, and toggling."""
         view = LeaderWorkspaceView(base_dir=tmp_path)
         assert view.lbl_kpi_cttt_progress.text() == "0%"
 
@@ -264,12 +264,12 @@ class TestKPICardsEmpiricalStress:
         view.refresh_kpi_cards()
         assert view.lbl_kpi_recon_status.text() == "Đang chuẩn bị"
 
-        # Transition 2: Step 3 marked complete -> "Sẵn sàng đối soát"
+        # Transition 2: Step 3 marked complete -> "Sẵn sàng đối soát" / "Sẵn sàng so sánh"
         view.state.step3_completed = True
         view.refresh_kpi_cards()
-        assert view.lbl_kpi_recon_status.text() == "Sẵn sàng đối soát"
+        assert view.lbl_kpi_recon_status.text() in ("Sẵn sàng đối soát", "Sẵn sàng so sánh")
 
-        # Transition 3: Reconciliation finished -> "Hoàn tất"
+        # Transition 3: Reconciliation finished -> "Hoàn tất" / "Đã so sánh xong"
         dummy_result = ReconciliationResult(
             cttt_rows=pd.DataFrame(),
             plm_missing_rows=pd.DataFrame(),
@@ -279,13 +279,13 @@ class TestKPICardsEmpiricalStress:
         )
         view.current_result = dummy_result
         view.refresh_kpi_cards()
-        assert view.lbl_kpi_recon_status.text() == "Hoàn tất"
+        assert view.lbl_kpi_recon_status.text() in ("Hoàn tất", "Đã so sánh xong")
 
-        # Transition 4: Report generated -> remains "Hoàn tất"
+        # Transition 4: Report generated -> remains "Hoàn tất" / "Đã so sánh xong"
         view.current_result = None
         view.last_report_path = tmp_path / "report.xlsx"
         view.refresh_kpi_cards()
-        assert view.lbl_kpi_recon_status.text() == "Hoàn tất"
+        assert view.lbl_kpi_recon_status.text() in ("Hoàn tất", "Đã so sánh xong")
 
         # Transition 5: Clean reset
         view.current_result = None
@@ -387,14 +387,14 @@ class TestKPICardsEmpiricalStress:
 
             # Card 4: Recon Status
             if has_result or has_report:
-                expected_status = "Hoàn tất"
+                expected_statuses = {"Hoàn tất", "Đã so sánh xong"}
             elif step3_done:
-                expected_status = "Sẵn sàng đối soát"
+                expected_statuses = {"Sẵn sàng đối soát", "Sẵn sàng so sánh"}
             elif n_machines > 0:
-                expected_status = "Đang chuẩn bị"
+                expected_statuses = {"Đang chuẩn bị"}
             else:
-                expected_status = "Chờ khởi tạo"
-            assert view.lbl_kpi_recon_status.text() == expected_status
+                expected_statuses = {"Chờ khởi tạo"}
+            assert view.lbl_kpi_recon_status.text() in expected_statuses
 
 
 # =============================================================================

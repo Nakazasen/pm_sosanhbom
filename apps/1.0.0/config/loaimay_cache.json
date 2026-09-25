@@ -1,0 +1,454 @@
+{
+  "Master": [
+    [
+      "Tên máy",
+      "Kiểu",
+      "Thương hiệu",
+      "Mã máy",
+      "Thông số kĩ thuật",
+      null,
+      null
+    ],
+    [
+      "6th A3",
+      " Thường",
+      "KDC",
+      "02P7; 02R0; 02VC",
+      null,
+      "To",
+      "KDTVN-Production Engineering_Management(Local) <KDTVN-Production-Engineering_Management@kdcf.onmicrosoft.com>"
+    ],
+    [
+      "6th A3",
+      null,
+      "OEM",
+      "02R1; 02R2;02R3",
+      null,
+      "CC1(nhóm cơ 1)",
+      "KDTVN-Production Engineering_Mecha 1(Local) <KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com>"
+    ],
+    [
+      "6th A3 KDC",
+      "6th A3S",
+      "KDC",
+      "02Y3; 02Y4; 02Y5",
+      null,
+      "CC2(nhóm cơ 2)",
+      "KDTVN-Production Engineering_Mecha 2(Local) <KDTVN-ProductionEngineering_Mecha2_Local_@kdcf.onmicrosoft.com>"
+    ],
+    [
+      "6th A3 OEM",
+      null,
+      "OEM",
+      "02YB;02YC; 02YD; 02YF",
+      null,
+      "CC3(nhóm cơ 3.1)",
+      "KDTVN-Production Engineering_Mecha 3(Local) <KDTVN-ProductionEngineering_Mecha3_Local_@kdcf.onmicrosoft.com>"
+    ],
+    [
+      "6th A4 Plus",
+      "6th Plus",
+      "H",
+      "02T6; 02T7; 02T8",
+      null,
+      "CC4(nhóm cơ 3.2)",
+      "KDTVN-Production-Engineering_Mecha32 <KDTVN-Production-Engineering_Mecha32@dtvn.kyocera.com>"
+    ],
+    [
+      "6th A4 Plus",
+      null,
+      "L",
+      "02T9",
+      null,
+      "CC5(nhóm KTCT Điện)",
+      "KDTVN-Production Engineering_Electrical(Local) <KDTVN-Production-Engineering_Electrical@kdcf.onmicrosoft.com>"
+    ],
+    [
+      "6th A4 E",
+      "6th E ",
+      "H",
+      "02TP; 02TS; 02TR",
+      null,
+      null,
+      null
+    ],
+    [
+      "6th A4 E",
+      null,
+      "L",
+      "02TT",
+      null,
+      null,
+      null
+    ],
+    [
+      "6th A4 E Plus",
+      "6th E Plus",
+      null,
+      "02WD",
+      null,
+      null,
+      null
+    ],
+    [
+      "6th A4 Next",
+      "6th Next",
+      "H",
+      "0C0T; 0C0W; 0C0X",
+      null,
+      null,
+      null
+    ],
+    [
+      "6th A4 Next",
+      null,
+      "L",
+      "0C0Y",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris E Model",
+      "Polaris E Model",
+      "H",
+      "02TA; 02TB",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris E Model",
+      null,
+      "L",
+      "02V2; 02V3; 02TF; 02TG",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris E Plus",
+      "Polaris E Plus",
+      "Finisher",
+      "02WF",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris E Plus",
+      null,
+      null,
+      "02X9",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris Next",
+      "Polaris Next",
+      "H",
+      "0C0V; 0C0Z",
+      null,
+      null,
+      null
+    ],
+    [
+      "Polaris Next",
+      null,
+      "L",
+      "0C10; 0C11; 0C12; 0C13",
+      null,
+      null,
+      null
+    ],
+    [
+      "Brazil 2",
+      "PRT",
+      null,
+      "02W0; 02W1",
+      null,
+      null,
+      null
+    ],
+    [
+      "Brazil 2",
+      "MFP",
+      "Finisher",
+      "02VY; 02VX; 02VZ",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 1",
+      "Thường",
+      "PRT",
+      "02RV; 02RW; 02RX; 02RY; 02VA",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 1",
+      null,
+      "MFP",
+      "02S0; 02S1; 02S2; 02S3; 02S4; 02S5; 02SG; 02SH",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 1",
+      "X",
+      "PRT",
+      "02VB; 02VN; 02VP",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 1",
+      null,
+      "MFP",
+      "02VS; 02VT; 02VV",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 1",
+      "OEM",
+      null,
+      "02SM; 02SL; 02SK; 02TL; 02TK",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 2",
+      null,
+      "PRT",
+      "0C15; 0C1F",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 2",
+      null,
+      "MFP",
+      "0C14; 0C1C; 0C1D; 0C1B",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 2 35ppm",
+      null,
+      "PRT",
+      "0C3J; 0C3H",
+      null,
+      null,
+      null
+    ],
+    [
+      "Libra 2 35ppm",
+      null,
+      "MFP",
+      "0C3G; 0C3F; 0C3D; 0C3C",
+      null,
+      null,
+      null
+    ],
+    [
+      "Mebius E",
+      "Mebius E",
+      "PRT",
+      "02TW; 02TX",
+      500,
+      null,
+      null
+    ],
+    [
+      "Mebius E",
+      null,
+      null,
+      "02TV",
+      250,
+      null,
+      null
+    ],
+    [
+      "Mebius E",
+      null,
+      "MFP",
+      " 02TY; 02TZ; 02V0; 02V1; 02VW",
+      null,
+      null,
+      null
+    ],
+    [
+      "Kairos",
+      "Kairos",
+      "PRT",
+      "02XA",
+      null,
+      null,
+      null
+    ],
+    [
+      "Mebius E Plus",
+      "Mebius E Plus",
+      "MFP",
+      "02ZL",
+      null,
+      null,
+      null
+    ],
+    [
+      "Virgo",
+      null,
+      "PRT",
+      "02YJ;02Z0;02Z1;02Z2",
+      null,
+      null,
+      null
+    ],
+    [
+      "Virgo",
+      null,
+      "MFP",
+      "02YK;02Z3;02Z4;02Z5;02Z6",
+      250,
+      null,
+      null
+    ],
+    [
+      "Virgo",
+      null,
+      null,
+      "02Z7",
+      500,
+      null,
+      null
+    ],
+    [
+      "Iris2020",
+      "Mono",
+      "H",
+      "02YT; 02YS; 02YR; 02XF",
+      "40/50/60/70",
+      null,
+      null
+    ],
+    [
+      "Iris2020",
+      "Color",
+      "H",
+      "02YN; 02YM; 02YL; 02XC",
+      "40/50/60/70",
+      null,
+      null
+    ],
+    [
+      "Iris2020",
+      null,
+      "L",
+      "02YP; 02XD",
+      "25/35",
+      null,
+      null
+    ],
+    [
+      "Sirius 2 (26ppm)",
+      null,
+      "PRT",
+      "0C0D; 0C0F; 0C1G",
+      null,
+      null,
+      null
+    ],
+    [
+      "Sirius 2 (26ppm)",
+      null,
+      "MFP",
+      "0C0G; 0C0H",
+      null,
+      null,
+      null
+    ],
+    [
+      "Sirius 2 (21ppm)",
+      null,
+      "PRT",
+      "0C24; 0C25",
+      null,
+      null,
+      null
+    ],
+    [
+      "Sirius 2 (21ppm)",
+      null,
+      "MFP",
+      "0C22; 0C23",
+      null,
+      null,
+      null
+    ],
+    [
+      "Pictor",
+      null,
+      "MFP",
+      "02Y7; 02YV",
+      null,
+      null,
+      null
+    ],
+    [
+      "Pictor",
+      null,
+      "PRT",
+      "02Y8; 02YW",
+      null,
+      null,
+      null
+    ],
+    [
+      "Iris 2024",
+      null,
+      "H",
+      "0C2G; 0C2H; 0C2J; 0C2K",
+      null,
+      null,
+      null
+    ],
+    [
+      "Iris 2024",
+      null,
+      "L",
+      "0C2L; 0C2M",
+      null,
+      null,
+      null
+    ],
+    [
+      "Iris 2024",
+      null,
+      "mono",
+      "0C2N; 0C2P; 0C2R; 0C2S",
+      null,
+      null,
+      null
+    ],
+    [
+      "DF IRIS",
+      null,
+      null,
+      "03V8;03RV",
+      null,
+      null,
+      null
+    ]
+  ]
+}

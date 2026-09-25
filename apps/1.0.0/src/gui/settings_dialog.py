@@ -490,8 +490,11 @@ class SettingsDialog(QDialog):
         """Save settings to config file and emit signal."""
         cfg = self.get_settings()
         try:
-            theme_val = cfg.get("theme") or cfg.get("ui", {}).get("theme", "light")
-            get_theme_manager().set_theme(theme_val, save_preference=True)
+            try:
+                theme_val = cfg.get("theme") or cfg.get("ui", {}).get("theme", "light")
+                get_theme_manager().set_theme(theme_val, save_preference=True)
+            except Exception as theme_err:
+                logger.debug("Theme setting skipped: %s", theme_err)
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_path, "w", encoding="utf-8") as fp:
                 json.dump(cfg, fp, indent=2, ensure_ascii=False)

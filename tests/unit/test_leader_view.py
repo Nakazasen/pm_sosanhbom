@@ -81,10 +81,20 @@ class TestLeaderWizardStep1:
         assert step1.machine_table.rowCount() >= 1
         assert step1.machine_table.item(0, 1).text().startswith("110")
 
-        # Switch to DMT / PMT (maT)
-        step1.stage_combo.setCurrentText("DMT / PMT (maT - tiền tố T10)")
+        # Switch to DMT (maT)
+        step1.stage_combo.setCurrentText("DMT (maT - tiền tố T10)")
         assert view.state.stage == ProjectStage.MA_T
         assert step1.machine_table.item(0, 1).text().startswith("T10")
+
+        # Switch to PMT (maT)
+        step1.stage_combo.setCurrentText("PMT (maT - tiền tố T10)")
+        assert view.state.stage == ProjectStage.MA_T
+        assert step1.machine_table.item(0, 1).text().startswith("T10")
+
+        # Switch to PP (ma1)
+        step1.stage_combo.setCurrentText("PP (ma1 - tiền tố 110)")
+        assert view.state.stage == ProjectStage.MA_1
+        assert step1.machine_table.item(0, 1).text().startswith("110")
 
         # Switch back to MP (ma1)
         step1.stage_combo.setCurrentText("MP (ma1 - tiền tố 110)")
@@ -134,52 +144,77 @@ class TestLeaderWizardStep1:
         qapp: QApplication,
         tmp_path: Path,
     ) -> None:
-        """Verify column 'Mã Máy Giao' dynamically sources its choices from table 1.2."""
+        """Verify column 'Tên máy' dynamically sources its choices from dictionary and active models."""
         view = LeaderWorkspaceView(base_dir=tmp_path)
         step1 = view.step1_widget
 
-        # 1. Initial machines in table 1.2: 110C103NL0, 110C103NL1, 110C0Z3LV1
+        # 1. Initial models in table 1.2 and dictionary
         active_codes = step1.get_active_machine_codes()
-        assert active_codes == ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
+        assert len(active_codes) >= 2
 
-        # Each row in staff_table has a QComboBox in column 3 populated with active_codes
+        # Each row in staff_table has a QComboBox in column 3 populated with Tên máy
         combo0 = step1.staff_table.cellWidget(0, 3)
         assert isinstance(combo0, QComboBox)
         items0 = [combo0.itemText(i) for i in range(combo0.count())]
-        for code in active_codes:
-            assert code in items0
+        assert "(Tất cả)" in items0
+        assert "Virgo" in items0
 
-        # 2. Add a new machine code to table 1.2
-        step1._add_machine_row(code="110C999US0")
-        active_codes_after_add = step1.get_active_machine_codes()
-        assert "110C999US0" in active_codes_after_add
-
-        # All combo boxes now have the newly added machine code
+        # 2. Add a new machine with a distinct model to table 1.2
+        step1._add_machine_row(code="110C999US0", model_name="PolarisNext")
         items0_after = [combo0.itemText(i) for i in range(combo0.count())]
-        assert "110C999US0" in items0_after
+        assert "PolarisNext" in items0_after
 
-        # 3. Mark a machine as Excluded (Bỏ qua X)
-        chk_w = step1.machine_table.cellWidget(0, 2)
-        chk = chk_w.findChild(QCheckBox)
-        assert chk is not None
-        chk.setChecked(True)  # Exclude 110C103NL0
-        active_codes_after_ex = step1.get_active_machine_codes()
-        assert "110C103NL0" not in active_codes_after_ex
-
-        # 4. Paste new machines list
-        step1.machine_table.setRowCount(0)
-        step1._add_machine_row(code="2NT1000")
-        step1._add_machine_row(code="2NT2000")
-        assert step1.get_active_machine_codes() == ["2NT1000", "2NT2000"]
-        items0_pasted = [combo0.itemText(i) for i in range(combo0.count())]
-        assert "2NT1000" in items0_pasted
-        assert "2NT2000" in items0_pasted
-
-        # 5. User can select machine code from dropdown
-        combo0.setCurrentText("2NT2000")
-        assert step1.staff_table.item(0, 3).text() == "2NT2000"
+        # 3. User can select model name or (Tất cả) from dropdown
+        combo0.setCurrentText("PolarisNext")
+        assert step1.staff_table.item(0, 3).text() == "PolarisNext"
         step1.sync_state_from_ui()
-        assert step1.state.staff_roster[0].machine_code == "2NT2000"
+        assert step1.state.staff_roster[0].machine_name == "PolarisNext"
+        assert step1.state.staff_roster[0].machine_code == "PolarisNext"
+
+    def test_multi_row_and_clear_all_machine_deletion(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify multi-row selection deletion and clear-all with confirmation."""
+        from PyQt6.QtCore import QItemSelectionModel
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+
+        # 1. Populate with 4 machines
+        step1.machine_table.setRowCount(0)
+        codes = ["11002YKNL0", "11002Z0NL0", "11002Z2NL0", "11002Z3NL0"]
+        for c in codes:
+            step1._add_machine_row(code=c)
+        assert step1.machine_table.rowCount() == 4
+
+        # 2. Select rows 0 and 1 simultaneously (like in user screenshot)
+        sel_model = step1.machine_table.selectionModel()
+        sel_model.clearSelection()
+        for col in range(5):
+            idx0 = step1.machine_table.model().index(0, col)
+            idx1 = step1.machine_table.model().index(1, col)
+            sel_model.select(idx0, QItemSelectionModel.SelectionFlag.Select)
+            sel_model.select(idx1, QItemSelectionModel.SelectionFlag.Select)
+
+        # Call delete
+        step1._del_machine_row()
+        assert step1.machine_table.rowCount() == 2
+        assert step1.machine_table.item(0, 1).text() == "11002Z2NL0"
+        assert step1.machine_table.item(1, 1).text() == "11002Z3NL0"
+        assert step1.machine_table.item(0, 0).text() == "1"
+        assert step1.machine_table.item(1, 0).text() == "2"
+
+        # 3. Test _clear_all_machines with No (canceled)
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+        step1._clear_all_machines()
+        assert step1.machine_table.rowCount() == 2
+
+        # 4. Test _clear_all_machines with Yes (confirmed)
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+        step1._clear_all_machines()
+        assert step1.machine_table.rowCount() == 0
 
     def test_validation_guards_empty_machines_and_empty_staff(
         self,
@@ -224,7 +259,7 @@ class TestLeaderWizardStep1:
 
         step1.model_combo.setCurrentText("Iris2024")
         step1.machine_table.setRowCount(0)
-        step1._add_machine_row(code="110C0Z3LV1")
+        step1._add_machine_row(code="1100C2G3LV1")
 
         # Select only 2 engineers
         step1._set_all_staff_checked(False)
@@ -232,12 +267,12 @@ class TestLeaderWizardStep1:
             chk_w = step1.staff_table.cellWidget(r, 0)
             chk = chk_w.findChild(QCheckBox)
             chk.setChecked(True)
-            step1.staff_table.setItem(r, 3, openpyxl_item := QTableWidgetItem("110C0Z3LV1"))
+            step1.staff_table.setItem(r, 3, openpyxl_item := QTableWidgetItem("1100C2G3LV1"))
 
         step1.execute_create_folders_and_packages()
 
         assert view.state.step1_completed is True
-        mach_dir = tmp_path / "Iris2024" / "110C0Z3LV1"
+        mach_dir = tmp_path / "Iris2024" / "1100C2G3LV1"
         assert mach_dir.exists()
 
         # Check member packages
@@ -358,12 +393,12 @@ class TestLeaderWizardStep2:
 
         step1.model_combo.setCurrentText("Virgo")
         step1.machine_table.setRowCount(0)
-        step1._add_machine_row(code="110C103NL0")
+        step1._add_machine_row(code="11002YJ3NL0")
         step1.sync_state_from_ui()
 
-        mach_dir = tmp_path / "Virgo" / "110C103NL0"
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
-        plm_file = mach_dir / "PLM_110C103NL0.xlsx"
+        plm_file = mach_dir / "PLM_11002YJ3NL0.xlsx"
         plm_file.write_text("RAW_PLM_DATA")
 
         step2.refresh_sourcing_table()
@@ -371,7 +406,7 @@ class TestLeaderWizardStep2:
 
         backup_dir = tmp_path / "backupTC14full"
         assert backup_dir.exists()
-        backups = list(backup_dir.glob("PLM_110C103NL0_*.xlsx"))
+        backups = list(backup_dir.glob("PLM_11002YJ3NL0_*.xlsx"))
         assert len(backups) >= 1
         assert view.state.machines[0].is_filtered is True
 
@@ -387,25 +422,25 @@ class TestLeaderWizardStep2:
 
         step1.model_combo.setCurrentText("Virgo")
         step1.machine_table.setRowCount(0)
-        step1._add_machine_row(code="110C103NL0")
+        step1._add_machine_row(code="11002YJ3NL0")
         step1.sync_state_from_ui()
 
         model_dir = tmp_path / "Virgo"
         model_dir.mkdir(parents=True, exist_ok=True)
-        mach_dir = model_dir / "110C103NL0"
+        mach_dir = model_dir / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
 
         # Place raw download in model root (as if downloaded by PLM/SAP tool)
-        raw_plm = model_dir / "PLM_110C103NL0.xlsx"
-        raw_r3 = model_dir / "R3_110C103NL0.xls"
+        raw_plm = model_dir / "PLM_11002YJ3NL0.xlsx"
+        raw_r3 = model_dir / "R3_11002YJ3NL0.xls"
         raw_plm.write_text("DOWNLOADED_PLM")
         raw_r3.write_text("DOWNLOADED_R3")
 
         step2.refresh_sourcing_table()
 
         # Files must be moved/copied directly into machine directory
-        assert (mach_dir / "PLM_110C103NL0.xlsx").exists()
-        assert (mach_dir / "R3_110C103NL0.xls").exists()
+        assert (mach_dir / "PLM_11002YJ3NL0.xlsx").exists()
+        assert (mach_dir / "R3_11002YJ3NL0.xls").exists()
         assert "✓ Sẵn sàng" in step2.sourcing_table.item(0, 3).text()
         assert "✓ Sẵn sàng" in step2.sourcing_table.item(0, 4).text()
 
@@ -426,12 +461,12 @@ class TestLeaderWizardStep3:
         view = LeaderWorkspaceView(base_dir=tmp_path)
         step3 = view.step3_widget
 
-        mach_dir = tmp_path / "Virgo" / "110C103NL0"
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
 
         view.step1_widget.model_combo.setCurrentText("Virgo")
         view.step1_widget.machine_table.setRowCount(0)
-        view.step1_widget._add_machine_row(code="110C103NL0")
+        view.step1_widget._add_machine_row(code="11002YJ3NL0")
         view.step1_widget.sync_state_from_ui()
 
         # Engineer 1 submitted OK
@@ -458,8 +493,8 @@ class TestLeaderWizardStep3:
         status1 = step3.submission_table.item(0, 4).text()
         status2 = step3.submission_table.item(1, 4).text()
         statuses = {status1, status2}
-        assert "✓ ĐÃ NỘP OK" in statuses
-        assert "⏳ CHƯA NỘP" in statuses
+        assert "✓ HOÀN THÀNH OK" in statuses
+        assert "⏳ CHƯA HOÀN THÀNH" in statuses
         assert view.state.all_members_ok is False
         assert step3.btn_consolidate.isEnabled() is False
 
@@ -473,11 +508,11 @@ class TestLeaderWizardStep3:
         view = LeaderWorkspaceView(base_dir=tmp_path)
         step3 = view.step3_widget
 
-        mach_dir = tmp_path / "Virgo" / "110C103NL0"
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
         view.step1_widget.model_combo.setCurrentText("Virgo")
         view.step1_widget.machine_table.setRowCount(0)
-        view.step1_widget._add_machine_row(code="110C103NL0")
+        view.step1_widget._add_machine_row(code="11002YJ3NL0")
         view.step1_widget.sync_state_from_ui()
 
         pkg = mach_dir / "Pending_Eng.xlsm"
@@ -512,11 +547,11 @@ class TestLeaderWizardStep3:
         view = LeaderWorkspaceView(base_dir=tmp_path)
         step3 = view.step3_widget
 
-        mach_dir = tmp_path / "Virgo" / "110C103NL0"
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
         view.step1_widget.model_combo.setCurrentText("Virgo")
         view.step1_widget.machine_table.setRowCount(0)
-        view.step1_widget._add_machine_row(code="110C103NL0")
+        view.step1_widget._add_machine_row(code="11002YJ3NL0")
         view.step1_widget.sync_state_from_ui()
 
         # Both engineers submitted OK with part items
@@ -563,15 +598,15 @@ class TestLeaderWizardStep4:
 
         view.step1_widget.model_combo.setCurrentText("Virgo")
         view.step1_widget.machine_table.setRowCount(0)
-        view.step1_widget._add_machine_row(code="110C103NL0")
+        view.step1_widget._add_machine_row(code="11002YJ3NL0")
         view.step1_widget.sync_state_from_ui()
         step4.sync_machine_combo()
 
         # Create dummy source PLM and R3
-        mach_dir = tmp_path / "Virgo" / "110C103NL0"
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
         mach_dir.mkdir(parents=True, exist_ok=True)
-        plm_p = mach_dir / "PLM_110C103NL0.xlsx"
-        r3_p = mach_dir / "R3_110C103NL0.xls"
+        plm_p = mach_dir / "PLM_11002YJ3NL0.xlsx"
+        r3_p = mach_dir / "R3_11002YJ3NL0.xls"
         plm_p.write_text("PLM")
         r3_p.write_text("R3")
         view.state.machines[0].plm_file = plm_p
@@ -580,13 +615,13 @@ class TestLeaderWizardStep4:
         out_file = step4.generate_master_bom_file()
         assert out_file is not None
         assert out_file.exists()
-        assert "BOM_110C103NL0.xlsm" in out_file.name
+        assert "BOM_11002YJ3NL0.xlsm" in out_file.name
         assert view.state.step4_completed is True
 
         # Check capnhat/old archive
         capnhat_old = mach_dir / "capnhat" / "old"
         assert capnhat_old.exists()
-        assert (capnhat_old / "PLM_110C103NL0.xlsx").exists()
+        assert (capnhat_old / "PLM_11002YJ3NL0.xlsx").exists()
 
     def test_jig_catalog_15_models_and_4m_assessment(
         self,
@@ -692,7 +727,7 @@ class TestLeaderWizardWorkflowGuards:
             step1.staff_table.horizontalHeaderItem(c).text()
             for c in range(step1.staff_table.columnCount())
         ]
-        assert headers_1_3 == ["Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Mã máy", "Công Đoạn"]
+        assert headers_1_3 == ["Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Tên máy", "Công Đoạn"]
 
         # Check Sub-unit QComboBox in row 0
         combo_sub = step1.staff_table.cellWidget(0, 4)

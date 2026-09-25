@@ -1,5 +1,5 @@
 {
-  "theme": "dark",
+  "theme": "light",
   "paths": {
     "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
     "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update",
@@ -16,5 +16,41 @@
     "PolarisNext": [
       "0C0V"
     ]
+  },
+  "project_configs": {
+    "Virgo": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": []
+    },
+    "Spica": {
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": [
+        {
+          "code": "1100C0LNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0MNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        },
+        {
+          "code": "1100C0NNL0",
+          "model_name": "Spica",
+          "is_excluded": false,
+          "note": ""
+        }
+      ]
+    }
+  },
+  "last_selected_model": "Spica",
+  "email_groups": {
+    "To": "pe_polaris@kdcf.com",
+    "CC1": "pe_virgo@kdcf.com",
+    "CC2": "pe_iris@kdcf.com",
+    "CC5(nhóm KTCT Điện)": "pe_electrical@kdcf.com"
   }
 }

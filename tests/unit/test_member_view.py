@@ -67,7 +67,7 @@ class TestMemberViewR6:
         assert view.lbl_department.text() == "Phòng Cơ 1"
         assert view.lbl_assignment_path.text() == str(assignment_file)
         assert view.is_submitted_ok is False
-        assert "CHƯA NỘP" in view.lbl_submission_seal.text()
+        assert "CHƯA HOÀN THÀNH" in view.lbl_submission_seal.text()
 
         # Check that CTTT row was auto-loaded
         assert view.cttt_table.rowCount() == 1
@@ -297,7 +297,7 @@ class TestMemberViewR6:
         assert res_file is not None
         assert res_file == assignment_file
         assert view.is_submitted_ok is True
-        assert "ĐÃ NỘP BÀI (Q2 = OK)" in view.lbl_submission_seal.text()
+        assert "ĐÃ HOÀN THÀNH (Q2 = OK)" in view.lbl_submission_seal.text()
         assert len(signal_payload) == 1
         assert signal_payload[0]["q2_status"] == "OK"
 
@@ -313,7 +313,7 @@ class TestMemberViewR6:
             view.unlock_submission()
 
         assert view.is_submitted_ok is False
-        assert "CHƯA NỘP" in view.lbl_submission_seal.text()
+        assert "CHƯA HOÀN THÀNH" in view.lbl_submission_seal.text()
 
         # Check physical workbook after unlock
         wb_unlocked = openpyxl.load_workbook(assignment_file)

@@ -25,13 +25,14 @@
     "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
     "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update",
     "default_model": "Virgo",
-    "last_download_dir": "D:\\Sandbox\\pm_sosanhbom\\downloads",
+    "last_download_dir": "D:\\Sandbox\\pm_sosanhbom\\Virgo",
     "last_download_dirs_by_model": {
       "Iris2024": "D:\\Sandbox\\pm_sosanhbom\\Iris2024",
-      "Virgo": "D:\\Sandbox\\pm_sosanhbom\\Iris2024",
+      "Virgo": "D:\\Sandbox\\pm_sosanhbom\\Virgo",
       "Libra235ppm": "D:\\Sandbox\\pm_sosanhbom\\downloads",
       "Sirius2(21ppm)": "D:\\Sandbox\\pm_sosanhbom\\downloads"
-    }
+    },
+    "pcd_base_dir": "D:\\Sandbox\\pm_sosanhbom\\apps\\1.0.0\\data\\pcd_plans\\202609"
   },
   "email": {
     "test_mode": true,

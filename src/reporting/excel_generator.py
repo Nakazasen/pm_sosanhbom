@@ -289,7 +289,7 @@ class ExcelReportGenerator:
         )
         row += 1
 
-        table_headers = ["STT", "Công đoạn / Sub-Unit", "Trạng thái nộp", "Linh kiện đối soát", "Kết quả"]
+        table_headers = ["STT", "Công đoạn / Sub-Unit", "Trạng thái CTTT", "Linh kiện đối soát", "Kết quả"]
         for col_idx, h in enumerate(table_headers, start=2):
             cell = ws.cell(row=row, column=col_idx, value=h)
             cell.fill = self.fill_header

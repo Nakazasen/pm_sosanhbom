@@ -43,8 +43,11 @@ Thumbs.db
 .agents/
 2024.12/
 2025.02/
-data/*.db
+data/
+apps/*/data/
 *.db
+*.db-shm
+*.db-wal
 Virgo/
 Iris2024/
 Libra2/
@@ -52,5 +55,4 @@ Sirius2/
 Polaris/
 Mebius/
 backup_before_*_filter/
-
-
+*.bak

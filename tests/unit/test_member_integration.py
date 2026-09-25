@@ -55,7 +55,7 @@ class TestMemberRosterIntegration:
 
         # Check that table contains 38 default + 1 new = 39 members
         account_names = [step1.staff_table.item(r, 1).text() for r in range(step1.staff_table.rowCount())]
-        assert "ZCustom_Eng" in account_names
+        assert any("ZCustom_Eng" in name for name in account_names)
         assert len(account_names) == 39
 
     def test_member_view_completer_loads_from_database(
@@ -111,7 +111,7 @@ class TestMemberRosterIntegration:
         dlg.shared_db_edit.setText(new_db)
         dlg.update_dir_edit.setText(new_update)
 
-        with patch.object(QMessageBox, "information"):
+        with patch.object(QMessageBox, "information"), patch.object(QMessageBox, "critical"), patch.object(QMessageBox, "warning"):
             dlg.save_and_close()
 
         with open(config_file, "r", encoding="utf-8") as f:

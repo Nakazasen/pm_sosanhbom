@@ -24,8 +24,8 @@ from typing import Any, Optional
 
 import openpyxl
 import pandas as pd
-from PyQt6.QtCore import QDate, QObject, QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtCore import QDate, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QColor, QFont, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -123,7 +124,7 @@ CHECKLIST_18_POINTS: list[str] = [
     "15. Xác nhận không còn mã linh kiện rỗng hoặc lỗi #N/A.",
     "16. Tự đối soát sơ bộ tại chỗ (Self-Check).",
     "17. Xác nhận với KTSX về các thay đổi 4M liên quan công đoạn.",
-    "18. Bấm nút nộp bài và xác nhận đóng dấu cờ Q2 = OK.",
+    "18. Kiểm tra và xác nhận đóng dấu cờ Q2 = OK trong file CTTT.",
 ]
 
 
@@ -152,12 +153,23 @@ class StaffAssignment:
     machine_code: str = ""
     sub_unit: str = "LSU"
     assigned_file: Optional[Path] = None
+    full_name: str = ""
+
+    @property
+    def machine_name(self) -> str:
+        return self.machine_code
+
+    @machine_name.setter
+    def machine_name(self, value: str) -> None:
+        self.machine_code = value
 
 
 @dataclass
 class MachineTarget:
     """Target machine / export direction for BOM comparison."""
     machine_code: str
+    model_name: str = ""
+    phase: str = "MP"
     is_excluded: bool = False
     folder_path: Optional[Path] = None
     custom_date: Optional[str] = None
@@ -517,9 +529,10 @@ def sanitize_machine_code(code: str) -> str:
 # =============================================================================
 
 class ModelMachineManagerDialog(QDialog):
-    """Dialog to manage machine models, 4-character machine codes, and sync with file_loaimay_nhommail.xlsx."""
+    """Dialog to manage machine models, production stage, 4-character machine codes, and department email groups."""
 
     model_selected = pyqtSignal(str)  # Emits chosen or created model
+    stage_selected = pyqtSignal(str)  # Emits chosen stage code (DMT, PMT, PP, MP)
     populate_codes_requested = pyqtSignal(str, list)  # Emits (model_name, list_of_codes)
 
     def __init__(
@@ -534,18 +547,20 @@ class ModelMachineManagerDialog(QDialog):
         self.current_model = current_model
         self.current_stage = current_stage
 
-        self.setWindowTitle("Quản Lý Model Máy & Mã Máy Từ Điển (file_loaimay_nhommail.xlsx)")
-        self.resize(580, 440)
+        self.setWindowTitle("Quản Lý Model Máy & Giai Đoạn & Nhóm Mail (file_loaimay_nhommail.xlsx)")
+        self.resize(680, 640)
         self._init_ui()
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        # 1. Model Selector Row
-        model_box = QGroupBox("1. Chọn hoặc Tạo Model Máy Mới")
+        # 1. Model & Stage Selector Row
+        model_box = QGroupBox("1. Chọn Model Máy & Giai Đoạn Sản Xuất")
         model_layout = QVBoxLayout(model_box)
+        model_layout.setSpacing(8)
+
         h_sel = QHBoxLayout()
         h_sel.addWidget(QLabel("Model máy:"))
         self.combo_model = QComboBox()
@@ -560,18 +575,41 @@ class ModelMachineManagerDialog(QDialog):
         self.btn_new_model.clicked.connect(self._prompt_new_model)
         h_sel.addWidget(self.btn_new_model)
         model_layout.addLayout(h_sel)
+
+        h_stage = QHBoxLayout()
+        h_stage.addWidget(QLabel("Giai đoạn sản xuất:"))
+        self.combo_stage = QComboBox()
+        self.combo_stage.addItems([
+            "MP (Mass Production - tiền tố 110)",
+            "PP (Pre-Production - tiền tố 110)",
+            "DMT (Trial - tiền tố T10)",
+            "PMT (Trial - tiền tố T10)",
+        ])
+        stage_upper = self.current_stage.upper()
+        if "PMT" in stage_upper:
+            self.combo_stage.setCurrentIndex(3)
+        elif "DMT" in stage_upper:
+            self.combo_stage.setCurrentIndex(2)
+        elif "PP" in stage_upper:
+            self.combo_stage.setCurrentIndex(1)
+        else:
+            self.combo_stage.setCurrentIndex(0)
+        h_stage.addWidget(self.combo_stage, stretch=1)
+        model_layout.addLayout(h_stage)
+
         layout.addWidget(model_box)
 
         # 2. Model Details & Existing 4-Char Machine Codes
         detail_box = QGroupBox("2. Danh Sách Mã Máy 4 Ký Tự Đã Đăng Ký")
         detail_layout = QVBoxLayout(detail_box)
+        detail_layout.setSpacing(6)
 
         self.lbl_info = QLabel()
         self.lbl_info.setStyleSheet("color: #64748B; font-size: 11px;")
         detail_layout.addWidget(self.lbl_info)
 
         self.text_codes = QTextBrowser()
-        self.text_codes.setMaximumHeight(85)
+        self.text_codes.setMaximumHeight(70)
         self.text_codes.setStyleSheet("background-color: rgba(255, 255, 255, 0.05); font-weight: bold; font-size: 12px;")
         detail_layout.addWidget(self.text_codes)
 
@@ -592,13 +630,52 @@ class ModelMachineManagerDialog(QDialog):
 
         layout.addWidget(detail_box)
 
-        # 3. Email and Info Summary
-        email_box = QGroupBox("3. Nhóm Email Phụ Trách (Theo Từ Điển Master)")
+        # 3. Email and Info Summary -> UPGRADED TO INTERACTIVE TABLE
+        email_box = QGroupBox("3. Nhóm Email Phụ Trách Các Phòng Ban (Cơ 1, Cơ 2, Cơ 3, Điện, Quản Lý)")
         email_layout = QVBoxLayout(email_box)
-        self.lbl_email_summary = QLabel("Đang tra cứu...")
-        self.lbl_email_summary.setWordWrap(True)
-        self.lbl_email_summary.setStyleSheet("font-size: 11px; color: #94A3B8;")
-        email_layout.addWidget(self.lbl_email_summary)
+        email_layout.setSpacing(6)
+
+        self.table_emails = QTableWidget(0, 2)
+        self.table_emails.setHorizontalHeaderLabels(["Nhóm / Phòng Ban", "Địa Chỉ Email Phụ Trách (To / CC)"])
+        self.table_emails.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table_emails.setColumnWidth(0, 180)
+        self.table_emails.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table_emails.setAlternatingRowColors(True)
+        self.table_emails.setMinimumHeight(130)
+        self.table_emails.setMaximumHeight(180)
+        email_layout.addWidget(self.table_emails)
+
+        # Sub-row: buttons to add, delete, save email groups, and open excel
+        h_email_btns = QHBoxLayout()
+        self.btn_add_email = QPushButton("+ Thêm Nhóm")
+        self.btn_add_email.setStyleSheet("background-color: #0D9488; color: white; font-weight: bold; padding: 4px 8px;")
+        self.btn_add_email.clicked.connect(self._add_email_row)
+        h_email_btns.addWidget(self.btn_add_email)
+
+        self.btn_del_email = QPushButton("- Xóa Nhóm")
+        self.btn_del_email.setStyleSheet("background-color: #DC2626; color: white; font-weight: bold; padding: 4px 8px;")
+        self.btn_del_email.clicked.connect(self._del_email_row)
+        h_email_btns.addWidget(self.btn_del_email)
+
+        h_email_btns.addStretch()
+
+        self.btn_save_email = QPushButton("💾 Lưu Nhóm Mail Vào Từ Điển")
+        self.btn_save_email.setStyleSheet("background-color: #2563EB; color: white; font-weight: bold; padding: 4px 10px;")
+        self.btn_save_email.clicked.connect(self._save_email_groups)
+        h_email_btns.addWidget(self.btn_save_email)
+
+        self.btn_open_excel = QPushButton("📂 Mở File Excel Từ Điển")
+        self.btn_open_excel.setStyleSheet("background-color: #4B5563; color: white; font-weight: bold; padding: 4px 10px;")
+        self.btn_open_excel.clicked.connect(self._open_excel_dictionary)
+        h_email_btns.addWidget(self.btn_open_excel)
+
+        email_layout.addLayout(h_email_btns)
+
+        self.lbl_email_path = QLabel()
+        self.lbl_email_path.setStyleSheet("font-size: 10px; color: #94A3B8;")
+        self.lbl_email_path.setWordWrap(True)
+        email_layout.addWidget(self.lbl_email_path)
+
         layout.addWidget(email_box)
 
         # 4. Action Buttons
@@ -624,8 +701,18 @@ class ModelMachineManagerDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-        # Load initial model info
+        # Load initial model info & emails
         self._refresh_display()
+
+    def _get_selected_stage_code(self) -> str:
+        txt = self.combo_stage.currentText().upper()
+        if "PMT" in txt:
+            return "PMT"
+        if "DMT" in txt:
+            return "DMT"
+        if "PP" in txt:
+            return "PP"
+        return "MP"
 
     def _reload_model_list(self) -> None:
         models = self.dict_service.get_model_names()
@@ -656,11 +743,89 @@ class ModelMachineManagerDialog(QDialog):
             self.lbl_info.setText(f"Dòng máy '{model}' chưa có mã máy 4 ký tự:")
             self.btn_populate.setEnabled(False)
 
-        # Email info
+        # Refresh email groups table
         groups = self.dict_service.get_all_email_groups()
-        to_email = groups.get("To", None)
-        to_str = to_email.clean_email if to_email else "KDTVN-ProductionEngineering_Mecha1_Local_@kdcf.onmicrosoft.com"
-        self.lbl_email_summary.setText(f"• Email Nhóm Phụ Trách: {to_str}\n• Tệp Master lưu trữ: {self.dict_service.excel_path}")
+        self.table_emails.setRowCount(0)
+        for row_idx, (label, info) in enumerate(groups.items()):
+            self.table_emails.insertRow(row_idx)
+            item_lbl = QTableWidgetItem(label)
+            item_email = QTableWidgetItem(info.email_string)
+            self.table_emails.setItem(row_idx, 0, item_lbl)
+            self.table_emails.setItem(row_idx, 1, item_email)
+
+        self.lbl_email_path.setText(f"• Tệp Master lưu trữ: {self.dict_service.excel_path}")
+
+    def _add_email_row(self) -> None:
+        row = self.table_emails.rowCount()
+        self.table_emails.insertRow(row)
+        self.table_emails.setItem(row, 0, QTableWidgetItem(f"Nhóm mới {row + 1}"))
+        self.table_emails.setItem(row, 1, QTableWidgetItem("KDTVN-...@kdcf.onmicrosoft.com"))
+        self.table_emails.setCurrentCell(row, 0)
+        self.table_emails.editItem(self.table_emails.item(row, 0))
+
+    def _del_email_row(self) -> None:
+        row = self.table_emails.currentRow()
+        if row >= 0:
+            lbl_item = self.table_emails.item(row, 0)
+            lbl = lbl_item.text() if lbl_item else f"dòng {row + 1}"
+            reply = QMessageBox.question(
+                self,
+                "Xác nhận xóa nhóm email",
+                f"Bạn có chắc muốn xóa nhóm email '{lbl}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.table_emails.removeRow(row)
+        else:
+            QMessageBox.information(self, "Thông báo", "Vui lòng chọn dòng nhóm email cần xóa!")
+
+    def _save_email_groups(self) -> None:
+        new_groups: dict[str, str] = {}
+        for r in range(self.table_emails.rowCount()):
+            lbl_item = self.table_emails.item(r, 0)
+            email_item = self.table_emails.item(r, 1)
+            lbl = lbl_item.text().strip() if lbl_item else ""
+            email = email_item.text().strip() if email_item else ""
+            if lbl and email:
+                new_groups[lbl] = email
+
+        if not new_groups:
+            QMessageBox.warning(self, "Trống", "Bảng nhóm email đang trống!")
+            return
+
+        success = self.dict_service.update_email_groups(new_groups)
+        if success:
+            QMessageBox.information(
+                self,
+                "Đã lưu nhóm email",
+                f"Đã lưu thành công {len(new_groups)} nhóm email phòng ban vào Từ Điển Master và bộ nhớ cấu hình.",
+            )
+            self._refresh_display()
+        else:
+            QMessageBox.warning(self, "Lỗi", "Không thể lưu nhóm email vào từ điển!")
+
+    def _open_excel_dictionary(self) -> None:
+        excel_path = self.dict_service.excel_path
+        if not excel_path.exists():
+            candidates = [
+                Path("file_loaimay_nhommail.xlsx"),
+                Path("data/file_loaimay_nhommail.xlsx"),
+                Path("config/file_loaimay_nhommail.xlsx"),
+                Path("../config/file_loaimay_nhommail.xlsx"),
+            ]
+            for c in candidates:
+                if c.exists():
+                    excel_path = c.resolve()
+                    break
+
+        if excel_path.exists():
+            try:
+                os.startfile(str(excel_path))
+            except Exception as e:
+                QMessageBox.warning(self, "Lỗi mở file", f"Không thể mở file Excel:\n{e}")
+        else:
+            QMessageBox.warning(self, "Không tìm thấy file", f"File Excel từ điển không tồn tại tại:\n{excel_path}")
 
     def _prompt_new_model(self) -> None:
         from PyQt6.QtWidgets import QInputDialog
@@ -713,14 +878,18 @@ class ModelMachineManagerDialog(QDialog):
             QMessageBox.warning(self, "Trống", "Model này chưa có mã máy nào để đưa vào bảng!")
             return
 
-        prefix = "T10" if "maT" in self.current_stage else "110"
+        stage_code = self._get_selected_stage_code()
+        prefix = "T10" if stage_code in ("DMT", "PMT") else "110"
         full_codes = [f"{prefix}{c}NL0" for c in codes]
 
+        self.stage_selected.emit(stage_code)
         self.model_selected.emit(self.current_model)
         self.populate_codes_requested.emit(self.current_model, full_codes)
         self.accept()
 
     def _on_apply_clicked(self) -> None:
+        stage_code = self._get_selected_stage_code()
+        self.stage_selected.emit(stage_code)
         self.model_selected.emit(self.current_model)
         self.accept()
 
@@ -807,7 +976,8 @@ class Step1ProjectSetupWidget(QWidget):
         self.stage_combo.addItems([
             "MP (ma1 - tiền tố 110)",
             "PP (ma1 - tiền tố 110)",
-            "DMT / PMT (maT - tiền tố T10)",
+            "DMT (maT - tiền tố T10)",
+            "PMT (maT - tiền tố T10)",
         ])
         self.stage_combo.currentTextChanged.connect(self._on_stage_changed)
         row1_layout.addWidget(self.stage_combo)
@@ -878,31 +1048,46 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_add_mach = QPushButton("+ Thêm mã")
         self.btn_add_mach.clicked.connect(self._add_machine_row)
         self.btn_del_mach = QPushButton("- Xóa mã")
+        self.btn_del_mach.setToolTip("Xóa các mã máy đang được chọn trong bảng (hoặc bấm phím Delete)")
         self.btn_del_mach.clicked.connect(self._del_machine_row)
+        self.btn_clear_all_mach = QPushButton("Xóa toàn bộ")
+        self.btn_clear_all_mach.setIcon(get_theme_manager().get_styled_icon("trash-2"))
+        self.btn_clear_all_mach.setToolTip("Xóa sạch toàn bộ danh sách mã máy trong bảng")
+        self.btn_clear_all_mach.clicked.connect(self._clear_all_machines)
         self.btn_paste_mach = QPushButton("Nhập danh sách")
         self.btn_paste_mach.setIcon(get_theme_manager().get_styled_icon("file-spreadsheet"))
         self.btn_paste_mach.clicked.connect(self._paste_machines)
 
         mach_btn_layout.addWidget(self.btn_add_mach)
         mach_btn_layout.addWidget(self.btn_del_mach)
+        mach_btn_layout.addWidget(self.btn_clear_all_mach)
         mach_btn_layout.addWidget(self.btn_paste_mach)
         mach_layout.addLayout(mach_btn_layout)
 
-        self.machine_table = QTableWidget(0, 4)
-        self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Bỏ qua (X)", "Ghi chú"])
+        self.machine_table = QTableWidget(0, 5)
+        self.machine_table.setHorizontalHeaderLabels(["STT", "Mã Máy", "Loại Máy", "Bỏ qua (X)", "Ghi chú"])
         self.machine_table.verticalHeader().setDefaultSectionSize(32)
         self.machine_table.verticalHeader().setMinimumSectionSize(28)
         self.machine_table.setShowGrid(True)
         self.machine_table.setMinimumHeight(160)
         self.machine_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.machine_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.machine_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.machine_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.machine_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.machine_table.customContextMenuRequested.connect(self._show_machine_table_context_menu)
+
+        self.shortcut_del_mach = QShortcut(QKeySequence(Qt.Key.Key_Delete), self.machine_table)
+        self.shortcut_del_mach.activated.connect(self._del_machine_row)
+
         h_mach = self.machine_table.horizontalHeader()
         h_mach.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self.machine_table.setColumnWidth(0, 45)
-        h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        h_mach.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.machine_table.setColumnWidth(2, 75)
-        h_mach.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        h_mach.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        h_mach.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        h_mach.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.machine_table.setColumnWidth(3, 75)
+        h_mach.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.machine_table.itemChanged.connect(self._on_machine_table_item_changed)
         mach_layout.addWidget(self.machine_table)
 
@@ -930,6 +1115,10 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_auto_assign = QPushButton("Tự động gán công đoạn")
         self.btn_auto_assign.clicked.connect(self._auto_assign_subunits)
 
+        self.btn_import_roster_excel = QPushButton("📥 Nạp DS từ Excel")
+        self.btn_import_roster_excel.setToolTip("Nạp danh sách nhân sự từ file Danhsachthanhvien.xlsm trên mạng LAN")
+        self.btn_import_roster_excel.clicked.connect(self._import_roster_from_excel_clicked)
+
         self.btn_manage_roster = QPushButton("Quản lý nhân sự...")
         self.btn_manage_roster.setIcon(get_theme_manager().get_styled_icon("settings"))
         self.btn_manage_roster.setToolTip("Thêm, sửa, xóa thành viên và kết nối CSDL chung LAN (ssbom_master.db)")
@@ -938,12 +1127,13 @@ class Step1ProjectSetupWidget(QWidget):
         filter_layout.addWidget(self.btn_select_all_staff)
         filter_layout.addWidget(self.btn_deselect_all_staff)
         filter_layout.addWidget(self.btn_auto_assign)
+        filter_layout.addWidget(self.btn_import_roster_excel)
         filter_layout.addWidget(self.btn_manage_roster)
         staff_layout.addLayout(filter_layout)
 
         self.staff_table = QTableWidget(0, 5)
         self.staff_table.setHorizontalHeaderLabels([
-            "Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Mã máy", "Công Đoạn",
+            "Áp dụng", "Phụ trách công đoạn", "Phòng Ban", "Tên máy", "Công Đoạn",
         ])
         self.staff_table.verticalHeader().setDefaultSectionSize(32)
         self.staff_table.verticalHeader().setMinimumSectionSize(28)
@@ -970,6 +1160,39 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_create_project = self.btn_create_folders
         self.btn_add_machine = self.btn_add_mach
 
+    def _matches_model(self, machine_names: str, model_name: str) -> bool:
+        """Check if member's assigned machine names match the project model."""
+        if not machine_names or not machine_names.strip():
+            return True
+        if not model_name or not model_name.strip() or model_name in ("(Tất cả)", "(Tất cả model)"):
+            return True
+        clean_target = re.sub(r"\s+", "", model_name.strip()).lower()
+        tokens = [re.sub(r"\s+", "", t.strip()).lower() for t in machine_names.split(",") if t.strip()]
+        return any(clean_target == t or clean_target in t or t in clean_target for t in tokens)
+
+    def _import_roster_from_excel_clicked(self) -> None:
+        """Import member roster from Danhsachthanhvien.xlsx / .xlsm and refresh Table 1.3."""
+        base_dir = getattr(self.state, "base_dir", None)
+        try:
+            from src.core.member_database import MemberDatabaseManager
+            db = MemberDatabaseManager(base_dir=base_dir)
+            path = db.get_member_excel_path()
+            if not path.exists():
+                QMessageBox.warning(
+                    self,
+                    "Không tìm thấy file",
+                    f"Không tìm thấy file danh sách nhân sự tại:\n{path}\n\nVui lòng kiểm tra kết nối mạng LAN hoặc cấu hình.",
+                )
+                return
+            total, updated, msg = db.import_from_excel(path, clean_legacy_seeds=True)
+            if total > 0:
+                QMessageBox.information(self, "Nạp thành công", msg)
+                self._reload_roster_from_db(force_model_match=True)
+            else:
+                QMessageBox.warning(self, "Kết quả nạp", msg)
+        except Exception as err:
+            QMessageBox.critical(self, "Lỗi", f"Lỗi nạp danh sách từ Excel:\n{err}")
+
     def _open_manage_roster_dialog(self) -> None:
         """Open the Member Roster Management Dialog."""
         from src.gui.member_roster_dialog import MemberRosterDialog
@@ -979,7 +1202,7 @@ class Step1ProjectSetupWidget(QWidget):
         dlg.exec()
         self._reload_roster_from_db()
 
-    def _reload_roster_from_db(self) -> None:
+    def _reload_roster_from_db(self, force_model_match: bool = False) -> None:
         """Reload roster from database and update staff table while preserving assignments."""
         base_dir = getattr(self.state, "base_dir", None)
         try:
@@ -988,7 +1211,6 @@ class Step1ProjectSetupWidget(QWidget):
             members = db.get_members(active_only=True)
             if not members:
                 return
-            roster_data = [(m.account_id, m.department, m.default_sub_unit) for m in members]
             depts = db.get_departments()
         except Exception as e:
             logger.warning(f"Could not load roster from database: {e}")
@@ -1014,7 +1236,12 @@ class Step1ProjectSetupWidget(QWidget):
             eng_item = self.staff_table.item(r, 1)
             if not eng_item:
                 continue
-            eng = eng_item.text().strip()
+            acc_id = eng_item.data(Qt.ItemDataRole.UserRole)
+            if not acc_id:
+                txt = eng_item.text().strip()
+                m_match = re.search(r"\(([^)]+)\)$", txt)
+                acc_id = m_match.group(1).strip() if m_match else txt
+
             chk_w = self.staff_table.cellWidget(r, 0)
             is_app = True
             if chk_w:
@@ -1029,28 +1256,35 @@ class Step1ProjectSetupWidget(QWidget):
             combo_sub = self.staff_table.cellWidget(r, 4)
             sub_item = self.staff_table.item(r, 4)
             sub = combo_sub.currentText() if isinstance(combo_sub, QComboBox) else (sub_item.text() if sub_item else "")
-            existing_assignments[eng] = (is_app, mach, sub)
+            existing_assignments[acc_id] = (is_app, mach, sub)
 
         self.staff_table.setRowCount(0)
         self.state.staff_roster.clear()
 
         sub_unit_cycle = list(STANDARD_SUB_UNITS)
-        active_machines = self.get_active_machine_codes() or ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
+        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
 
-        for idx, (eng, dept, def_sub) in enumerate(roster_data):
-            if eng in existing_assignments:
-                is_app, assigned_mach, assigned_unit = existing_assignments[eng]
+        for idx, m in enumerate(members):
+            acc_id = m.account_id
+            dept = m.department
+            def_sub = m.default_sub_unit
+            m_mach = getattr(m, "machine_names", "") or ""
+            model_matched = self._matches_model(m_mach, default_model)
+
+            if not force_model_match and acc_id in existing_assignments:
+                is_app, assigned_mach, assigned_unit = existing_assignments[acc_id]
             else:
-                is_app = True
+                is_app = model_matched
                 assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-                assigned_mach = active_machines[idx % len(active_machines)]
+                assigned_mach = default_model
 
             assignment = StaffAssignment(
-                engineer_name=eng,
+                engineer_name=acc_id,
                 department=dept,
                 is_applied=is_app,
                 machine_code=assigned_mach,
                 sub_unit=assigned_unit,
+                full_name=m.full_name,
             )
             self.state.staff_roster.append(assignment)
 
@@ -1066,7 +1300,11 @@ class Step1ProjectSetupWidget(QWidget):
             chk_layout.setContentsMargins(0, 0, 0, 0)
             self.staff_table.setCellWidget(r, 0, chk_widget)
 
-            self.staff_table.setItem(r, 1, QTableWidgetItem(eng))
+            disp_name = f"{m.full_name} ({acc_id})" if m.full_name and m.full_name != acc_id else acc_id
+            item_eng = QTableWidgetItem(disp_name)
+            item_eng.setData(Qt.ItemDataRole.UserRole, acc_id)
+            self.staff_table.setItem(r, 1, item_eng)
+
             self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
             self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
@@ -1114,18 +1352,22 @@ class Step1ProjectSetupWidget(QWidget):
             if not code:
                 continue
 
-            chk_w = self.machine_table.cellWidget(r, 2)
+            model_item = self.machine_table.item(r, 2)
+            model_name = model_item.text().strip() if model_item else ""
+
+            chk_w = self.machine_table.cellWidget(r, 3)
             is_excluded = False
             if chk_w:
                 chk = chk_w.findChild(QCheckBox)
                 if chk:
                     is_excluded = chk.isChecked()
 
-            note_item = self.machine_table.item(r, 3)
+            note_item = self.machine_table.item(r, 4)
             note = note_item.text().strip() if note_item else ""
 
             machines_data.append({
                 "code": code,
+                "model_name": model_name,
                 "is_excluded": is_excluded,
                 "note": note,
             })
@@ -1177,11 +1419,27 @@ class Step1ProjectSetupWidget(QWidget):
             saved_stage = m_cfg.get("stage")
             if saved_stage:
                 idx = self.stage_combo.findText(saved_stage)
+                if idx < 0:
+                    s_upper = saved_stage.upper()
+                    for i in range(self.stage_combo.count()):
+                        it_upper = self.stage_combo.itemText(i).upper()
+                        if "PMT" in s_upper and "PMT" in it_upper:
+                            idx = i
+                            break
+                        elif "DMT" in s_upper and "DMT" in it_upper:
+                            idx = i
+                            break
+                        elif "PP" in s_upper and "PP" in it_upper:
+                            idx = i
+                            break
+                        elif "MP" in s_upper and "MP" in it_upper:
+                            idx = i
+                            break
                 if idx >= 0:
                     self.stage_combo.blockSignals(True)
                     self.stage_combo.setCurrentIndex(idx)
                     self.stage_combo.blockSignals(False)
-                    is_mat = "maT" in saved_stage
+                    is_mat = "maT" in self.stage_combo.itemText(idx) or "DMT" in self.stage_combo.itemText(idx) or "PMT" in self.stage_combo.itemText(idx)
                     self.state.stage = ProjectStage.MA_T if is_mat else ProjectStage.MA_1
 
             saved_machines = m_cfg.get("machines", [])
@@ -1194,7 +1452,8 @@ class Step1ProjectSetupWidget(QWidget):
                         code = m.get("code", "")
                         note = m.get("note", "")
                         is_excluded = bool(m.get("is_excluded", False))
-                        self._add_machine_row(code=code, note=note, is_excluded=is_excluded)
+                        row_model = m.get("model_name", "")
+                        self._add_machine_row(code=code, note=note, is_excluded=is_excluded, model_name=row_model)
             finally:
                 self._is_updating_machine_table = was_updating
 
@@ -1224,13 +1483,16 @@ class Step1ProjectSetupWidget(QWidget):
 
             if discovered_codes:
                 for code in discovered_codes:
-                    self._add_machine_row(code=code)
+                    self._add_machine_row(code=code, model_name=model)
             else:
-                default_machines = ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
                 prefix = "T10" if "maT" in self.stage_combo.currentText() else "110"
-                for code in default_machines:
-                    adjusted = prefix + code[3:] if len(code) > 3 else code
-                    self._add_machine_row(code=adjusted)
+                model_codes = self.dict_service.get_machine_codes_for_model(model)
+                if model_codes:
+                    for c_4char in model_codes[:3]:
+                        init_code = f"{prefix}{c_4char}3NL0"
+                        self._add_machine_row(code=init_code, model_name=model)
+                else:
+                    self._add_machine_row(code=f"{prefix}0001NL0", model_name=model)
         finally:
             self._is_updating_machine_table = was_updating
 
@@ -1244,13 +1506,13 @@ class Step1ProjectSetupWidget(QWidget):
 
         # Try loading roster from MemberDatabaseManager
         base_dir = getattr(self.state, "base_dir", None)
-        roster_data: list[tuple[str, str, str]] = []
+        members_data = []
         try:
-            from src.core.member_database import MemberDatabaseManager
+            from src.core.member_database import MemberDatabaseManager, MemberRecord
             db = MemberDatabaseManager(base_dir=base_dir)
             members = db.get_members(active_only=True)
             if members:
-                roster_data = [(m.account_id, m.department, m.default_sub_unit) for m in members]
+                members_data = members
                 depts = db.get_departments()
                 self.combo_dept_filter.blockSignals(True)
                 self.combo_dept_filter.clear()
@@ -1261,30 +1523,38 @@ class Step1ProjectSetupWidget(QWidget):
         except Exception as e:
             logger.warning(f"Could not load roster from database, using static fallback: {e}")
 
-        if not roster_data:
-            roster_data = [
-                (eng, "Cơ 1", "") for eng in ROSTER_MECHA_1
+        if not members_data:
+            from src.core.member_database import MemberRecord
+            members_data = [
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 1", default_sub_unit="") for eng in ROSTER_MECHA_1
             ] + [
-                (eng, "Cơ 2", "") for eng in ROSTER_MECHA_2
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 2", default_sub_unit="") for eng in ROSTER_MECHA_2
             ] + [
-                (eng, "Cơ 3", "") for eng in ROSTER_MECHA_3
+                MemberRecord(account_id=eng, full_name=eng, department="Cơ 3", default_sub_unit="") for eng in ROSTER_MECHA_3
             ]
 
         self.staff_table.setRowCount(0)
         self.state.staff_roster.clear()
 
         sub_unit_cycle = list(STANDARD_SUB_UNITS)
-        active_machines = self.get_active_machine_codes() or ["110C103NL0", "110C103NL1", "110C0Z3LV1"]
+        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
 
-        for idx, (eng, dept, def_sub) in enumerate(roster_data):
+        for idx, m in enumerate(members_data):
+            eng = m.account_id
+            dept = m.department
+            def_sub = m.default_sub_unit
+            m_mach = getattr(m, "machine_names", "") or ""
+            model_matched = self._matches_model(m_mach, default_model)
+
             assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-            assigned_mach = active_machines[idx % len(active_machines)]
+            assigned_mach = default_model
             assignment = StaffAssignment(
                 engineer_name=eng,
                 department=dept,
-                is_applied=True,
+                is_applied=model_matched,
                 machine_code=assigned_mach,
                 sub_unit=assigned_unit,
+                full_name=m.full_name,
             )
             self.state.staff_roster.append(assignment)
 
@@ -1293,7 +1563,7 @@ class Step1ProjectSetupWidget(QWidget):
 
             # Checkbox
             chk = QCheckBox()
-            chk.setChecked(True)
+            chk.setChecked(model_matched)
             chk_widget = QWidget()
             chk_layout = QHBoxLayout(chk_widget)
             chk_layout.addWidget(chk)
@@ -1301,7 +1571,10 @@ class Step1ProjectSetupWidget(QWidget):
             chk_layout.setContentsMargins(0, 0, 0, 0)
             self.staff_table.setCellWidget(r, 0, chk_widget)
 
-            self.staff_table.setItem(r, 1, QTableWidgetItem(eng))
+            disp_name = f"{m.full_name} ({eng})" if m.full_name and m.full_name != eng else eng
+            item_eng = QTableWidgetItem(disp_name)
+            item_eng.setData(Qt.ItemDataRole.UserRole, eng)
+            self.staff_table.setItem(r, 1, item_eng)
             self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
             self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
             self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
@@ -1319,7 +1592,7 @@ class Step1ProjectSetupWidget(QWidget):
         # Synchronize dynamic dropdown options for column "Mã máy"
         self._sync_staff_machine_options()
 
-    def _add_machine_row(self, code: str = "", note: str = "", is_excluded: bool = False) -> None:
+    def _add_machine_row(self, code: str = "", note: str = "", is_excluded: bool = False, model_name: str = "") -> None:
         was_updating = self._is_updating_machine_table
         self._is_updating_machine_table = True
         try:
@@ -1330,8 +1603,16 @@ class Step1ProjectSetupWidget(QWidget):
             self.machine_table.item(r, 0).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
             prefix = "T10" if "maT" in self.stage_combo.currentText() else "110"
-            init_code = code or f"{prefix}C10{r + 1}NL0"
+            init_code = code or f"{prefix}000{r + 1}NL0"
             self.machine_table.setItem(r, 1, QTableWidgetItem(init_code))
+
+            # Column 2: Loại Máy (Model)
+            detected_model = model_name or self.dict_service.get_model_for_machine_code(init_code, self.state.model_name)
+            item_model = QTableWidgetItem(detected_model)
+            item_model.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+            item_model.setForeground(QColor("#0F6CBD"))
+            item_model.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.machine_table.setItem(r, 2, item_model)
 
             chk_exclude = QCheckBox()
             if is_excluded:
@@ -1342,9 +1623,9 @@ class Step1ProjectSetupWidget(QWidget):
             chk_layout.addWidget(chk_exclude)
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             chk_layout.setContentsMargins(0, 0, 0, 0)
-            self.machine_table.setCellWidget(r, 2, chk_widget)
+            self.machine_table.setCellWidget(r, 3, chk_widget)
 
-            self.machine_table.setItem(r, 3, QTableWidgetItem(note))
+            self.machine_table.setItem(r, 4, QTableWidgetItem(note))
         finally:
             self._is_updating_machine_table = was_updating
 
@@ -1353,12 +1634,78 @@ class Step1ProjectSetupWidget(QWidget):
             self._save_project_config()
 
     def _del_machine_row(self) -> None:
-        curr = self.machine_table.currentRow()
-        if curr >= 0:
-            self.machine_table.removeRow(curr)
-            self._reindex_machine_stt()
-            self._sync_staff_machine_options()
-            self._save_project_config()
+        """Delete all currently selected machine rows, or the focused row if single selection."""
+        if self.machine_table.state() == QAbstractItemView.State.EditingState:
+            return
+
+        selected_rows = sorted(
+            set(index.row() for index in self.machine_table.selectedIndexes()),
+            reverse=True,
+        )
+        if not selected_rows:
+            curr = self.machine_table.currentRow()
+            if curr >= 0:
+                selected_rows = [curr]
+
+        if not selected_rows:
+            return
+
+        was_updating = self._is_updating_machine_table
+        self._is_updating_machine_table = True
+        try:
+            for r in selected_rows:
+                self.machine_table.removeRow(r)
+        finally:
+            self._is_updating_machine_table = was_updating
+
+        self._reindex_machine_stt()
+        self._sync_staff_machine_options()
+        self._save_project_config()
+
+    def _clear_all_machines(self) -> None:
+        """Clear all machines from Table 1.2 with confirmation dialog."""
+        total_rows = self.machine_table.rowCount()
+        if total_rows == 0:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Xác nhận Xóa Toàn Bộ",
+            f"Bạn có chắc chắn muốn xóa toàn bộ {total_rows} mã máy trong danh sách không?\n\n"
+            f"Hành động này sẽ làm trống danh sách mã máy của dự án hiện tại.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        was_updating = self._is_updating_machine_table
+        self._is_updating_machine_table = True
+        try:
+            self.machine_table.setRowCount(0)
+        finally:
+            self._is_updating_machine_table = was_updating
+
+        self._sync_staff_machine_options()
+        self._save_project_config()
+
+    def _show_machine_table_context_menu(self, pos: QPoint) -> None:
+        """Context menu on right-click for machine_table."""
+        menu = QMenu(self)
+        act_del = menu.addAction(get_theme_manager().get_styled_icon("trash-2"), "Xóa các mã đã chọn (Delete)")
+        act_del.triggered.connect(self._del_machine_row)
+
+        act_clear = menu.addAction(get_theme_manager().get_styled_icon("trash"), "Xóa toàn bộ mã máy...")
+        act_clear.triggered.connect(self._clear_all_machines)
+
+        menu.addSeparator()
+        act_select_all = menu.addAction("Chọn tất cả (Ctrl+A)")
+        act_select_all.triggered.connect(self.machine_table.selectAll)
+
+        act_paste = menu.addAction(get_theme_manager().get_styled_icon("file-spreadsheet"), "Nhập danh sách mã...")
+        act_paste.triggered.connect(self._paste_machines)
+
+        menu.exec(self.machine_table.viewport().mapToGlobal(pos))
 
     def _reindex_machine_stt(self) -> None:
         was_updating = self._is_updating_machine_table
@@ -1402,6 +1749,7 @@ class Step1ProjectSetupWidget(QWidget):
             parent=self,
         )
         dlg.model_selected.connect(self._on_model_selected_from_dialog)
+        dlg.stage_selected.connect(self._on_stage_selected_from_dialog)
         dlg.populate_codes_requested.connect(self._on_populate_codes_from_dialog)
         dlg.exec()
 
@@ -1414,6 +1762,15 @@ class Step1ProjectSetupWidget(QWidget):
         self.model_combo.blockSignals(False)
         self.model_combo.setCurrentText(model_name)
 
+    def _on_stage_selected_from_dialog(self, stage_code: str) -> None:
+        """Handle stage selection from dialog."""
+        stage_upper = stage_code.upper().strip()
+        for i in range(self.stage_combo.count()):
+            item_text = self.stage_combo.itemText(i).upper()
+            if stage_upper in item_text:
+                self.stage_combo.setCurrentIndex(i)
+                break
+
     def _on_populate_codes_from_dialog(self, model_name: str, full_codes: list[str]) -> None:
         """Populate machine codes directly into Table 1.2."""
         self._on_model_selected_from_dialog(model_name)
@@ -1422,7 +1779,7 @@ class Step1ProjectSetupWidget(QWidget):
         try:
             self.machine_table.setRowCount(0)
             for code in full_codes:
-                self._add_machine_row(code=code)
+                self._add_machine_row(code=code, model_name=model_name)
         finally:
             self._is_updating_machine_table = was_updating
 
@@ -1508,7 +1865,8 @@ class Step1ProjectSetupWidget(QWidget):
             self._is_switching_model = False
 
     def _on_stage_changed(self, text: str) -> None:
-        is_mat = "maT" in text
+        stage_upper = text.upper()
+        is_mat = "MAT" in stage_upper or "DMT" in stage_upper or "PMT" in stage_upper
         self.state.stage = ProjectStage.MA_T if is_mat else ProjectStage.MA_1
         prefix = "T10" if is_mat else "110"
         self._is_updating_machine_table = True
@@ -1526,9 +1884,27 @@ class Step1ProjectSetupWidget(QWidget):
         if getattr(self, "_is_updating_machine_table", False):
             return
         if item.column() == 1:
+            code = item.text().strip().upper()
+            detected_model = self.dict_service.get_model_for_machine_code(code, self.state.model_name)
+            self._is_updating_machine_table = True
+            try:
+                mod_item = self.machine_table.item(item.row(), 2)
+                if mod_item:
+                    mod_item.setText(detected_model)
+                else:
+                    new_item = QTableWidgetItem(detected_model)
+                    new_item.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+                    new_item.setForeground(QColor("#0F6CBD"))
+                    new_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.machine_table.setItem(item.row(), 2, new_item)
+            finally:
+                self._is_updating_machine_table = False
+
             self._sync_staff_machine_options()
             self._save_project_config()
-        elif item.column() == 3:
+        elif item.column() == 2:
+            self._save_project_config()
+        elif item.column() == 4:
             self._save_project_config()
 
     def _on_machine_exclude_toggled(self, checked: bool) -> None:
@@ -1541,7 +1917,7 @@ class Step1ProjectSetupWidget(QWidget):
         """Extract active machine codes from machine_table (excluding rows marked X)."""
         codes: list[str] = []
         for r in range(self.machine_table.rowCount()):
-            chk_w = self.machine_table.cellWidget(r, 2)
+            chk_w = self.machine_table.cellWidget(r, 3)
             is_excluded = False
             if chk_w:
                 chk = chk_w.findChild(QCheckBox)
@@ -1573,16 +1949,35 @@ class Step1ProjectSetupWidget(QWidget):
             self.state.staff_roster[row].sub_unit = txt
 
     def _sync_staff_machine_options(self) -> None:
-        """Dynamically sync 'Mã máy' combo options in staff_table with machine_table."""
-        active_codes = self.get_active_machine_codes()
-        options = active_codes if active_codes else ["(Chưa có mã máy)"]
+        """Dynamically sync 'Tên máy' combo options in staff_table with dictionary and active models."""
+        active_models: list[str] = []
+        for mr in range(self.machine_table.rowCount()):
+            it = self.machine_table.item(mr, 2)
+            if it and it.text().strip():
+                mod = it.text().strip()
+                if mod not in active_models and mod != "(Chưa định nghĩa)":
+                    active_models.append(mod)
+
+        dict_models = self.dict_service.get_model_names()
+
+        # Build options: "(Tất cả)", then active models, then other dictionary models
+        options: list[str] = ["(Tất cả)"]
+        for m in active_models:
+            if m not in options:
+                options.append(m)
+        for m in dict_models:
+            if m not in options:
+                options.append(m)
 
         for r in range(self.staff_table.rowCount()):
             combo = self.staff_table.cellWidget(r, 3)
             if not isinstance(combo, QComboBox):
                 combo = QComboBox()
+                combo.setEditable(True)
                 combo.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
                 self.staff_table.setCellWidget(r, 3, combo)
+            else:
+                combo.setEditable(True)
 
             current_text = combo.currentText().strip()
             if not current_text:
@@ -1597,9 +1992,10 @@ class Step1ProjectSetupWidget(QWidget):
 
             if current_text in options:
                 combo.setCurrentText(current_text)
-            elif active_codes:
-                chosen = active_codes[r % len(active_codes)]
-                combo.setCurrentText(chosen)
+            elif current_text:
+                combo.setEditText(current_text)
+            elif active_models:
+                combo.setCurrentText(active_models[0])
             else:
                 combo.setCurrentIndex(0)
 
@@ -1637,9 +2033,13 @@ class Step1ProjectSetupWidget(QWidget):
             subprocess.Popen(["explorer", str(p)], shell=True)
 
     def _filter_staff_table(self, dept: str) -> None:
+        dept_clean = dept.strip()
         for r in range(self.staff_table.rowCount()):
-            r_dept = self.staff_table.item(r, 2).text()
-            if dept == "Tất cả" or r_dept == dept:
+            r_item = self.staff_table.item(r, 2)
+            r_dept = r_item.text().strip() if r_item else ""
+            if dept_clean == "Tất cả" or not dept_clean:
+                self.staff_table.setRowHidden(r, False)
+            elif r_dept == dept_clean or r_dept.startswith(dept_clean):
                 self.staff_table.setRowHidden(r, False)
             else:
                 self.staff_table.setRowHidden(r, True)
@@ -1651,6 +2051,8 @@ class Step1ProjectSetupWidget(QWidget):
                 chk = w.findChild(QCheckBox)
                 if chk:
                     chk.setChecked(checked)
+            if r < len(self.state.staff_roster):
+                self.state.staff_roster[r].is_applied = checked
 
     def _auto_assign_subunits(self) -> None:
         sub_units = list(STANDARD_SUB_UNITS)
@@ -1672,8 +2074,18 @@ class Step1ProjectSetupWidget(QWidget):
                 if r < len(self.state.staff_roster):
                     self.state.staff_roster[r].sub_unit = unit
 
-                if active_machines:
-                    mach = active_machines[visible_idx % len(active_machines)]
+                active_models = []
+                for mr in range(self.machine_table.rowCount()):
+                    it = self.machine_table.item(mr, 2)
+                    if it and it.text().strip() and it.text().strip() not in active_models and it.text().strip() != "(Chưa định nghĩa)":
+                        active_models.append(it.text().strip())
+                if not active_models:
+                    cur_mod = self.model_combo.currentText().strip()
+                    if cur_mod:
+                        active_models = [cur_mod]
+
+                if active_models:
+                    mach = active_models[visible_idx % len(active_models)]
                     combo = self.staff_table.cellWidget(r, 3)
                     if isinstance(combo, QComboBox):
                         combo.blockSignals(True)
@@ -1701,17 +2113,44 @@ class Step1ProjectSetupWidget(QWidget):
             if not code:
                 continue
 
-            chk_w = self.machine_table.cellWidget(r, 2)
+            model_item = self.machine_table.item(r, 2)
+            row_model = model_item.text().strip() if model_item else ""
+            if not row_model or row_model == "(Chưa định nghĩa)":
+                row_model = self.dict_service.get_model_for_machine_code(code, self.state.model_name)
+
+            chk_w = self.machine_table.cellWidget(r, 3)
             is_excluded = False
             if chk_w:
                 chk = chk_w.findChild(QCheckBox)
                 if chk:
                     is_excluded = chk.isChecked()
 
+            stage_txt = self.stage_combo.currentText().strip().upper()
+            if "PMT" in stage_txt:
+                stage_code = "PMT"
+            elif "DMT" in stage_txt:
+                stage_code = "DMT"
+            elif "PP" in stage_txt:
+                stage_code = "PP"
+            else:
+                stage_code = "MP"
+
+            now = datetime.datetime.now()
+            year_month = f"{now.year}.{now.month:02d}"
+            is_canonical_unc = "SO SANH PLM-CTTT-R3" in str(self.state.base_dir).upper()
+            use_hierarchy = (is_canonical_unc or getattr(self.state, "use_date_hierarchy", False))
+
+            if use_hierarchy:
+                target_folder = self.state.base_dir / row_model / stage_code / year_month / code
+            else:
+                target_folder = self.state.base_dir / row_model / code
+
             m = MachineTarget(
                 machine_code=code,
+                model_name=row_model,
+                phase=stage_code,
                 is_excluded=is_excluded,
-                folder_path=self.state.base_dir / self.state.model_name / code,
+                folder_path=target_folder,
             )
             self.state.machines.append(m)
 
@@ -1752,54 +2191,106 @@ class Step1ProjectSetupWidget(QWidget):
         """Open PCD Monthly Production Plan scanner dialog."""
         from src.gui.pcd_plan_dialog import PCDPlanScanDialog
         dlg = PCDPlanScanDialog(mailer=self.mailer, parent=self)
+        dlg.projects_created.connect(self._on_pcd_projects_created)
         dlg.exec()
 
+    def _on_pcd_projects_created(self, created_folders: list[Any]) -> None:
+        """Handle created project directories from PCDPlanScanDialog, populating Table 1.2."""
+        if not created_folders:
+            return
+        was_updating = self._is_updating_machine_table
+        self._is_updating_machine_table = True
+        new_codes_added = 0
+        try:
+            existing_codes = set()
+            for r in range(self.machine_table.rowCount()):
+                it = self.machine_table.item(r, 1)
+                if it and it.text().strip():
+                    existing_codes.add(it.text().strip().upper())
+
+            for folder in created_folders:
+                folder_p = Path(folder)
+                code = folder_p.name.strip().upper()
+                if code and code not in existing_codes:
+                    mod = self.dict_service.get_model_for_machine_code(code, self.state.model_name)
+                    self._add_machine_row(code=code, model_name=mod)
+                    existing_codes.add(code)
+                    new_codes_added += 1
+        finally:
+            self._is_updating_machine_table = was_updating
+
+        if new_codes_added > 0:
+            self._reindex_machine_stt()
+            self._sync_staff_machine_options()
+            self._save_project_config()
+
     def _on_send_assignment_email(self) -> None:
-        """Open Email Preview for task assignment to engineers."""
-        model = self.state.model_name
-        stage_txt = self.stage_combo.currentText().strip()
-        stage_code = "MP"
-        if "DMT" in stage_txt or "PMT" in stage_txt:
-            stage_code = "DMT/PMT"
+        """Open Email Preview for task assignment to engineers, strictly separated by Model."""
+        self.sync_state_from_ui()
+        active_machines = [m for m in self.state.machines if not m.is_excluded]
+        if not active_machines:
+            QMessageBox.warning(self, "Thông báo", "Chưa có mã máy nào được chọn để gửi thông báo!")
+            return
+
+        stage_txt = self.stage_combo.currentText().strip().upper()
+        if "PMT" in stage_txt:
+            stage_code = "PMT"
+        elif "DMT" in stage_txt:
+            stage_code = "DMT"
         elif "PP" in stage_txt:
             stage_code = "PP"
+        else:
+            stage_code = "MP"
 
-        active_machines = [m for m in self.state.machines if not m.is_excluded]
-        qty = len(active_machines) or 1
         now_str = datetime.datetime.now().strftime("%d/%m")
         today = datetime.date.today()
         deadline_copy = (today + datetime.timedelta(days=3)).strftime("%d.%m.%Y")
         deadline_verify = (today + datetime.timedelta(days=5)).strftime("%d.%m.%Y")
 
-        att_path = self.state.base_dir / model
+        from collections import defaultdict
+        machines_by_model: dict[str, list[MachineTarget]] = defaultdict(list)
+        for m in active_machines:
+            mod = m.model_name or self.state.model_name
+            machines_by_model[mod].append(m)
 
-        preview = self.mailer.build_task_assignment_email(
-            machine_type=model,
-            start_date=now_str,
-            quantity=qty,
-            phase=stage_code,
-            deadline_copy=deadline_copy,
-            deadline_verify=deadline_verify,
-            attachment_path=att_path,
-        )
-        dlg = EmailPreviewDialog(preview, self.mailer, parent=self)
-        dlg.exec()
+        total_models = len(machines_by_model)
+        for idx, (mod_name, m_list) in enumerate(machines_by_model.items(), start=1):
+            qty = len(m_list)
+            first_m = m_list[0]
+            if first_m.folder_path and first_m.folder_path.parent:
+                att_path = first_m.folder_path.parent
+            else:
+                att_path = self.state.base_dir / mod_name
 
-    def create_project_folder_structure(self, force_date_hierarchy: bool | None = None) -> Path:
-        """Canonical folder creation for model with phase and Year.Month (YYYY.MM)."""
-        self.sync_state_from_ui()
-        stage_txt = self.stage_combo.currentText().strip()
-        stage_code = "MP"
-        if "DMT" in stage_txt or "PMT" in stage_txt:
+            preview = self.mailer.build_task_assignment_email(
+                machine_type=mod_name,
+                start_date=now_str,
+                quantity=qty,
+                phase=stage_code,
+                deadline_copy=deadline_copy,
+                deadline_verify=deadline_verify,
+                attachment_path=att_path,
+            )
+            dlg = EmailPreviewDialog(preview, self.mailer, parent=self)
+            dlg.setWindowTitle(f"Xem trước Email Phân Công ({idx}/{total_models}) - Model: {mod_name} ({qty} mã)")
+            dlg.exec()
+
+    def create_model_folder_structure(self, model_name: str | None = None, force_date_hierarchy: bool | None = None) -> Path:
+        """Canonical folder creation for a specific model with phase and Year.Month (YYYY.MM)."""
+        mod = model_name or self.state.model_name
+        stage_txt = self.stage_combo.currentText().strip().upper()
+        if "PMT" in stage_txt:
+            stage_code = "PMT"
+        elif "DMT" in stage_txt:
             stage_code = "DMT"
         elif "PP" in stage_txt:
             stage_code = "PP"
+        else:
+            stage_code = "MP"
 
         now = datetime.datetime.now()
         year_month = f"{now.year}.{now.month:02d}"
 
-        # Standard hierarchy: <base_dir>/<model_name>/<stage>/<year_month> when on network UNC storage,
-        # or flat <base_dir>/<model_name> for local test/custom environments unless explicitly forced.
         is_canonical_unc = "SO SANH PLM-CTTT-R3" in str(self.state.base_dir).upper()
         use_hierarchy = (
             force_date_hierarchy
@@ -1808,11 +2299,9 @@ class Step1ProjectSetupWidget(QWidget):
         )
 
         if use_hierarchy:
-            model_dir = self.state.base_dir / self.state.model_name / stage_code / year_month
+            model_dir = self.state.base_dir / mod / stage_code / year_month
         else:
-            model_dir = self.state.base_dir / self.state.model_name
-
-        self.state.current_model_dir = model_dir
+            model_dir = self.state.base_dir / mod
 
         dirs_to_create = [
             model_dir / "PLM",
@@ -1828,8 +2317,15 @@ class Step1ProjectSetupWidget(QWidget):
 
         return model_dir
 
+    def create_project_folder_structure(self, force_date_hierarchy: bool | None = None) -> Path:
+        """Canonical folder creation for primary model."""
+        self.sync_state_from_ui()
+        res = self.create_model_folder_structure(model_name=self.state.model_name, force_date_hierarchy=force_date_hierarchy)
+        self.state.current_model_dir = res
+        return res
+
     def execute_create_folders_and_packages(self) -> None:
-        """Execute folder creation and member submission package distribution."""
+        """Execute folder creation and member submission package distribution strictly isolated by Model."""
         self.sync_state_from_ui()
 
         active_machines = [m for m in self.state.machines if not m.is_excluded]
@@ -1843,8 +2339,6 @@ class Step1ProjectSetupWidget(QWidget):
             QMessageBox.warning(self, "Thông báo lỗi", "Bạn chưa lựa chọn người phụ trách để tạo file điền linh kiện!")
             return
 
-        model_dir = self.create_project_folder_structure()
-
         # Locate formnguoidung template (check local base_dir or canonical UNC)
         src_template: Path | None = None
         cand = self.state.base_dir / "formnguoidung.xlsm"
@@ -1857,48 +2351,60 @@ class Step1ProjectSetupWidget(QWidget):
         elif unc_template.exists():
             src_template = unc_template
 
-        # Create machine directories and engineer submission packages
+        # Group machines by model so each model gets its own isolated folder hierarchy!
+        from collections import defaultdict
+        machines_by_model: dict[str, list[MachineTarget]] = defaultdict(list)
         for m in active_machines:
-            m.machine_code = sanitize_machine_code(m.machine_code)
-            m_dir = model_dir / m.machine_code
+            mod = m.model_name or self.state.model_name
+            machines_by_model[mod].append(m)
 
-            if m_dir.exists():
-                reply = QMessageBox.question(
-                    self,
-                    "Xác nhận Thư mục Đã Tồn Tại",
-                    f"Thư mục dự án đã tồn tại:\n{m_dir}\n\nBạn có muốn ghi đè / tạo lại gói nộp không?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No,
-                )
-                if reply != QMessageBox.StandardButton.Yes:
-                    continue
+        summary_lines = []
+        for mod_name, m_list in machines_by_model.items():
+            mod_dir = self.create_model_folder_structure(model_name=mod_name)
+            summary_lines.append(f"• Model '{mod_name}': {len(m_list)} mã máy -> {mod_dir}")
 
-            m_dir.mkdir(parents=True, exist_ok=True)
-            m.folder_path = m_dir
+            for m in m_list:
+                m.machine_code = sanitize_machine_code(m.machine_code)
+                m_dir = mod_dir / m.machine_code
 
+                if m_dir.exists():
+                    reply = QMessageBox.question(
+                        self,
+                        "Xác nhận Thư mục Đã Tồn Tại",
+                        f"Thư mục dự án đã tồn tại:\n{m_dir}\n\nBạn có muốn ghi đè / tạo lại gói file làm việc không?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        continue
 
-            # Relevant engineers for this machine
-            assigned_engineers = [
-                e for e in active_engineers
-                if e.machine_code == m.machine_code or e.machine_code in ("(Tất cả mã máy)", "Tất cả", "")
-            ]
-            if not assigned_engineers:
-                assigned_engineers = active_engineers
+                m_dir.mkdir(parents=True, exist_ok=True)
+                m.folder_path = m_dir
 
-            for eng in assigned_engineers:
-                target_file = m_dir / f"{eng.engineer_name}.xlsm"
-                self._generate_member_package(target_file, eng, m, src_template)
-                eng.assigned_file = target_file
+                # Relevant engineers for this machine based on Model/Tên máy or specific machine code
+                assigned_engineers = [
+                    e for e in active_engineers
+                    if e.machine_code in (m.model_name, m.machine_code, "(Tất cả)", "(Tất cả model)", "(Tất cả mã máy)", "Tất cả", "")
+                ]
+                if not assigned_engineers:
+                    assigned_engineers = active_engineers
 
+                for eng in assigned_engineers:
+                    target_file = m_dir / f"{eng.engineer_name}.xlsm"
+                    self._generate_member_package(target_file, eng, m, src_template)
+                    eng.assigned_file = target_file
+
+        self.state.current_model_dir = self.state.base_dir / self.state.model_name
         self.state.step1_completed = True
         self.step_completed.emit(True)
 
+        summary_text = "\n".join(summary_lines)
         QMessageBox.information(
             self,
             "Thông báo thành công",
-            f"Đã tạo xong danh sách BOM và các gói nộp của phụ trách theo cài đặt.\n\n"
-            f"📁 Thư mục lưu trữ: {model_dir}\n"
-            f"Cấu trúc: <Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\<Tên phụ trách>.xlsm",
+            f"Đã tạo xong danh sách BOM và các gói file CTTT của phụ trách được phân lập theo từng dòng máy:\n\n"
+            f"{summary_text}\n\n"
+            f"Cấu trúc: <Thư mục gốc>\\<Tên Model>\\<Mã máy>\\<Tên phụ trách>.xlsm",
         )
 
     def _generate_member_package(
@@ -2095,46 +2601,47 @@ class Step2DataSourcingWidget(QWidget):
 
     def _auto_route_model_files_to_machine_dirs(self) -> None:
         """Automatically route any BOM files found in model root or sub-folders into machine-specific folders."""
-        model_dir = self.state.base_dir / self.state.model_name
-        if not model_dir.exists():
-            return
-
         active_machines = [m for m in self.state.machines if not m.is_excluded]
         if not active_machines:
             return
 
-        # Check model_dir root, PLM subfolder, R3 subfolder for any files matching machine codes
-        search_dirs = [model_dir, model_dir / "PLM", model_dir / "R3"]
-        for s_dir in search_dirs:
-            if not s_dir.exists():
+        unique_models = set(m.model_name or self.state.model_name for m in active_machines)
+        for mod_name in unique_models:
+            model_dir = self.state.base_dir / mod_name
+            if not model_dir.exists():
                 continue
-            candidates = (
-                list(s_dir.glob("PLM_*.xlsx"))
-                + list(s_dir.glob("PLM_*.xlsm"))
-                + list(s_dir.glob("R3_*.xls*"))
-            )
-            for p in candidates:
-                if not p.is_file():
+
+            search_dirs = [model_dir, model_dir / "PLM", model_dir / "R3"]
+            for s_dir in search_dirs:
+                if not s_dir.exists():
                     continue
-                fname = p.name.upper()
-                for m in active_machines:
-                    if m.machine_code.upper() in fname:
-                        target_dir = m.folder_path or (model_dir / m.machine_code)
-                        target_dir.mkdir(parents=True, exist_ok=True)
-                        dest = target_dir / p.name
-                        if p.resolve() != dest.resolve():
-                            shutil.copyfile(str(p), str(dest))
-                            if "PLM" in fname:
-                                m.plm_file = dest
-                            elif "R3" in fname:
-                                m.r3_file = dest
-                            # If downloaded to root model_dir, remove so it doesn't leave duplicates
-                            if s_dir == model_dir:
-                                try:
-                                    p.unlink()
-                                except Exception:
-                                    pass
-                        break
+                candidates = (
+                    list(s_dir.glob("PLM_*.xlsx"))
+                    + list(s_dir.glob("PLM_*.xlsm"))
+                    + list(s_dir.glob("R3_*.xls*"))
+                )
+                for p in candidates:
+                    if not p.is_file():
+                        continue
+                    fname = p.name.upper()
+                    for m in active_machines:
+                        if m.machine_code.upper() in fname:
+                            target_dir = m.folder_path or (self.state.base_dir / (m.model_name or mod_name) / m.machine_code)
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            dest = target_dir / p.name
+                            if p.resolve() != dest.resolve():
+                                shutil.copyfile(str(p), str(dest))
+                                if "PLM" in fname:
+                                    m.plm_file = dest
+                                elif "R3" in fname:
+                                    m.r3_file = dest
+                                # If downloaded to root model_dir, remove so it doesn't leave duplicates
+                                if s_dir == model_dir:
+                                    try:
+                                        p.unlink()
+                                    except Exception:
+                                        pass
+                            break
 
     def refresh_sourcing_table(self) -> None:
         """Scan folder directories and update sourcing table rows."""
@@ -2184,7 +2691,7 @@ class Step2DataSourcingWidget(QWidget):
 
             # PLM File Check
             plm_status = "⏳ Thiếu file"
-            m_dir = m.folder_path or (self.state.base_dir / self.state.model_name / m.machine_code)
+            m_dir = m.folder_path or (self.state.base_dir / (m.model_name or self.state.model_name) / m.machine_code)
             if m_dir.exists():
                 plm_candidates = list(m_dir.glob(f"PLM_{m.machine_code}*.xlsx")) + list(m_dir.glob(f"PLM_{m.machine_code}*.xlsm"))
                 if not plm_candidates:
@@ -2380,7 +2887,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         layout.setSpacing(8)
 
         # 1. Control Header
-        ctrl_group = QGroupBox("3.1 Giám Sát Tiến Độ Nộp Bài Của Thành Viên (Cờ CTTT!Q2 = 'OK')")
+        ctrl_group = QGroupBox("3.1 Giám Sát Tiến Độ Hoàn Thành File CTTT Của Thành Viên (Cờ CTTT!Q2 = 'OK')")
         ctrl_layout = QHBoxLayout(ctrl_group)
 
         ctrl_layout.addWidget(QLabel("Lọc mã máy:"))
@@ -2407,7 +2914,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         # 2. Real-time Status Table
         self.submission_table = QTableWidget(0, 8)
         self.submission_table.setHorizontalHeaderLabels([
-            "STT", "Mã Máy", "Công Đoạn", "Phụ trách công đoạn", "Trạng Thái Nộp", "Số LK", "MSI", "Thời Gian Nộp",
+            "STT", "Mã Máy", "Công Đoạn", "Phụ trách công đoạn", "Trạng Thái CTTT", "Số LK", "MSI", "Thời Gian Cập Nhật",
         ])
         self.submission_table.verticalHeader().setDefaultSectionSize(32)
         self.submission_table.verticalHeader().setMinimumSectionSize(28)
@@ -2420,7 +2927,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         layout.addWidget(self.submission_table, stretch=1)
 
         # 3. Summary & Gate Notice
-        self.lbl_gate_summary = QLabel("Đang chờ quét trạng thái bài nộp...")
+        self.lbl_gate_summary = QLabel("Đang chờ quét tiến độ file CTTT...")
         self.lbl_gate_summary.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.lbl_gate_summary.setStyleSheet("color: #1F497D; padding: 4px;")
         layout.addWidget(self.lbl_gate_summary)
@@ -2486,9 +2993,10 @@ class Step3TrackingConsolidationWidget(QWidget):
         # Mode A: Machine Folders with Member Workbooks
         scanned_files_count = 0
         for m in active_machines:
-            m_dir = m.folder_path or (model_dir / m.machine_code)
+            m_dir = m.folder_path or (self.state.base_dir / (m.model_name or self.state.model_name) / m.machine_code)
             if not m_dir.exists():
-                cands = [p for p in (self.state.base_dir / self.state.model_name).rglob(m.machine_code) if p.is_dir()]
+                mod = m.model_name or self.state.model_name
+                cands = [p for p in (self.state.base_dir / mod).rglob(m.machine_code) if p.is_dir()]
                 if cands:
                     m_dir = cands[0]
             if not m_dir.exists():
@@ -2506,8 +3014,8 @@ class Step3TrackingConsolidationWidget(QWidget):
                 assigned_unit = "CTTT"
                 for r_item in self.state.staff_roster:
                     if r_item.engineer_name == f.stem and (
-                        r_item.machine_code == m.machine_code
-                        or r_item.machine_code in ("(Tất cả mã máy)", "Tất cả", "")
+                        r_item.machine_code in (m.model_name, m.machine_code)
+                        or r_item.machine_code in ("(Tất cả)", "(Tất cả model)", "(Tất cả mã máy)", "Tất cả", "")
                     ):
                         assigned_unit = r_item.sub_unit or "CTTT"
                         break
@@ -2593,7 +3101,7 @@ class Step3TrackingConsolidationWidget(QWidget):
             self.submission_table.setItem(r, 2, QTableWidgetItem(sub.sub_unit))
             self.submission_table.setItem(r, 3, QTableWidgetItem(sub.engineer_name))
 
-            c_status = QTableWidgetItem("✓ ĐÃ NỘP OK" if sub.is_submitted_ok else "⏳ CHƯA NỘP")
+            c_status = QTableWidgetItem("✓ HOÀN THÀNH OK" if sub.is_submitted_ok else "⏳ CHƯA HOÀN THÀNH")
             c_status.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             c_status.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
             if sub.is_submitted_ok:
@@ -2625,7 +3133,7 @@ class Step3TrackingConsolidationWidget(QWidget):
             self.btn_consolidate.setStyleSheet(
                 "background-color: #10B981; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px;"
             )
-            self.lbl_gate_summary.setText(f"✓ Hoàn tất 100% ({ok_subs}/{total_subs} bài nộp OK). Sẵn sàng tổng hợp dữ liệu.")
+            self.lbl_gate_summary.setText(f"✓ Hoàn tất 100% ({ok_subs}/{total_subs} file đạt OK). Sẵn sàng tổng hợp dữ liệu.")
             self.lbl_gate_summary.setStyleSheet("color: #10B981; font-weight: bold;")
         else:
             self.state.all_members_ok = False
@@ -2633,7 +3141,7 @@ class Step3TrackingConsolidationWidget(QWidget):
             self.btn_consolidate.setStyleSheet(
                 "background-color: #94A3B8; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px;"
             )
-            warn_msg = f"⏳ Đã nộp: {ok_subs}/{total_subs} bài. Cảnh báo: Còn {len(pending_engineers)} bài chưa nộp (Q2 != 'OK')!"
+            warn_msg = f"⏳ Đã hoàn thành: {ok_subs}/{total_subs} file. Cảnh báo: Còn {len(pending_engineers)} file chưa hoàn thành (Q2 != 'OK')!"
             self.lbl_gate_summary.setText(warn_msg)
             self.lbl_gate_summary.setStyleSheet("color: #DC3545; font-weight: bold;")
 
@@ -2708,7 +3216,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         self.state.consolidated_labels.clear()
 
         for m in active_machines:
-            m_dir = m.folder_path or (self.state.base_dir / self.state.model_name / m.machine_code)
+            m_dir = m.folder_path or (self.state.base_dir / (m.model_name or self.state.model_name) / m.machine_code)
             if not m_dir.exists():
                 continue
 
@@ -2732,7 +3240,7 @@ class Step3TrackingConsolidationWidget(QWidget):
             "Thông báo cập nhật",
             f"Đã cập nhật xong danh sách linh kiện vào dữ liệu tổng hợp.\n\n"
             f"📁 Các file thành viên đã được tổng hợp và lưu trữ tại:\n"
-            f"<Thư mục gốc>\\{self.state.model_name}\\<Mã máy>\\phutrach\\",
+            f"<Thư mục gốc>\\<Tên Model>\\<Mã máy>\\phutrach\\",
         )
         return True
 
@@ -2910,7 +3418,7 @@ class Step4ComparisonReportingWidget(QWidget):
 
         t1_sub = QHBoxLayout()
         t1_sub.addWidget(QLabel("Subject:"))
-        self.t1_subject = QLineEdit("[BOM SO SÁNH] Nhắc nhở nộp bài & 18 Điểm Kiểm Tra Trước Sản Xuất")
+        self.t1_subject = QLineEdit("[BOM SO SÁNH] Nhắc nhở tiến độ cập nhật file CTTT & 18 Điểm Kiểm Tra Trước Sản Xuất")
         t1_sub.addWidget(self.t1_subject)
         t1_layout.addLayout(t1_sub)
 
@@ -3010,15 +3518,13 @@ class Step4ComparisonReportingWidget(QWidget):
         m_code = self.combo_active_machine.currentText().strip() or (
             self.state.machines[0].machine_code if self.state.machines else "110C103NL0"
         )
-        model = self.state.model_name
-        model_dir = self.state.base_dir / model
-        m_dir = model_dir / m_code
+        m_target = next((m for m in self.state.machines if m.machine_code == m_code), None)
+        model = m_target.model_name if m_target and m_target.model_name else self.state.model_name
+        m_dir = m_target.folder_path if m_target and m_target.folder_path else (self.state.base_dir / model / m_code)
         m_dir.mkdir(parents=True, exist_ok=True)
 
         out_path = m_dir / f"BOM_{m_code}.xlsm"
         try:
-            # Match machine
-            m_target = next((m for m in self.state.machines if m.machine_code == m_code), None)
             plm_p = m_target.plm_file if m_target else None
             r3_p = m_target.r3_file if m_target else None
 
@@ -3055,7 +3561,7 @@ class Step4ComparisonReportingWidget(QWidget):
             QMessageBox.information(
                 self,
                 "Thông báo hoàn thành",
-                f"Đã tạo xong file BOM cần so sánh:\n{res_path.name}\n\nĐường dẫn: {res_path}",
+                f"Đã tạo xong file BOM cần so sánh cho Model '{model}':\n{res_path.name}\n\nĐường dẫn: {res_path}",
             )
             return res_path
         except Exception as exc:
@@ -3074,9 +3580,14 @@ class Step4ComparisonReportingWidget(QWidget):
 
     def _open_machine_folder(self) -> None:
         m_code = self.combo_active_machine.currentText().strip()
-        t = self.state.base_dir / self.state.model_name / m_code
-        if not t.exists():
-            t = self.state.base_dir / self.state.model_name
+        m_target = next((m for m in self.state.machines if m.machine_code == m_code), None)
+        if m_target and m_target.folder_path and m_target.folder_path.exists():
+            t = m_target.folder_path
+        else:
+            model = m_target.model_name if m_target and m_target.model_name else self.state.model_name
+            t = self.state.base_dir / model / m_code
+            if not t.exists():
+                t = self.state.base_dir / model
         try:
             os.startfile(str(t))
         except Exception:
@@ -3113,8 +3624,9 @@ class Step4ComparisonReportingWidget(QWidget):
 
     def _refresh_mail_previews(self) -> None:
         """Render HTML for Tier 1 and Tier 2 email previews."""
-        model = self.state.model_name
         m_code = self.combo_active_machine.currentText().strip() or "110C103NL0"
+        m_target = next((m for m in self.state.machines if m.machine_code == m_code), None)
+        model = m_target.model_name if m_target and m_target.model_name else self.state.model_name
 
         # Tier 1 HTML
         chk_list_html = "".join([f"<li style='margin-bottom: 4px;'>{pt}</li>" for pt in CHECKLIST_18_POINTS])
@@ -3123,11 +3635,11 @@ class Step4ComparisonReportingWidget(QWidget):
         <body style="font-family: Calibri, Arial, sans-serif; color: #212529;">
             <div style="background-color: #0078D4; color: white; padding: 12px; border-radius: 4px;">
                 <h3 style="margin: 0;">KYOCERA DOCUMENT SOLUTIONS - BỘ PHẬN CHẾ TẠO</h3>
-                <p style="margin: 4px 0 0 0; font-size: 13px;">THÔNG BÁO NHẮC NHỞ NỘP BÀI & 18 ĐIỂM KIỂM TRA TRƯỚC SẢN XUẤT</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">THÔNG BÁO NHẮC NHỞ TIẾN ĐỘ CẬP NHẬT FILE CTTT & 18 ĐIỂM KIỂM TRA TRƯỚC SẢN XUẤT</p>
             </div>
             <div style="padding: 12px;">
                 <p>Kính gửi các Anh/Chị kỹ sư phụ trách công đoạn Model <strong>{model}</strong> (Hướng xuất: <strong>{m_code}</strong>),</p>
-                <p>Vui lòng khẩn trương hoàn thành việc điền linh kiện, đối soát sơ bộ tại chỗ và đóng dấu nộp bài (<strong>CTTT!Q2 = 'OK'</strong>) đúng hạn.</p>
+                <p>Vui lòng khẩn trương hoàn thành việc điền linh kiện, đối soát sơ bộ tại chỗ và xác nhận hoàn tất (<strong>CTTT!Q2 = 'OK'</strong>) đúng hạn.</p>
                 <h4 style="color: #0078D4; border-bottom: 1px solid #0078D4; padding-bottom: 4px;">18 ĐIỂM KIỂM TRA TRƯỚC SẢN XUẤT:</h4>
                 <ol style="font-size: 13px; line-height: 1.5;">
                     {chk_list_html}
@@ -3158,7 +3670,7 @@ class Step4ComparisonReportingWidget(QWidget):
                     </tr>
                     <tr><td style="padding: 6px; border: 1px solid #dee2e6;">Model máy</td><td style="padding: 6px; border: 1px solid #dee2e6;"><strong>{model}</strong></td></tr>
                     <tr><td style="padding: 6px; border: 1px solid #dee2e6;">Mã hướng xuất</td><td style="padding: 6px; border: 1px solid #dee2e6;"><strong>{m_code}</strong></td></tr>
-                    <tr><td style="padding: 6px; border: 1px solid #dee2e6;">Trạng thái nộp bài</td><td style="padding: 6px; border: 1px solid #dee2e6; color: #10B981;"><strong>100% OK</strong></td></tr>
+                    <tr><td style="padding: 6px; border: 1px solid #dee2e6;">Trạng thái hoàn thành file CTTT</td><td style="padding: 6px; border: 1px solid #dee2e6; color: #10B981;"><strong>100% OK</strong></td></tr>
                     <tr><td style="padding: 6px; border: 1px solid #dee2e6;">File đính kèm</td><td style="padding: 6px; border: 1px solid #dee2e6;">📎 {att_name}</td></tr>
                 </table>
                 <p>Kính đề nghị Ban Quản lý xem xét và phê duyệt.</p>
@@ -3213,11 +3725,15 @@ class Step4ComparisonReportingWidget(QWidget):
 
     def _on_send_management_review_email(self) -> None:
         """Open Email Preview for management review with user's standard template."""
-        model = self.state.model_name
+        m_code = self.combo_active_machine.currentText().strip() or "110C103NL0"
+        m_target = next((m for m in self.state.machines if m.machine_code == m_code), None)
+        model = m_target.model_name if m_target and m_target.model_name else self.state.model_name
+
         today = datetime.date.today()
         prod_date = (today + datetime.timedelta(days=7)).strftime("%d.%m.%Y")
-        m_code = self.combo_active_machine.currentText().strip() or "110C103NL0"
-        att_path = self.state.last_bom_file or (self.state.base_dir / model / f"BOM_{m_code}.xlsm")
+
+        m_dir = m_target.folder_path if m_target and m_target.folder_path else (self.state.base_dir / model / m_code)
+        att_path = self.state.last_bom_file or (m_dir / f"BOM_{m_code}.xlsm")
 
         preview = self.mailer.build_management_review_email(
             machine_type=model,
@@ -3366,7 +3882,7 @@ class LeaderWorkspaceView(QWidget):
 
         self.kpi_card_total_models = KPICardWidget("Tổng số Model", "0", "Mã máy trong dự án", "folder", container)
         self.kpi_card_ready_models = KPICardWidget("Model đủ BOM", "0", "Đã nạp PLM & R3", "check-circle", container)
-        self.kpi_card_cttt_progress = KPICardWidget("Tiến độ nộp CTTT", "0%", "Tỷ lệ bài nộp OK", "user-check", container)
+        self.kpi_card_cttt_progress = KPICardWidget("Tiến độ file CTTT", "0%", "Tỷ lệ file hoàn thành OK", "user-check", container)
         self.kpi_card_recon_status = KPICardWidget("Trạng thái so sánh BOM", "Chờ khởi tạo", "So khớp BOM tổng", "file-spreadsheet", container)
 
         # Aliases for backward and testing compatibility
@@ -3395,7 +3911,7 @@ class LeaderWorkspaceView(QWidget):
         )
         self.btn_quick_download_plm.clicked.connect(self._open_plm_download_dialog)
 
-        self.btn_quick_scan = QPushButton("Quét nộp bài", container)
+        self.btn_quick_scan = QPushButton("Kiểm tra tiến độ CTTT", container)
         self.btn_quick_scan.setIcon(theme_mgr.get_styled_icon("refresh"))
         self.btn_quick_scan.setStyleSheet(
             "QPushButton { background-color: #0D9488; color: white; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-size: 11px; }"
@@ -3602,7 +4118,7 @@ class LeaderWorkspaceView(QWidget):
                 QMessageBox.warning(
                     self,
                     "Cảnh báo",
-                    "Chưa hoàn tất tổng hợp dữ liệu Bước 3! Vui lòng kiểm tra trạng thái nộp bài và nhấn 'Tổng hợp dữ liệu' trước khi chuyển sang Bước 4.",
+                    "Chưa hoàn tất tổng hợp dữ liệu Bước 3! Vui lòng kiểm tra tiến độ file CTTT và nhấn 'Tổng hợp dữ liệu' trước khi chuyển sang Bước 4.",
                 )
                 return
             self.switch_to_step(curr + 1)
