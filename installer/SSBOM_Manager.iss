@@ -3,7 +3,7 @@
 ; Cài theo chuẩn D:\Sandbox\MP2027\huongdansetup_autoupdate.md
 
 #define AppName "SSBOM Manager"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "Kyocera Document Technology Vietnam - Production Engineering"
 #define LauncherExe "SSBOM_Launcher.exe"
 
@@ -21,6 +21,8 @@ OutputBaseFilename=SSBOM_Manager_Setup_{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\assets\icon.ico
+UninstallIconFile=..\assets\icon.ico
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 UninstallDisplayName={#AppName}
@@ -32,12 +34,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "..\SSBOM_Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\current.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update_sources.default.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\locales\*"; DestDir: "{app}\locales"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\apps\{#AppVersion}\*"; DestDir: "{app}\apps\{#AppVersion}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#LauncherExe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#LauncherExe}"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#LauncherExe}"; IconFilename: "{app}\assets\icon.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#LauncherExe}"; Tasks: desktopicon; IconFilename: "{app}\assets\icon.ico"
 
 [Tasks]
 Name: "desktopicon"; Description: "Tạo lối tắt trên màn hình nền"; GroupDescription: "Lối tắt bổ sung:"

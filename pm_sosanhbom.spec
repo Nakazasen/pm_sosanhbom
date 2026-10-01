@@ -40,6 +40,8 @@ datas = [
     ("update_sources.default.json", "."),
     ("src/gui/assets", "src/gui/assets"),
     ("src/gui/styles", "src/gui/styles"),
+    ("assets", "assets"),
+    ("release.json", "."),
 ]
 
 a = Analysis(
@@ -71,6 +73,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon="assets/icon.ico",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "SSBOM_Manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "channel": "stable",
   "database_schema": 1,
   "policy": "HASH_ONLY_LAN"

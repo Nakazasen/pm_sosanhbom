@@ -9,18 +9,28 @@ Provides shared database persistence and offline caching for Kyocera SSBOM:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 import datetime
 import json
 import logging
 import os
 from pathlib import Path
+import random
 import re
 import shutil
 import sqlite3
+import time
 from typing import Any
 
 import openpyxl
+
+from src.core.path_utils import (
+    get_app_base_dir,
+    is_unc_path_accessible,
+    safe_exists,
+    safe_is_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +94,14 @@ class MemberDatabaseManager:
         remote_db_path: Path | str | None = None,
         excel_path: Path | str | None = None,
     ) -> None:
-        self.base_dir = Path(base_dir or r"D:\Sandbox\pm_sosanhbom")
+        self.base_dir = Path(base_dir) if base_dir else get_app_base_dir()
+        self._remote_check_cache: bool | None = None
+        self._remote_check_time: float = 0.0
+
         cfg_path = self.base_dir / "config" / "settings.json"
         cfg_shared = ""
         cfg_excel = ""
-        if cfg_path.exists():
+        if safe_exists(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as fp:
                     data = json.load(fp)
@@ -104,7 +117,7 @@ class MemberDatabaseManager:
             self.remote_db_path = Path(cfg_shared)
         else:
             local_master = self.base_dir / "ssbom_master.db"
-            if is_test_dir or local_master.exists():
+            if is_test_dir or safe_exists(local_master):
                 self.remote_db_path = local_master
             else:
                 self.remote_db_path = Path(DEFAULT_SHARED_DB_PATH)
@@ -117,13 +130,16 @@ class MemberDatabaseManager:
             local_xlsx = self.base_dir / "Danhsachthanhvien.xlsx"
             local_xlsm = self.base_dir / "Danhsachthanhvien.xlsm"
             if is_test_dir:
-                self.excel_path = local_xlsx if local_xlsx.exists() else (local_xlsm if local_xlsm.exists() else local_xlsx)
-            elif local_xlsx.exists():
+                self.excel_path = local_xlsx if safe_exists(local_xlsx) else (local_xlsm if safe_exists(local_xlsm) else local_xlsx)
+            elif safe_exists(local_xlsx):
                 self.excel_path = local_xlsx
-            elif local_xlsm.exists():
+            elif safe_exists(local_xlsm):
                 self.excel_path = local_xlsm
             else:
                 self.excel_path = Path(DEFAULT_MEMBER_EXCEL_PATH)
+
+        self.is_test_dir = is_test_dir
+        self._last_cache_sync_time: float = 0.0
 
         self.local_cache_dir = self.base_dir / "data"
         self.local_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -133,19 +149,54 @@ class MemberDatabaseManager:
         self.initialize_database()
 
     def is_remote_available(self) -> bool:
-        """Check if remote UNC share or directory is accessible."""
+        """Check if remote UNC share or directory is accessible with caching."""
+        now = time.time()
+        if self._remote_check_cache is not None and (now - self._remote_check_time < 15.0):
+            return self._remote_check_cache
+
+        is_avail = False
         try:
-            # Check parent directory or file access
             parent_dir = self.remote_db_path.parent
-            if parent_dir.exists():
-                return True
+            if is_unc_path_accessible(parent_dir, timeout=0.5):
+                is_avail = safe_exists(parent_dir)
         except Exception:
-            pass
-        return False
+            is_avail = False
+
+        self._remote_check_cache = is_avail
+        self._remote_check_time = now
+        return is_avail
+
+    def _ensure_cache_fresh(self, force: bool = False) -> None:
+        """Ensure local cache is up-to-date with remote DB using throttled mtime check."""
+        now = time.time()
+        throttle = 0.0 if self.is_test_dir else 5.0
+        if not force and (now - self._last_cache_sync_time < throttle):
+            return
+        self._last_cache_sync_time = now
+
+        if not self.is_remote_available():
+            return
+
+        remote_path = self.remote_db_path
+        if remote_path == self.local_cache_path or not safe_exists(remote_path):
+            return
+
+        try:
+            if not safe_exists(self.local_cache_path):
+                self._safe_backup_db(remote_path, self.local_cache_path)
+                return
+
+            r_mtime = remote_path.stat().st_mtime
+            l_mtime = self.local_cache_path.stat().st_mtime
+            if r_mtime > l_mtime:
+                logger.debug("Remote DB is newer (%.1f > %.1f), syncing cache...", r_mtime, l_mtime)
+                self._safe_backup_db(remote_path, self.local_cache_path)
+        except Exception as exc:
+            logger.debug("Error checking cache freshness: %s", exc)
 
     def get_active_db_path(self) -> tuple[Path, bool]:
         """Determine whether to use remote network database or local cache.
-        
+
         Returns:
             (active_path, is_remote_connected)
         """
@@ -153,14 +204,34 @@ class MemberDatabaseManager:
             return self.remote_db_path, True
         return self.local_cache_path, False
 
+    def get_read_db_path(self, force_refresh: bool = False) -> Path:
+        """Return local cache path for local-first zero-latency read access."""
+        self._ensure_cache_fresh(force=force_refresh)
+        if safe_exists(self.local_cache_path):
+            return self.local_cache_path
+        active_path, _ = self.get_active_db_path()
+        return active_path
+
+    def sync_cache_from_remote(self, force: bool = False) -> bool:
+        """Explicitly refresh local cache from remote DB if remote is available."""
+        if not self.is_remote_available() or not safe_exists(self.remote_db_path):
+            return False
+        try:
+            self._safe_backup_db(self.remote_db_path, self.local_cache_path)
+            self._last_cache_sync_time = time.time()
+            return True
+        except Exception as exc:
+            logger.error("Explicit cache sync failed: %s", exc)
+            return False
+
     def get_member_excel_path(self) -> Path:
         """Resolve the active member Excel file path with fallback to candidate paths."""
-        if self.excel_path.exists():
+        if safe_exists(self.excel_path):
             return self.excel_path
         # Check alternative extension (.xlsx vs .xlsm)
         alt_ext = ".xlsm" if self.excel_path.suffix.lower() == ".xlsx" else ".xlsx"
         alt_path = self.excel_path.with_suffix(alt_ext)
-        if alt_path.exists():
+        if safe_exists(alt_path):
             return alt_path
 
         candidates = [
@@ -176,17 +247,137 @@ class MemberDatabaseManager:
             Path("data/Danhsachthanhvien.xlsm"),
         ]
         for c in candidates:
-            if c.exists():
+            if safe_exists(c):
                 return c
         return self.excel_path
 
-    def _get_connection(self, db_path: Path) -> sqlite3.Connection:
-        """Open an SQLite connection with WAL mode and row factory."""
+    @staticmethod
+    def _safe_backup_db(src_path: Path, dst_path: Path) -> None:
+        """Safely copy live SQLite database using sqlite3 online backup API."""
+        if not safe_exists(src_path):
+            return
+        src_conn = None
+        dst_conn = None
+        try:
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            src_conn = sqlite3.connect(str(src_path), timeout=10.0)
+            dst_conn = sqlite3.connect(str(dst_path), timeout=10.0)
+            src_conn.backup(dst_conn)
+        except Exception as exc:
+            logger.debug("Safe SQLite backup skipped: %s", exc)
+        finally:
+            if src_conn is not None:
+                try:
+                    src_conn.close()
+                except Exception:
+                    pass
+            if dst_conn is not None:
+                try:
+                    dst_conn.close()
+                except Exception:
+                    pass
+
+    @contextmanager
+    def _get_connection(self, db_path: Path):
+        """Open an SQLite connection with 30s busy timeout and guaranteed clean closure."""
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(db_path), timeout=10.0)
+        conn = sqlite3.connect(str(db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        return conn
+        try:
+            conn.execute("PRAGMA busy_timeout = 30000;")
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    @contextmanager
+    def _write_transaction(self, db_path: Path):
+        """Open an SQLite write transaction using BEGIN IMMEDIATE to avoid upgrade deadlocks."""
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA busy_timeout = 30000;")
+            conn.execute("BEGIN IMMEDIATE;")
+            yield conn
+            conn.execute("COMMIT;")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK;")
+            except Exception:
+                pass
+            raise
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def _execute_dual_write(self, write_action, operation_name: str = "ghi dữ liệu") -> tuple[bool, Any, bool]:
+        """Execute write_action(conn) on remote (with jitter retry) and immediately on local cache.
+
+        write_action: callable(sqlite3.Connection) -> result (e.g. lastrowid, rowcount, or custom).
+        Returns:
+            (success: bool, result_or_error_msg: Any, used_fallback: bool)
+        """
+        remote_path, is_remote = self.get_active_db_path()
+        used_fallback = False
+        result = None
+
+        # 1. Write to remote if available
+        if is_remote and remote_path != self.local_cache_path:
+            max_retries = 5
+            remote_success = False
+            for attempt in range(max_retries):
+                try:
+                    with self._write_transaction(remote_path) as conn:
+                        result = write_action(conn)
+                    remote_success = True
+                    break
+                except sqlite3.IntegrityError as int_err:
+                    return False, str(int_err), False
+                except LookupError as lk_err:
+                    return False, str(lk_err), False
+                except sqlite3.OperationalError as op_err:
+                    err_str = str(op_err).lower()
+                    if ("locked" in err_str or "busy" in err_str) and attempt < max_retries - 1:
+                        delay = 0.04 * (1.5 ** attempt) + random.uniform(0.01, 0.06)
+                        logger.warning(
+                            "Remote DB locked during %s, retrying in %.3fs (attempt %d/%d)...",
+                            operation_name,
+                            delay,
+                            attempt + 1,
+                            max_retries,
+                        )
+                        time.sleep(delay)
+                        continue
+                    logger.warning("Remote DB write failed after retries: %s; falling back to local cache.", op_err)
+                    used_fallback = True
+                    break
+                except Exception as ex:
+                    logger.warning("Remote write error: %s; falling back to local cache.", ex)
+                    used_fallback = True
+                    break
+
+        # 2. Dual-write directly to local cache
+        try:
+            with self._write_transaction(self.local_cache_path) as conn:
+                local_res = write_action(conn)
+                if result is None:
+                    result = local_res
+        except sqlite3.IntegrityError as int_err:
+            return False, str(int_err), used_fallback
+        except LookupError as lk_err:
+            return False, str(lk_err), used_fallback
+        except Exception as local_err:
+            logger.error("Local cache dual-write error: %s", local_err)
+            if used_fallback and result is None:
+                return False, f"Lỗi ghi dữ liệu cục bộ: {local_err}", used_fallback
+
+        self._last_cache_sync_time = time.time()
+        return True, result, used_fallback
 
     def initialize_database(self) -> None:
         """Create tables if not existing, seed canonical engineers, and sync cache."""
@@ -194,70 +385,88 @@ class MemberDatabaseManager:
 
         try:
             with self._get_connection(target_path) as conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS members (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        account_id TEXT UNIQUE NOT NULL,
-                        full_name TEXT NOT NULL,
-                        department TEXT NOT NULL,
-                        default_sub_unit TEXT DEFAULT '',
-                        machine_names TEXT DEFAULT '',
-                        is_active INTEGER DEFAULT 1,
-                        notes TEXT DEFAULT '',
-                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                    );
-                    """
-                )
-                # Auto-migration for existing databases
+                is_network = str(target_path).startswith(r"\\") or str(target_path).startswith("//")
                 try:
-                    conn.execute("ALTER TABLE members ADD COLUMN machine_names TEXT DEFAULT '';")
-                    conn.commit()
+                    if is_network:
+                        conn.execute("PRAGMA journal_mode = TRUNCATE;")
+                    else:
+                        conn.execute("PRAGMA journal_mode = WAL;")
                 except sqlite3.OperationalError:
                     pass
 
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_members_dept ON members(department);"
-                )
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_members_active ON members(is_active);"
-                )
-
-                # Check if table is empty
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM members;")
-                count = cursor.fetchone()[0]
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='members';")
+                table_exists = cursor.fetchone() is not None
 
-                if count == 0:
-                    logger.info("Seeding database '%s' with 38 initial engineers...", target_path)
-                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    seed_items: list[tuple[str, str, str, str, str, int, str, str, str]] = []
-                    for name in SEED_ROSTER_MECHA_1:
-                        seed_items.append((name, name, "Cơ 1", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-                    for name in SEED_ROSTER_MECHA_2:
-                        seed_items.append((name, name, "Cơ 2", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-                    for name in SEED_ROSTER_MECHA_3:
-                        seed_items.append((name, name, "Cơ 3", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-
-                    conn.executemany(
+                if not table_exists:
+                    conn.execute(
                         """
-                        INSERT OR IGNORE INTO members (
-                            account_id, full_name, department, default_sub_unit, machine_names,
-                            is_active, notes, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-                        """,
-                        seed_items,
+                        CREATE TABLE IF NOT EXISTS members (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            account_id TEXT UNIQUE NOT NULL,
+                            full_name TEXT NOT NULL,
+                            department TEXT NOT NULL,
+                            default_sub_unit TEXT DEFAULT '',
+                            machine_names TEXT DEFAULT '',
+                            is_active INTEGER DEFAULT 1,
+                            notes TEXT DEFAULT '',
+                            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                        );
+                        """
                     )
-                    conn.commit()
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_members_dept ON members(department);")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_members_active ON members(is_active);")
 
-            # If remote was used, update local cache
-            if is_remote and target_path.exists():
-                try:
-                    shutil.copy2(target_path, self.local_cache_path)
-                except Exception as cache_err:
-                    logger.debug("Failed to cache remote DB to local: %s", cache_err)
+                    cursor.execute("SELECT COUNT(*) FROM members;")
+                    count = cursor.fetchone()[0]
+
+                    if count == 0:
+                        logger.info("Seeding database '%s' with 38 initial engineers...", target_path)
+                        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                        seed_items: list[tuple[str, str, str, str, str, int, str, str, str]] = []
+                        for name in SEED_ROSTER_MECHA_1:
+                            seed_items.append((name, name, "Cơ 1", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        for name in SEED_ROSTER_MECHA_2:
+                            seed_items.append((name, name, "Cơ 2", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                        for name in SEED_ROSTER_MECHA_3:
+                            seed_items.append((name, name, "Cơ 3", "", "(Tất cả)", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+
+                        conn.executemany(
+                            """
+                            INSERT OR IGNORE INTO members (
+                                account_id, full_name, department, default_sub_unit, machine_names,
+                                is_active, notes, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                            """,
+                            seed_items,
+                        )
+                        conn.commit()
+                else:
+                    # Auto-migration for existing databases
+                    try:
+                        cursor.execute("PRAGMA table_info(members);")
+                        existing_cols = [r[1] for r in cursor.fetchall()]
+                        if "machine_names" not in existing_cols:
+                            conn.execute("ALTER TABLE members ADD COLUMN machine_names TEXT DEFAULT '';")
+                            conn.commit()
+                    except sqlite3.OperationalError:
+                        pass
+
+            # If remote was used and local cache is missing or older, update local cache
+            if is_remote and safe_exists(target_path):
+                should_sync = True
+                if safe_exists(self.local_cache_path):
+                    try:
+                        should_sync = target_path.stat().st_mtime > self.local_cache_path.stat().st_mtime
+                    except OSError:
+                        should_sync = False
+                if should_sync:
+                    try:
+                        self._safe_backup_db(target_path, self.local_cache_path)
+                    except Exception as cache_err:
+                        logger.debug("Failed to cache remote DB to local: %s", cache_err)
 
             # If only local was used but local didn't exist, it is now initialized
         except Exception as exc:
@@ -267,49 +476,45 @@ class MemberDatabaseManager:
                 logger.info("Retrying initialization on local cache...")
                 try:
                     with self._get_connection(self.local_cache_path) as conn:
-                        conn.execute(
-                            """
-                            CREATE TABLE IF NOT EXISTS members (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                account_id TEXT UNIQUE NOT NULL,
-                                full_name TEXT NOT NULL,
-                                department TEXT NOT NULL,
-                                default_sub_unit TEXT DEFAULT '',
-                                machine_names TEXT DEFAULT '',
-                                is_active INTEGER DEFAULT 1,
-                                notes TEXT DEFAULT '',
-                                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                            );
-                            """
-                        )
-                        try:
-                            conn.execute("ALTER TABLE members ADD COLUMN machine_names TEXT DEFAULT '';")
-                            conn.commit()
-                        except sqlite3.OperationalError:
-                            pass
-
                         cursor = conn.cursor()
-                        cursor.execute("SELECT COUNT(*) FROM members;")
-                        if cursor.fetchone()[0] == 0:
-                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            seed_items = []
-                            for name in SEED_ROSTER_MECHA_1:
-                                seed_items.append((name, name, "Cơ 1", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-                            for name in SEED_ROSTER_MECHA_2:
-                                seed_items.append((name, name, "Cơ 2", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-                            for name in SEED_ROSTER_MECHA_3:
-                                seed_items.append((name, name, "Cơ 3", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
-                            conn.executemany(
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='members';")
+                        if not cursor.fetchone():
+                            conn.execute(
                                 """
-                                INSERT OR IGNORE INTO members (
-                                    account_id, full_name, department, default_sub_unit, machine_names,
-                                    is_active, notes, created_at, updated_at
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-                                """,
-                                seed_items,
+                                CREATE TABLE IF NOT EXISTS members (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    account_id TEXT UNIQUE NOT NULL,
+                                    full_name TEXT NOT NULL,
+                                    department TEXT NOT NULL,
+                                    default_sub_unit TEXT DEFAULT '',
+                                    machine_names TEXT DEFAULT '',
+                                    is_active INTEGER DEFAULT 1,
+                                    notes TEXT DEFAULT '',
+                                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                                );
+                                """
                             )
-                            conn.commit()
+                            cursor.execute("SELECT COUNT(*) FROM members;")
+                            if cursor.fetchone()[0] == 0:
+                                now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                seed_items = []
+                                for name in SEED_ROSTER_MECHA_1:
+                                    seed_items.append((name, name, "Cơ 1", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                for name in SEED_ROSTER_MECHA_2:
+                                    seed_items.append((name, name, "Cơ 2", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                for name in SEED_ROSTER_MECHA_3:
+                                    seed_items.append((name, name, "Cơ 3", "", "", 1, "Mặc định từ tenphong_pt", now_str, now_str))
+                                conn.executemany(
+                                    """
+                                    INSERT OR IGNORE INTO members (
+                                        account_id, full_name, department, default_sub_unit, machine_names,
+                                        is_active, notes, created_at, updated_at
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                                    """,
+                                    seed_items,
+                                )
+                                conn.commit()
                 except Exception as local_err:
                     logger.error("Fatal: failed to initialize local cache DB: %s", local_err)
 
@@ -318,8 +523,8 @@ class MemberDatabaseManager:
         department: str | None = None,
         active_only: bool = False,
     ) -> list[MemberRecord]:
-        """Query members filtered by department and active status."""
-        db_path, _ = self.get_active_db_path()
+        """Query members filtered by department and active status (Local-First fast read)."""
+        db_path = self.get_read_db_path()
         query = "SELECT * FROM members WHERE 1=1"
         params: list[Any] = []
 
@@ -400,7 +605,7 @@ class MemberDatabaseManager:
         return matched
 
     def add_member(self, member: MemberRecord, sync_to_excel: bool = False) -> tuple[bool, str]:
-        """Add a new member to the database, sync cache, and optionally write back to Danhsachthanhvien.xlsx / .xlsm."""
+        """Add a new member to the database via fast dual-write micro-transaction."""
         if not member.account_id or not member.account_id.strip():
             return False, "Mã thành viên / Tài khoản không được để trống."
 
@@ -413,18 +618,86 @@ class MemberDatabaseManager:
         raw_mach = getattr(member, "machine_names", "") or ""
         clean_mach = ", ".join([" ".join(t.strip().split()) for t in raw_mach.split(",") if t.strip()])
 
-        db_path, is_remote = self.get_active_db_path()
-        try:
-            with self._get_connection(db_path) as conn:
-                conn.execute(
+        def _do_add(conn: sqlite3.Connection):
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO members (
+                    account_id, full_name, department, default_sub_unit, machine_names,
+                    is_active, notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    member.account_id.strip(),
+                    full_name,
+                    member.department.strip(),
+                    member.default_sub_unit.strip(),
+                    clean_mach,
+                    1 if member.is_active else 0,
+                    member.notes.strip(),
+                    now_str,
+                    now_str,
+                ),
+            )
+            return cursor.lastrowid
+
+        ok, result, used_fallback = self._execute_dual_write(_do_add, operation_name=f"thêm '{member.account_id}'")
+        if not ok:
+            err_msg = str(result)
+            if "unique" in err_msg.lower() or "trùng" in err_msg.lower() or "exists" in err_msg.lower():
+                return False, f"Mã thành viên '{member.account_id}' đã tồn tại trong CSDL."
+            return False, f"Lỗi lưu CSDL: {err_msg}"
+
+        excel_note = ""
+        if sync_to_excel:
+            try:
+                ok_ex, ex_msg = self.export_to_excel()
+                if ok_ex:
+                    excel_note = " (Đã đồng bộ sang file Excel)"
+                else:
+                    logger.warning("Could not sync added member to Excel: %s", ex_msg)
+            except Exception as ex_err:
+                logger.warning("Could not sync added member to Excel: %s", ex_err)
+
+        fallback_note = " (Đã lưu vào bộ nhớ tạm cục bộ do CSDL mạng bận)" if used_fallback else ""
+        return True, f"Đã thêm thành viên '{member.account_id}' thành công.{fallback_note}{excel_note}"
+
+    def update_member(self, member: MemberRecord, sync_to_excel: bool = False) -> tuple[bool, str]:
+        """Update existing member information via fast dual-write micro-transaction."""
+        new_acc_id = member.account_id.strip() if member.account_id else ""
+        if not new_acc_id:
+            return False, "Mã thành viên không được để trống."
+
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        raw_mach = getattr(member, "machine_names", "") or ""
+        clean_mach = ", ".join([" ".join(t.strip().split()) for t in raw_mach.split(",") if t.strip()])
+        full_name = member.full_name.strip() if member.full_name else new_acc_id
+
+        def _do_update(conn: sqlite3.Connection):
+            cursor = conn.cursor()
+            if member.id is not None:
+                cursor.execute(
+                    "SELECT id FROM members WHERE account_id = ? AND id != ?;",
+                    (new_acc_id, member.id),
+                )
+                if cursor.fetchone():
+                    raise sqlite3.IntegrityError(f"Mã thành viên '{new_acc_id}' đã trùng với thành viên khác trong CSDL.")
+
+                cursor.execute(
                     """
-                    INSERT INTO members (
-                        account_id, full_name, department, default_sub_unit, machine_names,
-                        is_active, notes, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    UPDATE members SET
+                        account_id = ?,
+                        full_name = ?,
+                        department = ?,
+                        default_sub_unit = ?,
+                        machine_names = ?,
+                        is_active = ?,
+                        notes = ?,
+                        updated_at = ?
+                    WHERE id = ?;
                     """,
                     (
-                        member.account_id.strip(),
+                        new_acc_id,
                         full_name,
                         member.department.strip(),
                         member.default_sub_unit.strip(),
@@ -432,81 +705,10 @@ class MemberDatabaseManager:
                         1 if member.is_active else 0,
                         member.notes.strip(),
                         now_str,
-                        now_str,
+                        member.id,
                     ),
                 )
-                conn.commit()
-
-            # Sync to local cache or remote
-            self._sync_active_with_alternate(db_path, is_remote)
-            excel_note = ""
-            if sync_to_excel:
-                try:
-                    ok, ex_msg = self.export_to_excel()
-                    if ok:
-                        excel_note = " (Đã đồng bộ sang file Excel)"
-                    else:
-                        logger.warning("Could not sync added member to Excel: %s", ex_msg)
-                except Exception as ex_err:
-                    logger.warning("Could not sync added member to Excel: %s", ex_err)
-            return True, f"Đã thêm thành viên '{member.account_id}' thành công.{excel_note}"
-        except sqlite3.IntegrityError:
-            return False, f"Mã thành viên '{member.account_id}' đã tồn tại trong CSDL."
-        except Exception as exc:
-            logger.error("Failed to add member: %s", exc)
-            return False, f"Lỗi lưu CSDL: {exc}"
-
-    def update_member(self, member: MemberRecord, sync_to_excel: bool = False) -> tuple[bool, str]:
-        """Update existing member information, sync cache, and optionally write back to Danhsachthanhvien.xlsx / .xlsm."""
-        new_acc_id = member.account_id.strip() if member.account_id else ""
-        if not new_acc_id:
-            return False, "Mã thành viên không được để trống."
-
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db_path, is_remote = self.get_active_db_path()
-
-        raw_mach = getattr(member, "machine_names", "") or ""
-        clean_mach = ", ".join([" ".join(t.strip().split()) for t in raw_mach.split(",") if t.strip()])
-
-        try:
-            with self._get_connection(db_path) as conn:
-                cursor = conn.cursor()
-
-                if member.id is not None:
-                    # Check if new account_id is taken by another member
-                    cursor.execute(
-                        "SELECT id FROM members WHERE account_id = ? AND id != ?;",
-                        (new_acc_id, member.id),
-                    )
-                    if cursor.fetchone():
-                        return False, f"Mã thành viên '{new_acc_id}' đã trùng với thành viên khác trong CSDL."
-
-                    cursor.execute(
-                        """
-                        UPDATE members SET
-                            account_id = ?,
-                            full_name = ?,
-                            department = ?,
-                            default_sub_unit = ?,
-                            machine_names = ?,
-                            is_active = ?,
-                            notes = ?,
-                            updated_at = ?
-                        WHERE id = ?;
-                        """,
-                        (
-                            new_acc_id,
-                            member.full_name.strip() if member.full_name else new_acc_id,
-                            member.department.strip(),
-                            member.default_sub_unit.strip(),
-                            clean_mach,
-                            1 if member.is_active else 0,
-                            member.notes.strip(),
-                            now_str,
-                            member.id,
-                        ),
-                    )
-                else:
+                if cursor.rowcount == 0:
                     cursor.execute(
                         """
                         UPDATE members SET
@@ -520,7 +722,7 @@ class MemberDatabaseManager:
                         WHERE account_id = ?;
                         """,
                         (
-                            member.full_name.strip() if member.full_name else new_acc_id,
+                            full_name,
                             member.department.strip(),
                             member.default_sub_unit.strip(),
                             clean_mach,
@@ -530,58 +732,92 @@ class MemberDatabaseManager:
                             new_acc_id,
                         ),
                     )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE members SET
+                        full_name = ?,
+                        department = ?,
+                        default_sub_unit = ?,
+                        machine_names = ?,
+                        is_active = ?,
+                        notes = ?,
+                        updated_at = ?
+                    WHERE account_id = ?;
+                    """,
+                    (
+                        full_name,
+                        member.department.strip(),
+                        member.default_sub_unit.strip(),
+                        clean_mach,
+                        1 if member.is_active else 0,
+                        member.notes.strip(),
+                        now_str,
+                        new_acc_id,
+                    ),
+                )
 
-                if cursor.rowcount == 0:
-                    return False, f"Không tìm thấy thành viên '{new_acc_id}' để cập nhật."
-                conn.commit()
+            if cursor.rowcount == 0:
+                raise LookupError(f"Không tìm thấy thành viên '{new_acc_id}' để cập nhật.")
+            return cursor.rowcount
 
-            self._sync_active_with_alternate(db_path, is_remote)
-            excel_note = ""
-            if sync_to_excel:
-                try:
-                    ok, ex_msg = self.export_to_excel()
-                    if ok:
-                        excel_note = " (Đã đồng bộ 2 chiều sang file Excel)"
-                    else:
-                        logger.warning("Could not sync updated member to Excel: %s", ex_msg)
-                except Exception as ex_err:
-                    logger.warning("Could not sync updated member to Excel: %s", ex_err)
-            return True, f"Đã cập nhật thông tin thành viên '{new_acc_id}' thành công.{excel_note}"
-        except sqlite3.IntegrityError:
-            return False, f"Mã thành viên '{new_acc_id}' đã tồn tại trong CSDL."
-        except Exception as exc:
-            logger.error("Failed to update member: %s", exc)
-            return False, f"Lỗi cập nhật CSDL: {exc}"
+        ok, result, used_fallback = self._execute_dual_write(_do_update, operation_name=f"cập nhật '{new_acc_id}'")
+        if not ok:
+            err_msg = str(result)
+            if "unique" in err_msg.lower() or "trùng" in err_msg.lower():
+                return False, f"Mã thành viên '{new_acc_id}' đã trùng với thành viên khác trong CSDL."
+            if "không tìm thấy" in err_msg.lower():
+                return False, err_msg
+            return False, f"Lỗi cập nhật CSDL: {err_msg}"
+
+        excel_note = ""
+        if sync_to_excel:
+            try:
+                ok_ex, ex_msg = self.export_to_excel()
+                if ok_ex:
+                    excel_note = " (Đã đồng bộ 2 chiều sang file Excel)"
+                else:
+                    logger.warning("Could not sync updated member to Excel: %s", ex_msg)
+            except Exception as ex_err:
+                logger.warning("Could not sync updated member to Excel: %s", ex_err)
+
+        fallback_note = " (Đã lưu vào bộ nhớ tạm cục bộ do CSDL mạng bận)" if used_fallback else ""
+        return True, f"Đã cập nhật thông tin thành viên '{new_acc_id}' thành công.{fallback_note}{excel_note}"
 
     def delete_member(self, account_id: str, member_id: int | None = None, sync_to_excel: bool = False) -> tuple[bool, str]:
-        """Delete member by member_id (preferred) or account_id."""
+        """Delete member by member_id or account_id via fast dual-write micro-transaction."""
         acc_id = account_id.strip() if account_id else ""
         if not acc_id and member_id is None:
             return False, "Mã thành viên không hợp lệ."
 
-        db_path, is_remote = self.get_active_db_path()
-        try:
-            with self._get_connection(db_path) as conn:
-                cursor = conn.cursor()
-                if member_id is not None:
-                    cursor.execute("DELETE FROM members WHERE id = ?;", (member_id,))
-                else:
-                    cursor.execute("DELETE FROM members WHERE account_id = ?;", (acc_id,))
+        def _do_delete(conn: sqlite3.Connection):
+            cursor = conn.cursor()
+            if member_id is not None and acc_id:
+                cursor.execute("DELETE FROM members WHERE id = ? OR account_id = ?;", (member_id, acc_id))
+            elif member_id is not None:
+                cursor.execute("DELETE FROM members WHERE id = ?;", (member_id,))
+            else:
+                cursor.execute("DELETE FROM members WHERE account_id = ?;", (acc_id,))
 
-                if cursor.rowcount == 0:
-                    return False, f"Không tìm thấy thành viên '{acc_id}' để xóa."
-                conn.commit()
+            if cursor.rowcount == 0:
+                raise LookupError(f"Không tìm thấy thành viên '{acc_id}' để xóa.")
+            return cursor.rowcount
 
-            self._sync_active_with_alternate(db_path, is_remote)
-            if sync_to_excel:
-                try:
-                    self.export_to_excel()
-                except Exception:
-                    pass
-            return True, f"Đã xóa thành viên '{acc_id or str(member_id)}' thành công."
-        except Exception as exc:
-            logger.error("Failed to delete member: %s", exc)
-            return False, f"Lỗi xóa dữ liệu: {exc}"
+        ok, result, used_fallback = self._execute_dual_write(_do_delete, operation_name=f"xóa '{acc_id}'")
+        if not ok:
+            err_msg = str(result)
+            if "không tìm thấy" in err_msg.lower():
+                return False, err_msg
+            return False, f"Lỗi xóa dữ liệu: {err_msg}"
+
+        if sync_to_excel:
+            try:
+                self.export_to_excel()
+            except Exception:
+                pass
+
+        fallback_note = " (Đã xóa trên bộ nhớ tạm cục bộ do CSDL mạng bận)" if used_fallback else ""
+        return True, f"Đã xóa thành viên '{acc_id or str(member_id)}' thành công.{fallback_note}"
 
     def import_from_excel(self, excel_path: Path | str | None = None, clean_legacy_seeds: bool = True) -> tuple[int, int, str]:
         """Import or update members from Danhsachthanhvien.xlsx / .xlsm sheet 'DS KDTVN'.
@@ -649,7 +885,7 @@ class MemberDatabaseManager:
         imported_account_ids: set[str] = set()
 
         try:
-            with self._get_connection(db_path) as conn:
+            with self._write_transaction(db_path) as conn:
                 cursor = conn.cursor()
 
                 for r in range(header_row + 1, ws.max_row + 1):
@@ -727,8 +963,6 @@ class MemberDatabaseManager:
                     for lid, lacc in legacy_rows:
                         if lacc.lower() not in imported_account_ids:
                             cursor.execute("DELETE FROM members WHERE id = ?;", (lid,))
-
-                conn.commit()
 
             wb.close()
             self._sync_active_with_alternate(db_path, is_remote)
@@ -874,10 +1108,10 @@ class MemberDatabaseManager:
     def _sync_active_with_alternate(self, active_path: Path, is_remote: bool) -> None:
         """Mirror updated DB between remote and local cache."""
         try:
-            if is_remote and active_path.exists():
-                shutil.copy2(active_path, self.local_cache_path)
+            if is_remote and safe_exists(active_path):
+                self._safe_backup_db(active_path, self.local_cache_path)
             elif not is_remote and self.is_remote_available():
-                shutil.copy2(self.local_cache_path, self.remote_db_path)
+                self._safe_backup_db(self.local_cache_path, self.remote_db_path)
         except Exception as sync_err:
             logger.debug("Mirror sync skipped: %s", sync_err)
 
@@ -890,8 +1124,8 @@ class MemberDatabaseManager:
         return SEED_ROSTER_MECHA_1 + SEED_ROSTER_MECHA_2 + SEED_ROSTER_MECHA_3
 
     def get_departments(self) -> list[str]:
-        """Get distinct departments list."""
-        db_path, _ = self.get_active_db_path()
+        """Get distinct departments list (Local-First fast read)."""
+        db_path = self.get_read_db_path()
         try:
             with self._get_connection(db_path) as conn:
                 cursor = conn.cursor()
@@ -914,3 +1148,18 @@ class MemberDatabaseManager:
             result["Cơ 2"] = list(SEED_ROSTER_MECHA_2)
             result["Cơ 3"] = list(SEED_ROSTER_MECHA_3)
         return result
+
+
+_member_db_instances: dict[str, MemberDatabaseManager] = {}
+
+
+def get_member_database_manager(
+    base_dir: Path | str | None = None,
+    remote_db_path: Path | str | None = None,
+    excel_path: Path | str | None = None,
+) -> MemberDatabaseManager:
+    """Return a cached or new MemberDatabaseManager instance."""
+    key = f"{base_dir}_{remote_db_path}_{excel_path}"
+    if key not in _member_db_instances:
+        _member_db_instances[key] = MemberDatabaseManager(base_dir, remote_db_path, excel_path)
+    return _member_db_instances[key]
