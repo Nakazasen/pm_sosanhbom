@@ -1,8 +1,9 @@
 {
   "schema": 1,
   "id": "SSBOM_Manager",
-  "version": "1.0.1",
+  "version": "1.0.8",
   "channel": "stable",
   "database_schema": 1,
-  "policy": "HASH_ONLY_LAN"
+  "policy": "HASH_ONLY_LAN",
+  "notes": "SSBOM v1.0.8\n\nTối ưu hóa & Sửa lỗi tải PLM Teamcenter 2412:\n• Tối ưu hóa tải BOM theo tài liệu hướng dẫn kỹ thuật (Slide 4): Bỏ thao tác 'Select All' (Bước 7) gây lỗi crash JavaScript 'Cannot read properties of null (reading type)' và đơ lag giao diện bảng ảo. Xuất trực tiếp từ nút gốc cây BOM (Root Assembly), xuất tức thì toàn bộ 100% cấu trúc linh kiện (1,715 dòng) chỉ trong 88 giây.\n• Hỗ trợ tải các mã máy Prototype / DMT / PMT (ví dụ T10C172US0, P10...): Nâng cấp bộ nhận diện regex mã máy và linh kiện để tự động nhận dạng chính xác.\n• Tự động đồng bộ danh mục dòng máy 'Leo' (cho dải mã 0C17..0C2F) từ file tổng hợp mạng LAN, đảm bảo bộ lọc BolocBom hoạt động chính xác.\n• Sửa phím tắt và hoàn thiện giao diện cài đặt (SettingsDialog)."
 }

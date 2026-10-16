@@ -84,7 +84,7 @@ class TestBOMVisualRuleBuilderDialog:
         assert polygon.font(0).strikeOut() is False
 
         # Check KPI label
-        assert "Quy tắc đã chọn: 1 quy tắc" in dlg.lbl_stats_rules.text()
+        assert "Cụm bị áp quy tắc: 1 cụm" in dlg.lbl_stats_rules.text()
         assert "Sau khi lọc:" in dlg.lbl_stats_filtered.text()
 
     def test_rule1_prune_node_simulation(self, visual_builder_fixture):
@@ -186,7 +186,7 @@ class TestBOMVisualRuleBuilderDialog:
         assert heater.font(0).strikeOut() is False
 
         # Verify rule count reflects only 1 rule configured
-        assert "Quy tắc đã chọn: 1 quy tắc" in dlg.lbl_stats_rules.text()
+        assert "Cụm bị áp quy tắc: 1 cụm" in dlg.lbl_stats_rules.text()
 
     def test_tree_construction_from_tc2412_24col_file(self, qapp, tmp_path: Path):
         """Verify Issue 1 fix: TC2412 24-col file extracts real item names, not 'Released'."""
@@ -385,7 +385,7 @@ class TestBOMVisualRuleBuilderDialog:
         dlg.combo_model.setCurrentText("AnotherModel")
         assert dlg.current_model == "AnotherModel"
         assert len(dlg.existing_model_rules) == 1
-        assert "Quy tắc đã chọn: 1 quy tắc" in dlg.lbl_stats_rules.text()
+        assert "Cụm bị áp quy tắc: 1 cụm" in dlg.lbl_stats_rules.text()
 
     def test_tc_active_workspace_27col_tree_parsing(self, tmp_path: Path):
         """Verify that 27-column Teamcenter Active Workspace files parse correctly."""
@@ -581,12 +581,12 @@ class TestBOMVisualRuleBuilderDialog:
         mgr, dlg, sample_file = visual_builder_fixture
 
         # Initially 0 rules
-        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm đã chọn quy tắc (0)"
+        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm bị áp quy tắc (0 cụm)"
 
         # Set 2 rules
         dlg._on_action_changed("POLYGON MOTOR ASSY", "prune_children")
         dlg._on_action_changed("FUSER UNIT", "prune_node")
-        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm đã chọn quy tắc (2)"
+        assert dlg.chk_review_rules.text() == "📋 Chỉ xem cụm bị áp quy tắc (2 cụm)"
 
         # Enable Review Mode
         dlg.chk_review_rules.setChecked(True)
@@ -755,5 +755,76 @@ class TestBOMVisualRuleBuilderDialog:
         names = {r.item_name for r in rules_in_db}
         assert "POLYGON MOTOR ASSY" in names
         assert "PWB CASSETTE ASSY" in names
+
+    def test_phantom_root_level1_does_not_assign_branch_to_level2(self, qapp, tmp_path: Path):
+        """Verify that in full machine BOMs (Level 0 present), Level 1 Phantom Root does NOT assign branch to Level 2."""
+        from src.core.models import BOMNode, BOMTree
+        from unittest.mock import patch
+        import pytest
+
+        db_path = tmp_path / "test_phantom_branch.db"
+        mgr = BOMFilterManager(base_dir=tmp_path, remote_db_path=db_path)
+        dlg = BOMVisualRuleBuilderDialog(filter_manager=mgr, initial_model="SpicaTest")
+
+        # Construct synthetic full machine BOM:
+        # Level 0: Machine (T10C1T3NL0)
+        #   Level 1: Phantom Root (TVC1TZ0030)
+        #     Level 2: Unit 1 (3V2YJ01090)
+        #     Level 2: Unit 2 (3VC0LM1110)
+        #       Level 3: Component (31C0L11010)
+        m_root = BOMNode(level=0, item_id="T10C1T3NL0", item_name="MACHINE SPICA", has_children=True)
+        phantom_l1 = BOMNode(level=1, item_id="TVC1TZ0030", item_name="PHANTOM ROOT", has_children=True)
+        pwb_l2 = BOMNode(level=2, item_id="3V2YJ01090", item_name="PWB SWITCH ASSY", has_children=True)
+        drum_l2 = BOMNode(level=2, item_id="3VC0LM1110", item_name="DRUM UNIT", has_children=True)
+        drum_part_l3 = BOMNode(level=3, item_id="31C0L11010", item_name="DRUM ASSY WITH PACKING", has_children=False)
+
+        drum_l2.children.append(drum_part_l3)
+        phantom_l1.children.extend([pwb_l2, drum_l2])
+        m_root.children.append(phantom_l1)
+
+        tree = BOMTree(roots=[m_root])
+        dlg.raw_tree = tree
+        dlg._build_tree_widget()
+
+        # Check tree widget hierarchy
+        root_item = dlg.tree_widget.topLevelItem(0)
+        assert root_item.text(2) == "T10C1T3NL0"
+        phantom_item = root_item.child(0)
+        assert phantom_item.text(2) == "TVC1TZ0030"
+        pwb_item = phantom_item.child(0)
+        assert pwb_item.text(2) == "3V2YJ01090"
+        drum_item = phantom_item.child(1)
+        assert drum_item.text(2) == "3VC0LM1110"
+        part_item = drum_item.child(0)
+        assert part_item.text(2) == "31C0L11010"
+
+        # Verify parent_part_code in UserRole data
+        pwb_data = pwb_item.data(0, Qt.ItemDataRole.UserRole)
+        assert pwb_data.get("parent_part_code") is None, "Level 2 under Phantom Root must have parent_part_code=None"
+
+        part_data = part_item.data(0, Qt.ItemDataRole.UserRole)
+        assert part_data.get("parent_part_code") == "3VC0LM1110", "Level 3 under Unit must have parent_part_code=3VC0LM1110"
+
+        # Change action on Level 2 (3V2YJ01090) to prune_node
+        dlg._on_tree_item_action_changed(pwb_item, "prune_node")
+        # Change action on Level 3 (31C0L11010) to prune_children
+        dlg._on_tree_item_action_changed(part_item, "prune_children")
+
+        with patch("PyQt6.QtWidgets.QMessageBox.question", return_value=pytest.importorskip("PyQt6.QtWidgets").QMessageBox.StandardButton.Yes):
+            with patch("PyQt6.QtWidgets.QMessageBox.information"):
+                dlg._on_save_rules()
+
+        saved = mgr.get_rules_for_model("SpicaTest")
+        assert len(saved) == 2
+        r_pwb = next(r for r in saved if r.part_code == "3V2YJ01090")
+        assert "[branch:" not in (r_pwb.notes or "")
+        assert "Loại bỏ cả cụm" in r_pwb.notes
+
+        r_part = next(r for r in saved if r.part_code == "31C0L11010")
+        assert "[branch: 3VC0LM1110]" in r_part.notes
+        assert "Cắt con" in r_part.notes
+
+        dlg.close()
+
 
 

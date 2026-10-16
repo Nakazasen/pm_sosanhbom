@@ -55,7 +55,7 @@ def mock_excel_xlsm(tmp_path: Path) -> Path:
         (1, "V1001", "KhiemA_mecha1.1", "Nguyễn Ích Khiêm", "Cơ 1.1", "LSU", "Virgo"),
         (2, "V1002", "Ly_mecha1.2", "Đỗ Thị Ly", "Cơ 1.2", "DRUM", "Virgo, Iris2024"),
         (3, "V1003", "Son_mecha1", "Nguyễn Văn Sơn", "Cơ 1", "FUSER", ""),
-        (4, "V1004", "", "Phạm Hải Đăng", "KTCT Điện", "", "Corvus"),  # Missing account_id
+        (4, "V1004", "", "Phạm Hải Đăng", "KTCT Điện", "", "Spica"),  # Missing account_id
     ]
 
     for row_idx, r_data in enumerate(sample_data, 5):
@@ -118,7 +118,7 @@ class TestMemberExcelTwoWaySync:
         assert haidang.account_id != ""
         assert "haidang" in haidang.account_id.lower() or "dien" in haidang.account_id.lower()
         assert haidang.department == "KTCT Điện"
-        assert haidang.machine_names == "Corvus"
+        assert haidang.machine_names == "Spica"
 
     def test_export_to_excel_updates_in_place_and_creates_backup(
         self,
@@ -137,7 +137,7 @@ class TestMemberExcelTwoWaySync:
         # Update Khiem's machine and subunit in DB
         khiem = next(m for m in db.get_members() if m.account_id == "KhiemA_mecha1.1")
         khiem.default_sub_unit = "FUSER"
-        khiem.machine_names = "Virgo, Corvus"
+        khiem.machine_names = "Virgo, Spica"
         db.update_member(khiem, sync_to_excel=False)
 
         # Add brand new member in DB
@@ -166,7 +166,7 @@ class TestMemberExcelTwoWaySync:
         # Row 5 (KhiemA) should be updated in place
         assert ws.cell(row=5, column=3).value == "KhiemA_mecha1.1"
         assert ws.cell(row=5, column=6).value == "FUSER"
-        assert ws.cell(row=5, column=7).value == "Virgo, Corvus"
+        assert ws.cell(row=5, column=7).value == "Virgo, Spica"
 
         # New member should be appended
         found_new = False
@@ -238,7 +238,7 @@ class TestMemberExcelTwoWaySync:
         table = step1.staff_table
         assert table.rowCount() >= 4
 
-        # Find row for KhiemA (Virgo), Ly (Virgo, Iris2024), Son (empty machine), HaiDang (Corvus)
+        # Find row for KhiemA (Virgo), Ly (Virgo, Iris2024), Son (empty machine), HaiDang (Spica)
         rows_by_acc: dict[str, int] = {}
         for r in range(table.rowCount()):
             acc_id = table.item(r, 1).data(Qt.ItemDataRole.UserRole)
@@ -267,7 +267,7 @@ class TestMemberExcelTwoWaySync:
         chk_son = table.cellWidget(son_row, 0).findChild(QCheckBox)
         assert chk_son.isChecked() is False
 
-        # Hai Dang (KTCT Điện) has model Corvus -> For project Virgo, Checkbox should NOT be checked (False)
+        # Hai Dang (KTCT Điện) has model Spica -> For project Virgo, Checkbox should NOT be checked (False)
         assert "HaiDang_dien" in rows_by_acc
         haidang_row = rows_by_acc["HaiDang_dien"]
         chk_haidang = table.cellWidget(haidang_row, 0).findChild(QCheckBox)

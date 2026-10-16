@@ -189,22 +189,25 @@ class TestMachineCodePersistence:
         view = LeaderWorkspaceView(base_dir=tmp_path)
         step1 = view.step1_widget
 
-        # Add custom model and code to service
+        # Ensure dict_service is isolated and never touches real network Excel
         dict_service = step1.dict_service
-        dict_service.add_model_name("Corvus")
-        dict_service.add_or_update_machine_code("Corvus", "09AB")
-        dict_service.add_or_update_machine_code("Corvus", "09CD")
+        dict_service.excel_path = tmp_path / "mock_loaimay.xlsx"
+
+        # Add custom model and code to service
+        dict_service.add_model_name("MockTestModel")
+        dict_service.add_or_update_machine_code("MockTestModel", "09AB")
+        dict_service.add_or_update_machine_code("MockTestModel", "09CD")
 
         # Open dialog instance
         dlg = ModelMachineManagerDialog(
             dict_service=dict_service,
-            current_model="Corvus",
+            current_model="MockTestModel",
             current_stage=step1.stage_combo.currentText(),
             parent=step1,
         )
 
         # Verify dialog loaded the model and its codes
-        assert dlg.current_model == "Corvus"
+        assert dlg.current_model == "MockTestModel"
         codes_text = dlg.text_codes.toPlainText()
         assert "09AB" in codes_text
         assert "09CD" in codes_text
@@ -221,16 +224,43 @@ class TestMachineCodePersistence:
             step1.machine_table.item(r, 1).text()
             for r in range(step1.machine_table.rowCount())
         ]
-        assert "11009ABNL0" in table_codes
-        assert "11009CDNL0" in table_codes
-        assert step1.model_combo.currentText() == "Corvus"
+        assert "1109AB3NL0" in table_codes
+        assert "1109CD3NL0" in table_codes
+        assert step1.model_combo.currentText() == "MockTestModel"
 
         # Verify saved to config
         with open(settings_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        corvus_cfg = cfg.get("project_configs", {}).get("Corvus")
-        assert corvus_cfg is not None
-        saved_codes = [m["code"] for m in corvus_cfg["machines"]]
-        assert "11009ABNL0" in saved_codes
-        assert "11009CDNL0" in saved_codes
+        mock_cfg = cfg.get("project_configs", {}).get("MockTestModel")
+        assert mock_cfg is not None
+        saved_codes = [m["code"] for m in mock_cfg["machines"]]
+        assert "1109AB3NL0" in saved_codes
+        assert "1109CD3NL0" in saved_codes
+
+    def test_delete_model_name_and_dialog(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ModelMachineManagerDialog and MachineDictService support deleting models."""
+        from src.gui.leader_view import ModelMachineManagerDialog
+        from src.services.machine_dict_service import MachineDictService
+        from PyQt6.QtWidgets import QMessageBox
+
+        settings_file = tmp_path / "config" / "settings.json"
+        monkeypatch.setattr(
+            MachineDictService,
+            "_get_local_settings_path",
+            lambda self: settings_file,
+        )
+
+        service = MachineDictService(excel_path=tmp_path / "mock_excel.xlsx")
+        service.add_model_name("TempModelToDelete")
+        assert "TempModelToDelete" in service.get_model_names()
+
+        # Delete model via service
+        deleted = service.delete_model_name("TempModelToDelete")
+        assert deleted is True
+        assert "TempModelToDelete" not in service.get_model_names()
 

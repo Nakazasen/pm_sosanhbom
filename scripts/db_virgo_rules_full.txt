@@ -1,0 +1,97 @@
+Total rows in DB for Virgo: 96
+ID: 360  | Active: 1 | Mode: Full_name  | Code: TVC1Y01010   | Item: 3VC1Y01010 PWB MAIN ASSY WITH SOFTWARE     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 361  | Active: 1 | Mode: Full_name  | Code: 31C0L11010   | Item: DRUM ASSY WITH PACKING                     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1110]
+ID: 362  | Active: 1 | Mode: Full_name  | Code: 31C0L12010   | Item: FRAME DRUM                                 | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1110]
+ID: 363  | Active: 1 | Mode: Full_name  | Code: 31C0L11010   | Item: DRUM ASSY WITH PACKING                     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1120]
+ID: 364  | Active: 1 | Mode: Full_name  | Code: 31C0L12010   | Item: FRAME DRUM                                 | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1120]
+ID: 365  | Active: 1 | Mode: Full_name  | Code: 3V2YJ01150   | Item: PWB TPC ASSY                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1410]
+ID: 366  | Active: 1 | Mode: Full_name  | Code: 31C0L14030   | Item: CASE DLP                                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1410]
+ID: 367  | Active: 1 | Mode: Full_name  | Code: 3V2YJ01150   | Item: PWB TPC ASSY                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1420]
+ID: 368  | Active: 1 | Mode: Full_name  | Code: 31C0L14030   | Item: CASE DLP                                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1420]
+ID: 369  | Active: 1 | Mode: Full_name  | Code: 3V2YJ01150   | Item: PWB TPC ASSY                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1430]
+ID: 370  | Active: 1 | Mode: Full_name  | Code: 31C0L14030   | Item: CASE DLP                                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1430]
+ID: 371  | Active: 1 | Mode: Full_name  | Code: 3V2YJ01150   | Item: PWB TPC ASSY                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1440]
+ID: 372  | Active: 1 | Mode: Full_name  | Code: 31C0L14030   | Item: CASE DLP                                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1440]
+ID: 373  | Active: 1 | Mode: Full_name  | Code: 31C0L24030   | Item: FRAME CONVEYING                            | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXM40]
+ID: 374  | Active: 1 | Mode: Full_name  | Code: 31C0L25030   | Item: HOLDER HEATER                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 375  | Active: 1 | Mode: Full_name  | Code: 31C0L25260   | Item: HOLDER THERMISTOR                          | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 376  | Active: 1 | Mode: Full_name  | Code: 31C0L25320   | Item: HOLDER THERMAL-CUTOUT                      | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 377  | Active: 1 | Mode: Full_name  | Code: 31C0L25600   | Item: HOLDER BELT TENSION R                      | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 378  | Active: 1 | Mode: Full_name  | Code: 31C0L25610   | Item: HOLDER BELT TENSION L                      | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 379  | Active: 1 | Mode: Full_name  | Code: 31C0L25750   | Item: BUSH EXIT                                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2510]
+ID: 380  | Active: 1 | Mode: Full_name  | Code: 31C0L19090   | Item: HOUSING LSU                                | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TM1910]
+ID: 381  | Active: 1 | Mode: Full_name  | Code: 31C1Y04120   | Item: COVER LEFT HIGH P                          | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 382  | Active: 1 | Mode: Full_name  | Code: 31C1T04270   | Item: GUIDE CONTAINER HIGH C                     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 383  | Active: 1 | Mode: Full_name  | Code: 31C1T04280   | Item: GUIDE CONTAINER HIGH M                     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 384  | Active: 1 | Mode: Full_name  | Code: 3V2YJ01090   | Item: PWB SWITCH ASSY                            | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 385  | Active: 1 | Mode: Full_name  | Code: 31C0L46060   | Item: CONN.CORD ASSY MAIN MOT                    | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 386  | Active: 1 | Mode: Full_name  | Code: 31C0L46150   | Item: CONN.CORD ASSY DLP SOL                     | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 387  | Active: 1 | Mode: Full_name  | Code: 31C0L46210   | Item: CONN.CORD ASSY TONER MOT                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 388  | Active: 1 | Mode: Full_name  | Code: 31C0L46220   | Item: CONN.CORD ASSY POWER SW                    | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 389  | Active: 1 | Mode: Full_name  | Code: 31C1T46020   | Item: CONN.CORD ASSY FUSER MOT                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 390  | Active: 1 | Mode: Full_name  | Code: 31C1T46030   | Item: CONN.CORD ASSY MPF PI                      | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 391  | Active: 1 | Mode: Full_name  | Code: TVC0L01050   | Item: 3VC0L01050 PWB UNIT CONNECT ASSY           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 392  | Active: 1 | Mode: Full_name  | Code: TVC0L01080   | Item: 3VC0L01080 PWB EEPROM F ASSY               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 393  | Active: 1 | Mode: Full_name  | Code: 31C0L12120   | Item: GUIDE LIGHT DRUM                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1110]
+ID: 394  | Active: 1 | Mode: Full_name  | Code: TVC0L01060   | Item: 3VC0L01060 PWB DRUM ASSY                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXM90]
+ID: 395  | Active: 1 | Mode: Full_name  | Code: 31C0L12120   | Item: GUIDE LIGHT DRUM                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1120]
+ID: 396  | Active: 1 | Mode: Full_name  | Code: TVC0L01060   | Item: 3VC0L01060 PWB DRUM ASSY                   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXMA0]
+ID: 397  | Active: 1 | Mode: Full_name  | Code: 31C0L14010   | Item: ROLLER MAGNET                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1410]
+ID: 398  | Active: 1 | Mode: Full_name  | Code: 3D26KT0V20   | Item: DEVE /D26K-02 VN                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1410]
+ID: 399  | Active: 1 | Mode: Full_name  | Code: 3D26CT0V20   | Item: DEVE /D26C-02 VN                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1420]
+ID: 400  | Active: 1 | Mode: Full_name  | Code: 31C0L14010   | Item: ROLLER MAGNET                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1420]
+ID: 401  | Active: 1 | Mode: Full_name  | Code: 31C0L14010   | Item: ROLLER MAGNET                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1430]
+ID: 402  | Active: 1 | Mode: Full_name  | Code: 3D26MT0V20   | Item: DEVE /D26M-02 VN                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1430]
+ID: 403  | Active: 1 | Mode: Full_name  | Code: 31C0L14010   | Item: ROLLER MAGNET                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1440]
+ID: 404  | Active: 1 | Mode: Full_name  | Code: TD31YT0V10   | Item: DEVE /D31Y-01 VN                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM1440]
+ID: 405  | Active: 1 | Mode: Full_name  | Code: TVC0L01030   | Item: 3VC0L01030 PWB ID SENSOR ASSY              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2110]
+ID: 406  | Active: 1 | Mode: Full_name  | Code: TVC0L01090   | Item: 3VC0L01090 PWB ID SENSOR CONNECT ASSY      | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LM2110]
+ID: 407  | Active: 1 | Mode: Full_name  | Code: 31C0L06030   | Item: ROLLER RETARD ASSY                         | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TPXM40]
+ID: 408  | Active: 1 | Mode: Full_name  | Code: 31C0L06020   | Item: ROLLER FEED ASSY                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TPXM50]
+ID: 409  | Active: 1 | Mode: Full_name  | Code: 31C1T08160   | Item: ROLLER FEED MPF                            | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TM0810]
+ID: 410  | Active: 1 | Mode: Full_name  | Code: 31C1T08360   | Item: ROLLER MPF B                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TM0810]
+ID: 411  | Active: 1 | Mode: Full_name  | Code: TVC0L01070   | Item: 3VC0L01070 PWB 2.7 PANEL ASSY WITH SOFTW   | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1Y00010]
+ID: 412  | Active: 1 | Mode: Full_name  | Code: TVC1TJ0030   | Item: FILL UP CONT ASSY 33-NL-K                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 413  | Active: 1 | Mode: Full_name  | Code: TVC1TJ0060   | Item: FILL UP CONT ASSY 33-NL-C                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 414  | Active: 1 | Mode: Full_name  | Code: TVC1TJ0090   | Item: FILL UP CONT ASSY 33-NL-M                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 415  | Active: 1 | Mode: Full_name  | Code: TVC1TJ0120   | Item: FILL UP CONT ASSY 33-NL-Y                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: TVC1YZ0020]
+ID: 416  | Active: 1 | Mode: Full_name  | Code: TVC0L01020   | Item: 3VC0L01020 PWB APC ASSY                    | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TM1910]
+ID: 417  | Active: 1 | Mode: Full_name  | Code: 31C0L29070   | Item: ROLLER DU UP                               | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXM50]
+ID: 418  | Active: 1 | Mode: Full_name  | Code: 31C0L29080   | Item: ROLLER DU LOW                              | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXM50]
+ID: 419  | Active: 1 | Mode: Full_name  | Code: 3V2M201100   | Item: P.W.BOARD ASSY THERMISTOR                  | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC0LPXM60]
+ID: 420  | Active: 1 | Mode: Full_name  | Code: 31C1T04010   | Item: COVER FRONT HIGH                           | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TPXM90]
+ID: 421  | Active: 1 | Mode: Full_name  | Code: 31C0L19100   | Item: LID LSU                                    | Notes: Tạo tự động từ Cây BOM Mô phỏng (Cắt con) [branch: 3VC1TM1910]
+ID: 422  | Active: 1 | Mode: Full_name  | Code:              | Item: BOTTLE WASTE                               | Notes: Quy tắc mặc định ban đầu
+ID: 423  | Active: 1 | Mode: Part_name  | Code:              | Item: FILL UP CONTAINER ASSY                     | Notes: Quy tắc mặc định ban đầu
+ID: 424  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB PANEL MAIN ASSY WITH SOFTWARE          | Notes: Quy tắc mặc định ban đầu
+ID: 425  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB KEY-R ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 426  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB KEY-L ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 427  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB LCDCONT ASSY WITH SOFTWARE             | Notes: Quy tắc mặc định ban đầu
+ID: 428  | Active: 1 | Mode: Full_name  | Code:              | Item: CONN.CORD ASSY S04301 HEATER CON-FUSER B   | Notes: Quy tắc mặc định ban đầu
+ID: 429  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB FUSER ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 430  | Active: 1 | Mode: Full_name  | Code:              | Item: PULLEY FEED P ASSY                         | Notes: Quy tắc mặc định ban đầu
+ID: 431  | Active: 1 | Mode: Full_name  | Code:              | Item: ONE-WAY CLUTCH 6                           | Notes: Quy tắc mặc định ban đầu
+ID: 432  | Active: 1 | Mode: Full_name  | Code:              | Item: GEAR Z23R ONEWAY                           | Notes: Quy tắc mặc định ban đầu
+ID: 433  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB ASSY TX                                | Notes: Quy tắc mặc định ban đầu
+ID: 434  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB ASSY RX WITH SOFTWARE                  | Notes: Quy tắc mặc định ban đầu
+ID: 435  | Active: 1 | Mode: Full_name  | Code:              | Item: PULLEY PICKUP ASSY                         | Notes: Quy tắc mặc định ban đầu
+ID: 436  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB CIS CONNECT ASSY                       | Notes: Quy tắc mặc định ban đầu
+ID: 437  | Active: 1 | Mode: Part_name  | Code:              | Item: P2200 DEVE /D26                            | Notes: Quy tắc mặc định ban đầu
+ID: 438  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB DLP ASSY                               | Notes: Quy tắc mặc định ban đầu
+ID: 439  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB MOTOR ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 440  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB SUB ASSY                               | Notes: Quy tắc mặc định ban đầu
+ID: 441  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB THERMISTOR ASSY                        | Notes: Quy tắc mặc định ban đầu
+ID: 442  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB DRUM CONNECT ASSY                      | Notes: Quy tắc mặc định ban đầu
+ID: 443  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB EXIT ASSY                              | Notes: Quy tắc mặc định ban đầu
+ID: 444  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB CONTAINER CONNECT ASSY                 | Notes: Quy tắc mặc định ban đầu
+ID: 445  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB THERMISTOR2 ASSY                       | Notes: Quy tắc mặc định ban đầu
+ID: 446  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB ENGINE CONNECT ASSY                    | Notes: Quy tắc mặc định ban đầu
+ID: 447  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB ERASER ASSY                            | Notes: Quy tắc mặc định ban đầu
+ID: 448  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB APC A ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 449  | Active: 1 | Mode: Full_name  | Code:              | Item: PWB APC B ASSY                             | Notes: Quy tắc mặc định ban đầu
+ID: 450  | Active: 1 | Mode: Full_name  | Code:              | Item: P.W.BOARD ASSY PD B                        | Notes: Quy tắc mặc định ban đầu
+ID: 451  | Active: 1 | Mode: Full_name  | Code:              | Item: P.W.BOARD ASSY PD A                        | Notes: Quy tắc mặc định ban đầu
+ID: 452  | Active: 1 | Mode: Full_name  | Code:              | Item: PULLEY PICKUP P ASSY                       | Notes: Quy tắc mặc định ban đầu
+ID: 453  | Active: 1 | Mode: Full_name  | Code:              | Item: FRAME TOP                                  | Notes: Quy tắc mặc định ban đầu
+ID: 454  | Active: 1 | Mode: Full_name  | Code:              | Item: ROLLER RETARD P ASSY                       | Notes: Quy tắc mặc định ban đầu
+ID: 455  | Active: 1 | Mode: Full_name  | Code:              | Item: ROLLER M/P ASSY                            | Notes: Quy tắc mặc định ban đầu

@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import openpyxl
 
+from src.core.path_utils import is_unc_path_accessible, safe_exists
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DICT_PATH = (
@@ -46,21 +48,137 @@ class MachineDictService:
     """Service to load, cache, lookup, and write-back machine types and email groups."""
 
     def __init__(self, excel_path: str | Path | None = None) -> None:
-        self.excel_path = Path(excel_path or DEFAULT_DICT_PATH)
+        if excel_path:
+            self.excel_path = Path(excel_path)
+        else:
+            # Check settings.json for configured templates.dict_path
+            configured_path: Optional[Path] = None
+            try:
+                cfg_path = self._get_local_settings_path()
+                if safe_exists(cfg_path):
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    p = cfg.get("templates", {}).get("dict_path", "").strip()
+                    if p:
+                        configured_path = Path(p)
+            except Exception:
+                pass
+            self.excel_path = configured_path or Path(DEFAULT_DICT_PATH)
+
         self._machines: list[MachineInfo] = []
-        self._code_to_machine: dict[str, MachineInfo] = {}
+        self._code_to_machine: dict[str, MachineInfo] = []
         self._email_groups: dict[str, EmailGroupInfo] = {}
         self._is_loaded = False
+        self._is_custom_path = excel_path is not None
+
+    def _load_from_json(self) -> bool:
+        """Attempt to load machine dictionary from local JSON cache."""
+        base_dir = Path(__file__).resolve().parent
+        json_candidates = [
+            Path("config/loaimay_cache.json"),
+            Path("../config/loaimay_cache.json"),
+            base_dir.parent.parent / "config" / "loaimay_cache.json",
+            base_dir.parent / "config" / "loaimay_cache.json",
+            Path("scratch/loaimay_data.json"),
+        ]
+        for jcand in json_candidates:
+            if safe_exists(jcand):
+                try:
+                    with open(jcand, "r", encoding="utf-8") as f:
+                        jdata = json.load(f)
+                    master_rows = jdata.get("Master", [])
+                    machines = []
+                    code_map = {}
+                    email_groups = {}
+                    for r_idx, row in enumerate(master_rows[1:], start=2):
+                        col_a = row[0] if len(row) > 0 else None
+                        col_b = row[1] if len(row) > 1 else None
+                        col_c = row[2] if len(row) > 2 else None
+                        col_d = row[3] if len(row) > 3 else None
+                        col_e = row[4] if len(row) > 4 else None
+                        col_f = row[5] if len(row) > 5 else None
+                        col_g = row[6] if len(row) > 6 else None
+
+                        if col_f and col_g:
+                            label = str(col_f).strip()
+                            raw_email = str(col_g).strip()
+                            match = re.search(r"<([^>]+)>", raw_email)
+                            clean_email = match.group(1).strip() if match else raw_email
+                            email_groups[label] = EmailGroupInfo(
+                                group_label=label,
+                                email_string=raw_email,
+                                clean_email=clean_email,
+                            )
+
+                        if col_a or col_d:
+                            raw_name = str(col_a).strip() if col_a else ""
+                            machine_name = re.sub(r"\s+", "", raw_name)
+                            variant = str(col_b).strip() if col_b else ""
+                            brand_segment = str(col_c).strip() if col_c else ""
+                            raw_codes = str(col_d).strip() if col_d else ""
+                            specs = str(col_e).strip() if col_e else ""
+                            codes = [c.strip().upper() for c in raw_codes.split(";") if c.strip()]
+                            info = MachineInfo(
+                                machine_name=machine_name,
+                                variant=variant,
+                                brand_segment=brand_segment,
+                                machine_codes=codes,
+                                specs=specs,
+                                row_index=r_idx,
+                            )
+                            machines.append(info)
+                            for code in codes:
+                                code_map[code] = info
+
+                    self._machines = machines
+                    self._code_to_machine = code_map
+                    self._email_groups = email_groups
+                    self._is_loaded = True
+
+                    # Check settings.json override for email_groups
+                    cfg_path = self._get_local_settings_path()
+                    if safe_exists(cfg_path):
+                        try:
+                            with open(cfg_path, "r", encoding="utf-8") as f:
+                                cfg = json.load(f)
+                            custom_eg = cfg.get("email_groups")
+                            if isinstance(custom_eg, dict):
+                                for label, raw_email in custom_eg.items():
+                                    match = re.search(r"<([^>]+)>", str(raw_email))
+                                    clean_email = match.group(1).strip() if match else str(raw_email).strip()
+                                    self._email_groups[str(label).strip()] = EmailGroupInfo(
+                                        group_label=str(label).strip(),
+                                        email_string=str(raw_email).strip(),
+                                        clean_email=clean_email,
+                                    )
+                        except Exception:
+                            pass
+
+                    logger.debug("Loaded %d machines from JSON cache %s", len(machines), jcand)
+                    return True
+                except Exception as exc:
+                    logger.error("Failed loading JSON cache %s: %s", jcand, exc)
+
+        return False
 
     def load(self, force_reload: bool = False) -> bool:
-        """Load and parse the Master sheet from file_loaimay_nhommail.xlsx or local cache."""
+        """Load and parse the Master sheet from local JSON cache or file_loaimay_nhommail.xlsx."""
         if self._is_loaded and not force_reload:
             return True
 
+        # Fast path: load from local JSON cache first unless explicitly forced to reload from Excel or custom path is set
+        if not force_reload and not self._is_custom_path:
+            if self._load_from_json():
+                return True
+
         target_path: Optional[Path] = None
-        if self.excel_path.exists():
-            target_path = self.excel_path
-        else:
+        try:
+            if is_unc_path_accessible(self.excel_path.parent, timeout=0.3) and safe_exists(self.excel_path):
+                target_path = self.excel_path
+        except Exception:
+            target_path = None
+
+        if not target_path:
             # Check candidate fallback paths
             candidates = [
                 Path("file_loaimay_nhommail.xlsx"),
@@ -69,11 +187,11 @@ class MachineDictService:
                 Path("../config/file_loaimay_nhommail.xlsx"),
             ]
             for cand in candidates:
-                if cand.exists():
+                if safe_exists(cand):
                     target_path = cand
                     break
 
-        if target_path and target_path.exists():
+        if target_path and safe_exists(target_path):
             try:
                 wb = openpyxl.load_workbook(str(target_path), data_only=True)
                 sheet_name = "Master" if "Master" in wb.sheetnames else wb.sheetnames[0]
@@ -129,6 +247,8 @@ class MachineDictService:
                         for code in codes:
                             code_map[code] = info
 
+                if not self._is_custom_path:
+                    self._sync_cache_from_workbook(ws)
                 wb.close()
 
                 self._machines = machines
@@ -141,94 +261,50 @@ class MachineDictService:
                 logger.error("Failed to load machine dictionary from %s: %s", target_path, exc)
 
         # Fallback to JSON cache if available
-        base_dir = Path(__file__).resolve().parent
-        json_candidates = [
-            Path("config/loaimay_cache.json"),
-            Path("../config/loaimay_cache.json"),
-            base_dir.parent.parent / "config" / "loaimay_cache.json",
-            base_dir.parent / "config" / "loaimay_cache.json",
-            Path("scratch/loaimay_data.json"),
-        ]
-        for jcand in json_candidates:
-            if jcand.exists():
-                try:
-                    with open(jcand, "r", encoding="utf-8") as f:
-                        jdata = json.load(f)
-                    master_rows = jdata.get("Master", [])
-                    machines = []
-                    code_map = {}
-                    email_groups = {}
-                    for r_idx, row in enumerate(master_rows[1:], start=2):
-                        col_a = row[0] if len(row) > 0 else None
-                        col_b = row[1] if len(row) > 1 else None
-                        col_c = row[2] if len(row) > 2 else None
-                        col_d = row[3] if len(row) > 3 else None
-                        col_e = row[4] if len(row) > 4 else None
-                        col_f = row[5] if len(row) > 5 else None
-                        col_g = row[6] if len(row) > 6 else None
-
-                        if col_f and col_g:
-                            label = str(col_f).strip()
-                            raw_email = str(col_g).strip()
-                            match = re.search(r"<([^>]+)>", raw_email)
-                            clean_email = match.group(1).strip() if match else raw_email
-                            email_groups[label] = EmailGroupInfo(
-                                group_label=label,
-                                email_string=raw_email,
-                                clean_email=clean_email,
-                            )
-
-                        if col_a or col_d:
-                            raw_name = str(col_a).strip() if col_a else ""
-                            machine_name = re.sub(r"\s+", "", raw_name)
-                            variant = str(col_b).strip() if col_b else ""
-                            brand_segment = str(col_c).strip() if col_c else ""
-                            raw_codes = str(col_d).strip() if col_d else ""
-                            specs = str(col_e).strip() if col_e else ""
-                            codes = [c.strip().upper() for c in raw_codes.split(";") if c.strip()]
-                            info = MachineInfo(
-                                machine_name=machine_name,
-                                variant=variant,
-                                brand_segment=brand_segment,
-                                machine_codes=codes,
-                                specs=specs,
-                                row_index=r_idx,
-                            )
-                            machines.append(info)
-                            for code in codes:
-                                code_map[code] = info
-
-                    self._machines = machines
-                    self._code_to_machine = code_map
-                    self._email_groups = email_groups
-                    self._is_loaded = True
-
-                    # Check settings.json override for email_groups
-                    cfg_path = self._get_local_settings_path()
-                    if cfg_path.exists():
-                        try:
-                            with open(cfg_path, "r", encoding="utf-8") as f:
-                                cfg = json.load(f)
-                            custom_eg = cfg.get("email_groups")
-                            if isinstance(custom_eg, dict):
-                                for label, raw_email in custom_eg.items():
-                                    match = re.search(r"<([^>]+)>", str(raw_email))
-                                    clean_email = match.group(1).strip() if match else str(raw_email).strip()
-                                    self._email_groups[str(label).strip()] = EmailGroupInfo(
-                                        group_label=str(label).strip(),
-                                        email_string=str(raw_email).strip(),
-                                        clean_email=clean_email,
-                                    )
-                        except Exception:
-                            pass
-
-                    logger.info("Loaded %d machines from JSON cache %s", len(machines), jcand)
-                    return True
-                except Exception as exc:
-                    logger.error("Failed loading JSON cache %s: %s", jcand, exc)
+        if not self._is_custom_path and self._load_from_json():
+            return True
 
         logger.warning("Machine dictionary file does not exist: %s and no local cache found", self.excel_path)
         return False
+
+    def _sync_cache_from_workbook(self, ws: Any) -> None:
+        """Update local loaimay_cache.json so fast loading has latest Excel state."""
+        try:
+            master_rows: list[list[Any]] = [
+                ["Tên máy", "Kiểu", "Thương hiệu", "Mã máy", "Thông số kĩ thuật", None, None]
+            ]
+            for r_idx in range(2, ws.max_row + 1):
+                row = [ws.cell(row=r_idx, column=c).value for c in range(1, 8)]
+                if any(v is not None and str(v).strip() != "" for v in row):
+                    master_rows.append(row)
+
+            cdata = {"Master": master_rows}
+            cache_paths = [
+                Path("config/loaimay_cache.json"),
+                Path("../config/loaimay_cache.json"),
+                self._get_local_settings_path().parent / "loaimay_cache.json",
+            ]
+            for cp in cache_paths:
+                try:
+                    cp.parent.mkdir(parents=True, exist_ok=True)
+                    with open(cp, "w", encoding="utf-8") as f:
+                        json.dump(cdata, f, indent=2, ensure_ascii=False)
+                    logger.debug("Synchronized Excel data into JSON cache %s", cp)
+                except Exception as e:
+                    logger.debug("Could not write cache %s: %s", cp, e)
+        except Exception as exc:
+            logger.warning("Could not sync Excel to JSON cache: %s", exc)
+
+    def reload_from_excel(self) -> tuple[bool, str]:
+        """Force reloading dictionary directly from Excel file and update local JSON cache."""
+        self._is_loaded = False
+        success = self.load(force_reload=True)
+        if success:
+            model_count = len(self.get_model_names())
+            email_count = len(self.get_all_email_groups())
+            msg = f"Đã nạp lại thành công từ điển: {model_count} model máy và {email_count} nhóm mail từ file Excel Master!"
+            return True, msg
+        return False, f"Không thể tải lại từ điển từ file Excel tại:\n{self.excel_path}\n\nVui lòng kiểm tra file có đang mở độc quyền hoặc đường dẫn có hợp lệ."
 
     def lookup_machine_code(self, code_4char: str) -> Optional[MachineInfo]:
         """Lookup by 4-character machine code (e.g. '0C0T', '02Y4')."""
@@ -454,6 +530,10 @@ class MachineDictService:
                     cleaned = re.sub(r"\s+", "", str(p).strip())
                     if cleaned:
                         names.add(cleaned)
+                for d in cfg.get("deleted_models", []):
+                    cleaned_d = re.sub(r"\s+", "", str(d).strip()).lower()
+                    if cleaned_d:
+                        names = {n for n in names if n.lower() != cleaned_d}
             except Exception as e:
                 logger.debug("Could not read custom models from %s: %s", cfg_path, e)
 
@@ -473,8 +553,12 @@ class MachineDictService:
                 with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
             custom_models = cfg.get("custom_models", [])
+            deleted_models = cfg.get("deleted_models", [])
             if not isinstance(custom_models, list):
                 custom_models = []
+            if isinstance(deleted_models, list):
+                deleted_models = [d for d in deleted_models if str(d).strip().lower() != cleaned.lower()]
+                cfg["deleted_models"] = deleted_models
             if cleaned not in custom_models:
                 custom_models.append(cleaned)
                 cfg["custom_models"] = custom_models
@@ -506,6 +590,51 @@ class MachineDictService:
                     self.load(force_reload=True)
             except Exception as e:
                 logger.warning("Could not sync model to master Excel %s: %s", self.excel_path, e)
+
+        return True
+
+    def delete_model_name(self, model_name: str) -> bool:
+        """Delete a machine model both locally in settings.json and in-memory."""
+        cleaned = re.sub(r"\s+", "", model_name.strip())
+        if not cleaned:
+            return False
+
+        cfg_path = self._get_local_settings_path()
+        try:
+            cfg: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+            custom_models = cfg.get("custom_models", [])
+            deleted_models = cfg.get("deleted_models", [])
+            if not isinstance(custom_models, list):
+                custom_models = []
+            if isinstance(custom_models, list):
+                custom_models = [c for c in custom_models if str(c).strip().lower() != cleaned.lower()]
+                cfg["custom_models"] = custom_models
+            if cleaned not in deleted_models:
+                deleted_models.append(cleaned)
+            cfg["deleted_models"] = deleted_models
+
+            # Also remove from project_configs if present
+            project_configs = cfg.get("project_configs", {})
+            if isinstance(project_configs, dict) and cleaned in project_configs:
+                project_configs.pop(cleaned, None)
+                cfg["project_configs"] = project_configs
+
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = cfg_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            tmp_path.replace(cfg_path)
+            logger.info("Deleted model '%s' from %s", cleaned, cfg_path)
+        except Exception as exc:
+            logger.warning("Could not delete model from %s: %s", cfg_path, exc)
+
+        # Invalidate in-memory structures
+        if self._is_loaded:
+            self._machines = [m for m in self._machines if re.sub(r"\s+", "", m.machine_name.strip()).lower() != cleaned.lower()]
+            self._code_to_machine = {k: v for k, v in self._code_to_machine.items() if re.sub(r"\s+", "", v.machine_name.strip()).lower() != cleaned.lower()}
 
         return True
 
@@ -689,3 +818,17 @@ class MachineDictService:
             self.load()
         cleaned = re.sub(r"\s+", "", model_name.strip()).lower()
         return [m for m in self._machines if re.sub(r"\s+", "", m.machine_name.strip()).lower() == cleaned]
+
+
+_machine_dict_instances: dict[str, MachineDictService] = {}
+
+
+def get_machine_dict_service(excel_path: str | Path | None = None) -> MachineDictService:
+    """Return a cached singleton instance of MachineDictService."""
+    key = str(excel_path or "default")
+    if key not in _machine_dict_instances:
+        svc = MachineDictService(excel_path)
+        svc.load()
+        _machine_dict_instances[key] = svc
+    return _machine_dict_instances[key]
+

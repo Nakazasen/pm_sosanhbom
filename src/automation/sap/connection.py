@@ -196,7 +196,7 @@ class SAPConnectionManager:
         2. If none, opens a new connection.
         3. Resolves multi-logon conflicts and authenticates credentials.
         """
-        self.ensure_saplogon_running()
+        self.ensure_saplogon_running(timeout_sec=timeout_sec)
 
         if self.app is None:
             raise SAPConnectionError("Scripting engine is uninitialized.")
@@ -206,36 +206,46 @@ class SAPConnectionManager:
             connections = getattr(self.app, "Connections", None)
             count = getattr(connections, "Count", 0) if connections else 0
             for i in range(count):
-                conn = connections(i) if callable(connections) else connections[i]
-                desc = str(getattr(conn, "Description", "")).strip()
-                sys_id = str(getattr(conn, "Id", "")).strip()
+                try:
+                    conn = connections(i) if callable(connections) else connections[i]
+                    desc = str(getattr(conn, "Description", "")).strip()
+                    sys_id = str(getattr(conn, "Id", "")).strip()
 
-                target_sys = self.creds.system.strip()
-                target_base = target_sys.split("(")[0].strip().upper()
-                is_match = (
-                    target_sys.lower() in desc.lower()
-                    or target_sys.lower() in sys_id.lower()
-                    or (target_base and target_base in desc.upper())
-                    or (count == 1 and bool(desc))
-                )
+                    target_sys = self.creds.system.strip()
+                    target_base = target_sys.split("(")[0].strip().upper()
+                    is_match = (
+                        target_sys.lower() in desc.lower()
+                        or target_sys.lower() in sys_id.lower()
+                        or (target_base and target_base in desc.upper())
+                        or (count == 1 and bool(desc))
+                    )
 
-                if is_match:
-                    children = getattr(conn, "Children", None)
-                    child_count = getattr(children, "Count", 0) if children else 0
-                    if child_count > 0:
-                        sess = children(0) if callable(children) else children[0]
-                        self.connection = conn
-                        self.session = sess
+                    if is_match:
+                        children = getattr(conn, "Children", None)
+                        child_count = getattr(children, "Count", 0) if children else 0
+                        if child_count > 0:
+                            sess = children(0) if callable(children) else children[0]
+                            self.connection = conn
+                            self.session = sess
 
-                        if self.is_logged_in(self.session):
-                            logger.info(f"Reusing existing logged-in session for {desc or self.creds.system}.")
-                            return self.session
-                        else:
-                            logger.info("Reusing existing connection, completing login flow.")
-                            self.handle_multi_logon_and_login(self.session)
-                            return self.session
+                            if self.is_logged_in(self.session):
+                                logger.info(f"Reusing existing logged-in session for {desc or self.creds.system}.")
+                                return self.session
+                            else:
+                                logger.info("Reusing existing connection, completing login flow.")
+                                self.handle_multi_logon_and_login(self.session)
+                                return self.session
+                except Exception as inner_ex:
+                    logger.debug("Existing connection index %d reuse attempt failed: %s", i, inner_ex)
+                    self.connection = None
+                    self.session = None
+                    continue
         except Exception as ex:
             logger.debug(f"Connection reuse check encountered non-fatal error: {ex}")
+        finally:
+            if not self.is_logged_in(self.session):
+                self.connection = None
+                self.session = None
 
         # 2. Open new connection
         logger.info(f"Opening new SAP connection to '{self.creds.system}'...")
@@ -250,8 +260,9 @@ class SAPConnectionManager:
 
         for sys_candidate in candidates:
             try:
-                self.connection = self.app.OpenConnection(sys_candidate, True)
-                if self.connection is not None:
+                new_conn = self.app.OpenConnection(sys_candidate, True)
+                if new_conn is not None:
+                    self.connection = new_conn
                     break
             except Exception as ex:
                 conn_err = ex
@@ -504,6 +515,12 @@ class SAPConnectionManager:
 
         return self.get_or_create_session()
 
+    def reconnect(self, timeout_sec: float = 30.0) -> Any:
+        """Force a fresh reconnect by releasing stale COM handles and acquiring a new session."""
+        logger.info("Forcing SAP reconnection: clearing stale handles...")
+        self.disconnect()
+        return self.connect(timeout_sec=timeout_sec)
+
     def disconnect(self) -> None:
         """Release session and connection references cleanly."""
         for target in (self.session, getattr(self, "_session", None), self.connection):
@@ -551,8 +568,14 @@ class SAPConnectionManager:
                         elif hasattr(wnd0, "sendVKey"):
                             wnd0.sendVKey(15)  # Shift+F3 Exit
                         success = True
+                        logger.info("Closed SAP session window successfully via fallback.")
                 except Exception as ex:
                     logger.debug("Fallback close on SAP session failed: %s", ex)
+
+            if not success:
+                logger.info("SAP session was already closed, disconnected, or unresponsive prior to logoff.")
+        else:
+            logger.info("No active SAP session to log off; connection already released.")
 
         self.disconnect()
 

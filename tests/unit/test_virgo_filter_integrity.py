@@ -6,7 +6,8 @@ def test_virgo_filter_rules_count_and_content():
     mgr = BOMFilterManager()
     virgo_rules = mgr.get_rules_for_model("Virgo", active_only=True)
     
-    assert len(virgo_rules) == 62, f"Expected 62 rules for Virgo, got {len(virgo_rules)}"
+    # LAN DB holds 68 rules: the 62 defaults first, then 6 rules added later via the filter dialog.
+    assert len(virgo_rules) == 68, f"Expected 68 rules for Virgo, got {len(virgo_rules)}"
     
     expected_defaults = DEFAULT_MODEL_RULES["Virgo"]
     assert len(expected_defaults) == 62
@@ -19,7 +20,7 @@ def test_virgo_filter_rules_count_and_content():
 def test_virgo_model_rules_for_pruner():
     mgr = BOMFilterManager()
     pruner_rules = mgr.get_model_rules_for_pruner("Virgo")
-    assert len(pruner_rules) == 62
+    assert len(pruner_rules) == 68
     assert any(r.item_name == "BOTTLE WASTE" for r in pruner_rules)
     assert any(r.item_name == "FILL UP CONTAINER ASSY" and r.match_mode == "Part_name" for r in pruner_rules)
     assert any(r.item_name == "PWB DRUM ASSY" for r in pruner_rules)

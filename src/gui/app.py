@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QThread, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -33,15 +33,21 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.core.path_utils import get_app_base_dir, get_asset_path, safe_exists, safe_is_file
 from src.gui.leader_view import LeaderWorkspaceView
 from src.gui.member_view import MemberWorkspaceView
-from src.gui.settings_dialog import SettingsDialog
-from src.gui.styles import get_theme_manager
+from src.gui.styles import (
+    compute_smart_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+)
 from src.gui.update_dialog import UpdateDialog
-from src.services.app_updates import AppUpdateManager
+from src.services.app_updates import AppUpdateManager, get_build_release_notes, get_build_version
 from src.services.update_delivery import UpdateDeliveryService
 
 logger = logging.getLogger(__name__)
+
+_global_terminating_threads: list[QThread] = []
 
 
 class LogEmitter(QObject):
@@ -70,11 +76,86 @@ class QLogHandler(logging.Handler):
             pass
 
 
+class SilentUpdateCheckWorker(QThread):
+    """Background QThread performing non-blocking update discovery across LAN sources."""
+
+    candidate_found = pyqtSignal(object, str, object, object)
+
+    def __init__(self, base_dir: Path, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.base_dir = base_dir
+
+    def run(self) -> None:
+        try:
+            update_mgr = AppUpdateManager(install_root=self.base_dir)
+            current_ver = update_mgr.get_active_version()
+            build_ver = get_build_version()
+            if build_ver and build_ver != "unknown":
+                current_ver = build_ver
+
+            logger.info("Kiểm tra cập nhật ngầm: phiên bản đang chạy v%s...", current_ver)
+            delivery_worker = UpdateDeliveryService(base_dir=self.base_dir, current_version=current_ver)
+            cfg = delivery_worker.load_sources_configuration()
+            if not cfg.get("startup_check", True):
+                logger.info("Tính năng kiểm tra cập nhật tự động đã bị tắt trong cấu hình.")
+                return
+
+            candidate = delivery_worker.check_for_updates()
+            if candidate:
+                logger.info(
+                    "Đã tìm thấy bản cập nhật mới v%s (gói %s). Chuẩn bị hiển thị gợi ý cập nhật.",
+                    candidate.version,
+                    candidate.package_name,
+                )
+                self.candidate_found.emit(candidate, current_ver, delivery_worker, update_mgr)
+            else:
+                logger.info("Kiểm tra cập nhật ngầm: hệ thống đang ở phiên bản mới nhất (v%s).", current_ver)
+        except Exception as exc:
+            logger.warning("Silent background update check failed: %s", exc)
+
+
 class SSBOMMainWindow(QMainWindow):
     """Main application window for Kyocera automated BOM comparison."""
 
     def closeEvent(self, event: Any) -> None:
-        """Ensure logging handler is detached cleanly on window close."""
+        """Ensure logging handler is detached cleanly and background workers stopped on window close."""
+        timer = getattr(self, "_periodic_update_timer", None)
+        if timer is not None:
+            try:
+                timer.stop()
+            except Exception:
+                pass
+
+        worker = getattr(self, "_update_check_worker", None)
+        self._update_check_worker = None
+        if worker is not None:
+            try:
+                worker.candidate_found.disconnect()
+            except Exception:
+                pass
+            is_running = False
+            try:
+                is_running = worker.isRunning()
+            except Exception:
+                is_running = False
+
+            if is_running:
+                try:
+                    worker.quit()
+                    worker.wait(1000)
+                except Exception:
+                    pass
+                try:
+                    if worker.isRunning():
+                        _global_terminating_threads.append(worker)
+                        worker.finished.connect(
+                            lambda w=worker: _global_terminating_threads.remove(w)
+                            if w in _global_terminating_threads
+                            else None
+                        )
+                except Exception:
+                    pass
+
         if hasattr(self, "log_handler") and self.log_handler in logging.getLogger().handlers:
             logging.getLogger().removeHandler(self.log_handler)
         super().closeEvent(event)
@@ -85,25 +166,62 @@ class SSBOMMainWindow(QMainWindow):
         config_path: Path | None = None,
     ) -> None:
         super().__init__()
-        self.base_dir = Path(base_dir or r"D:\Sandbox\pm_sosanhbom")
+        self.base_dir = Path(base_dir) if base_dir else get_app_base_dir()
         self.config_path = config_path
+        self._update_check_worker: SilentUpdateCheckWorker | None = None
+        self._active_update_dialog: UpdateDialog | None = None
+        self._periodic_update_timer: QTimer | None = None
+
+        # Initialize global crash protection and diagnostic logging
+        from src.core.crash_handler import setup_crash_protection
+        setup_crash_protection(base_dir=self.base_dir)
 
         self.setWindowTitle("Kyocera SSBOM - Chương Trình So Sánh BOM Tự Động")
-        self.resize(1280, 800)
-        self.setMinimumSize(960, 520)
+        x, y, w, h, is_compact = compute_smart_geometry(
+            widget_or_parent=self,
+            ideal_w=1280,
+            ideal_h=800,
+            min_w=880,
+            min_h=480,
+            max_w_ratio=0.96,
+            max_h_ratio=0.92,
+            margin_bottom=20,
+        )
+        self.setMinimumSize(min(880, w), min(480, h))
+        self.setGeometry(x, y, w, h)
 
         self.theme_mgr = get_theme_manager()
         self.theme_mgr.apply_theme_to_app()
-        self.setWindowIcon(self.theme_mgr.get_styled_icon("layers"))
+        app_icon_path = get_asset_path("icon.png", self.base_dir)
+        if app_icon_path:
+            from PyQt6.QtGui import QIcon
+            self.setWindowIcon(QIcon(str(app_icon_path)))
+        else:
+            self.setWindowIcon(self.theme_mgr.get_styled_icon("layers"))
 
-        self._setup_logging_dock()
         self._init_ui()
+        self._setup_logging_dock()
         self._setup_menus_and_toolbars()
         self._setup_status_bar()
-        # Schedule background update check if enabled in sources config
-        QTimer.singleShot(2500, self._check_updates_silent)
+        # Schedule background update check if enabled in sources config (skipped during unit testing)
+        import sys
+        if "pytest" not in sys.modules:
+            self._attach_update_log()
+            QTimer.singleShot(1500, self._show_whats_new_once)
+            QTimer.singleShot(2500, self._check_updates_silent)
+
+            # Periodic background update check every 60 minutes
+            self._periodic_update_timer = QTimer(self)
+            self._periodic_update_timer.setInterval(60 * 60 * 1000)
+            self._periodic_update_timer.timeout.connect(self._check_updates_silent)
+            self._periodic_update_timer.start()
 
         logger.info("Hệ thống So Sánh BOM (SSBOM) đã khởi tạo thành công.")
+
+    def showEvent(self, event: Any) -> None:
+        """Ensure main window never clips beneath the Windows taskbar on initial show."""
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         """Create central tab widget hosting Leader and Member views."""
@@ -162,6 +280,20 @@ class SSBOMMainWindow(QMainWindow):
         self.action_bom_filter.triggered.connect(self.open_bom_filter_dialog)
         file_menu.addAction(self.action_bom_filter)
 
+        self.action_standalone_filter = QAction(" Áp dụng bộ lọc cho file có sẵn...", self)
+        self.action_standalone_filter.setIcon(self.theme_mgr.get_styled_icon("filter"))
+        self.action_standalone_filter.setShortcut("Ctrl+Shift+B")
+        self.action_standalone_filter.setToolTip("Lọc lại file Excel PLM trên máy tính theo bộ quy tắc mà không cần tải lại từ Teamcenter [Ctrl+Shift+B]")
+        self.action_standalone_filter.triggered.connect(self.open_standalone_bom_filter_dialog)
+        file_menu.addAction(self.action_standalone_filter)
+
+        self.action_bom_update = QAction(" Cập nhật BOM mới (PLM & R3)...", self)
+        self.action_bom_update.setIcon(self.theme_mgr.get_styled_icon("refresh"))
+        self.action_bom_update.setShortcut("Ctrl+U")
+        self.action_bom_update.setToolTip("Cập nhật file PLM hoặc SAP R3 mới vào workbook BOM (tương đương Nút 7 & 8 VBA) [Ctrl+U]")
+        self.action_bom_update.triggered.connect(lambda: self.open_bom_update_dialog())
+        file_menu.addAction(self.action_bom_update)
+
         self.action_theme = QAction(" Đổi Giao Diện Sáng/Tối", self)
         self.action_theme.setShortcut("Ctrl+T")
         self.action_theme.triggered.connect(self._toggle_theme)
@@ -202,6 +334,13 @@ class SSBOMMainWindow(QMainWindow):
         self.action_check_updates.setIcon(self.theme_mgr.get_styled_icon("refresh"))
         self.action_check_updates.triggered.connect(lambda: self.check_for_updates(interactive=True))
         help_menu.addAction(self.action_check_updates)
+
+        self.action_open_logs = QAction(" Mở thư mục nhật ký lỗi (Crash Logs)...", self)
+        self.action_open_logs.setIcon(self.theme_mgr.get_styled_icon("folder"))
+        self.action_open_logs.setToolTip("Mở thư mục chứa các tệp nhật ký sự cố và hoạt động hệ thống")
+        self.action_open_logs.triggered.connect(self._open_logs_folder)
+        help_menu.addAction(self.action_open_logs)
+
         help_menu.addSeparator()
         self.action_about = QAction(" Về chương trình...", self)
         self.action_about.setIcon(self.theme_mgr.get_styled_icon("info"))
@@ -216,6 +355,8 @@ class SSBOMMainWindow(QMainWindow):
 
         self.toolbar.addAction(self.action_download_plm)
         self.toolbar.addAction(self.action_bom_filter)
+        self.toolbar.addAction(self.action_standalone_filter)
+        self.toolbar.addAction(self.action_bom_update)
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.action_goto_leader)
         self.toolbar.addAction(self.action_goto_member)
@@ -260,10 +401,20 @@ class SSBOMMainWindow(QMainWindow):
         try:
             active_ver = AppUpdateManager(self.base_dir).get_active_version()
         except Exception:
-            active_ver = "1.0.0"
+            active_ver = "unknown"
+        build_ver = get_build_version()
 
-        self.lbl_version = QLabel(f"v{active_ver}")
-        self.lbl_version.setStyleSheet("margin-right: 8px; font-weight: bold;")
+        self.lbl_version = QLabel(f"v{build_ver}")
+        if build_ver != active_ver and build_ver != "unknown":
+            self.lbl_version.setText(f"v{build_ver} ⚠")
+            self.lbl_version.setToolTip(
+                f"Đang chạy bản v{build_ver} nhưng thư mục cài đặt trỏ tới v{active_ver}.\n"
+                "Hãy mở chương trình bằng SSBOM_Launcher hoặc shortcut Start Menu."
+            )
+            self.lbl_version.setStyleSheet("margin-right: 8px; font-weight: bold; color: #F59E0B;")
+        else:
+            self.lbl_version.setToolTip(f"Phiên bản đang chạy: v{build_ver}")
+            self.lbl_version.setStyleSheet("margin-right: 8px; font-weight: bold;")
         self.status_bar.addPermanentWidget(self.lbl_version)
 
     def _setup_logging_dock(self) -> None:
@@ -283,7 +434,6 @@ class SSBOMMainWindow(QMainWindow):
 
         self.log_dock.setWidget(dock_content)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
-        self.resizeDocks([self.log_dock], [90], Qt.Orientation.Vertical)
         self.log_dock.hide()  # Hidden by default to maximize table vertical space
 
         # Attach handler to root logger
@@ -315,6 +465,7 @@ class SSBOMMainWindow(QMainWindow):
 
     def open_settings_dialog(self) -> None:
         """Display configuration dialog."""
+        from src.gui.settings_dialog import SettingsDialog
         dlg = SettingsDialog(parent=self, config_path=self.config_path)
         dlg.exec()
 
@@ -327,12 +478,50 @@ class SSBOMMainWindow(QMainWindow):
         dlg = BOMFilterConfigDialog(initial_model=current_model, parent=self)
         dlg.exec()
 
+    def open_standalone_bom_filter_dialog(self) -> None:
+        """Display standalone BOM filtering dialog for existing files."""
+        from src.gui.standalone_bom_filter_dialog import StandaloneBOMFilterDialog
+        current_model = None
+        if hasattr(self, "leader_view") and hasattr(self.leader_view, "state"):
+            current_model = getattr(self.leader_view.state, "model_name", None)
+        dlg = StandaloneBOMFilterDialog(initial_model=current_model, parent=self)
+        dlg.exec()
+
+    def open_bom_update_dialog(
+        self,
+        initial_dir: Optional[Path] = None,
+        initial_bom_file: Optional[Path] = None,
+    ) -> None:
+        """Display standalone BOM update dialog for new PLM & R3 files (legacy VBA Buttons 7 & 8)."""
+        from src.gui.bom_update_dialog import BOMUpdateDialog
+
+        if initial_dir is None and hasattr(self, "leader_view"):
+            initial_dir = getattr(self.leader_view, "current_machine_dir", None)
+        dlg = BOMUpdateDialog(parent=self, initial_dir=initial_dir, initial_bom_file=initial_bom_file)
+        dlg.exec()
+
+    def _open_logs_folder(self) -> None:
+        """Open diagnostic crash logs directory."""
+        from src.core.crash_handler import open_logs_folder
+        if not open_logs_folder():
+            QMessageBox.information(
+                self,
+                "Nhật ký lỗi",
+                f"Thư mục nhật ký nằm tại:\n{self.base_dir / 'logs'}",
+            )
+
     def _refresh_theme_icons(self) -> None:
         """Re-apply dynamic styled SVG icons across all actions, tabs, and window."""
         if hasattr(self, "action_download_plm"):
             self.action_download_plm.setIcon(self.theme_mgr.get_styled_icon("download"))
         if hasattr(self, "action_bom_filter"):
             self.action_bom_filter.setIcon(self.theme_mgr.get_styled_icon("filter"))
+        if hasattr(self, "action_standalone_filter"):
+            self.action_standalone_filter.setIcon(self.theme_mgr.get_styled_icon("filter"))
+        if hasattr(self, "action_bom_update"):
+            self.action_bom_update.setIcon(self.theme_mgr.get_styled_icon("refresh"))
+        if hasattr(self, "action_open_logs"):
+            self.action_open_logs.setIcon(self.theme_mgr.get_styled_icon("folder"))
         if hasattr(self, "action_goto_leader"):
             self.action_goto_leader.setIcon(self.theme_mgr.get_styled_icon("users"))
         if hasattr(self, "action_goto_member"):
@@ -400,18 +589,14 @@ class SSBOMMainWindow(QMainWindow):
         try:
             update_mgr = AppUpdateManager(install_root=self.base_dir)
             current_ver = update_mgr.get_active_version()
+            build_ver = get_build_version()
+            if build_ver and build_ver != "unknown":
+                current_ver = build_ver
             delivery = UpdateDeliveryService(base_dir=self.base_dir, current_version=current_ver)
             candidate = delivery.check_for_updates()
 
             if candidate:
-                dlg = UpdateDialog(
-                    parent=self,
-                    candidate=candidate,
-                    current_version=current_ver,
-                    delivery_service=delivery,
-                    update_manager=update_mgr,
-                )
-                dlg.exec()
+                self._show_update_candidate(candidate, current_ver, delivery, update_mgr)
             elif interactive:
                 QMessageBox.information(
                     self,
@@ -427,24 +612,92 @@ class SSBOMMainWindow(QMainWindow):
                     f"Không thể kiểm tra bản cập nhật từ mạng LAN:\n{exc}",
                 )
 
-    def _check_updates_silent(self) -> None:
-        """Silent update check triggered on application startup if enabled in config."""
-        try:
-            delivery = UpdateDeliveryService(base_dir=self.base_dir)
-            cfg = delivery.load_sources_configuration()
-            if not cfg.get("startup_check", True):
+    def _show_update_candidate(self, candidate: Any, current_ver: str, delivery: Any, update_mgr: Any) -> None:
+        """Present update dialog on UI thread when candidate is found."""
+        if getattr(self, "_active_update_dialog", None) is not None:
+            if self._active_update_dialog.isVisible():
                 return
-
-            self.check_for_updates(interactive=False)
+        try:
+            self._active_update_dialog = UpdateDialog(
+                parent=self,
+                candidate=candidate,
+                current_version=current_ver,
+                delivery_service=delivery,
+                update_manager=update_mgr,
+            )
+            self._active_update_dialog.exec()
         except Exception as exc:
-            logger.debug("Silent startup update check failed: %s", exc)
+            logger.debug("Failed to display update dialog: %s", exc)
+        finally:
+            self._active_update_dialog = None
+
+    def _on_silent_worker_finished(self, worker: Any) -> None:
+        """Slot invoked when silent update worker finishes to clear reference cleanly."""
+        if getattr(self, "_update_check_worker", None) is worker:
+            self._update_check_worker = None
+
+    def _check_updates_silent(self) -> None:
+        """Silent update check triggered on application startup or periodically in background QThread."""
+        worker = getattr(self, "_update_check_worker", None)
+        if worker is not None:
+            is_running = False
+            try:
+                is_running = worker.isRunning()
+            except Exception:
+                is_running = False
+
+            if is_running:
+                return
+            try:
+                worker.deleteLater()
+            except Exception:
+                pass
+            self._update_check_worker = None
+
+        worker = SilentUpdateCheckWorker(base_dir=self.base_dir, parent=None)
+        worker.candidate_found.connect(self._show_update_candidate)
+        worker.finished.connect(lambda w=worker: self._on_silent_worker_finished(w))
+        worker.finished.connect(worker.deleteLater)
+        self._update_check_worker = worker
+        worker.start()
+
+    def _attach_update_log(self) -> None:
+        """Write updater activity (check, download, install, failures) to logs/update.log."""
+        try:
+            log_dir = self.base_dir / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(log_dir / "update.log", encoding="utf-8")
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"))
+            for name in ("app_updates", "update_delivery", "update_dialog", "update_security", __name__):
+                lg = logging.getLogger(name)
+                lg.setLevel(logging.INFO)
+                lg.addHandler(handler)
+            logging.getLogger(__name__).info(
+                "Khởi động SSBOM build v%s (base_dir=%s)", get_build_version(), self.base_dir
+            )
+        except Exception as exc:
+            logger.warning("Cannot attach update log: %s", exc)
+
+    def _show_whats_new_once(self) -> None:
+        """Show bundled release notes the first time a new build is launched."""
+        build_ver = get_build_version()
+        notes = get_build_release_notes()
+        if build_ver == "unknown" or not notes:
+            return
+        marker = self.base_dir / "logs" / "last_seen_version.txt"
+        try:
+            if marker.is_file() and marker.read_text(encoding="utf-8").strip() == build_ver:
+                return
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(build_ver, encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Cannot persist last seen version: %s", exc)
+        QMessageBox.information(self, f"Có gì mới trong SSBOM v{build_ver}", notes)
 
     def _show_about_dialog(self) -> None:
         """Show about software information."""
-        try:
-            active_ver = AppUpdateManager(self.base_dir).get_active_version()
-        except Exception:
-            active_ver = "1.0.0"
+        active_ver = get_build_version()
 
         QMessageBox.about(
             self,
@@ -461,6 +714,9 @@ class SSBOMMainWindow(QMainWindow):
 
 def main() -> None:
     """Application entrypoint."""
+    from src.core.crash_handler import setup_crash_protection
+    setup_crash_protection()
+
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
     if "--health-check" in sys.argv:
         print("SSBOM Health Check: OK")

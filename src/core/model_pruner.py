@@ -20,9 +20,12 @@ The 4 Action Rules on Matched Nodes:
 
 from __future__ import annotations
 
+import datetime
 import logging
 import re
+import shutil
 from pathlib import Path
+from typing import Any, Callable, Sequence
 
 from src.core.default_rules import DEFAULT_MODEL_RULES
 from src.core.models import BOMNode, BOMTree, ModelRule, PruneAction
@@ -30,12 +33,15 @@ from src.core.models import BOMNode, BOMTree, ModelRule, PruneAction
 logger = logging.getLogger(__name__)
 
 
+COMMON_MODELS: list[str] = ["Virgo", "Libra2", "Spica", "Iris2024", "Sirius2", "Mebius", "Polaris"]
+
+
 def normalize_model_name(name: str) -> str | None:
     """Normalize model name for case-insensitive lookup."""
     if not name or not isinstance(name, str):
         return None
     cleaned = name.strip().lower()
-    for known in DEFAULT_MODEL_RULES:
+    for known in COMMON_MODELS:
         k_low = known.lower()
         if k_low == cleaned or k_low.startswith(cleaned) or cleaned.startswith(k_low):
             return known
@@ -44,6 +50,64 @@ def normalize_model_name(name: str) -> str | None:
         if k_alpha and (k_alpha == c_alpha or c_alpha.startswith(k_alpha) or k_alpha.startswith(c_alpha)):
             return known
     return None
+
+
+def auto_detect_model_from_path(file_path: str | Path) -> str | None:
+    """Intelligently detect Kyocera machine model name from filename or directory hierarchy."""
+    if not file_path:
+        return None
+    p = Path(file_path)
+    stem = p.stem.strip()
+    full_str = str(p).replace("\\", "/")
+
+    models_to_check = list(COMMON_MODELS)
+    try:
+        from src.core.bom_filter_manager import get_bom_filter_manager
+        db_models = get_bom_filter_manager().get_all_models()
+        for m in db_models:
+            if m not in models_to_check:
+                models_to_check.append(m)
+    except Exception:
+        pass
+
+    # 1. Direct match with registered models in stem or path
+    for known in models_to_check:
+        pattern = re.compile(rf"(?<![a-zA-Z0-9]){re.escape(known)}(?![a-zA-Z0-9])", re.IGNORECASE)
+        if pattern.search(stem) or pattern.search(full_str):
+            return known
+        k_clean = re.sub(r"[^a-zA-Z0-9]", "", known.lower())
+        s_clean = re.sub(r"[^a-zA-Z0-9]", "", stem.lower())
+        if k_clean and len(k_clean) >= 4 and k_clean in s_clean:
+            return known
+
+    # 2. Extract material / machine code and query MachineDictService
+    try:
+        from src.services.machine_dict_service import get_machine_dict_service
+        dict_svc = get_machine_dict_service()
+        # Check 10-char codes (e.g. 110C0V4PH0, T10C0L2US0)
+        codes_10 = re.findall(r"[0-9A-Za-z]{10}", stem)
+        for code in codes_10:
+            resolved = dict_svc.get_model_for_machine_code(code)
+            if resolved:
+                norm = normalize_model_name(resolved)
+                if norm:
+                    return norm
+
+        # Check discrete 4-character tokens (e.g. C0V4, 2YJ0, 02Y4)
+        tokens = re.split(r"[-_\s.]+", stem)
+        for t in tokens:
+            if len(t) == 4 and any(c.isdigit() for c in t) and t.isalnum():
+                resolved = dict_svc.get_model_for_machine_code(t)
+                if resolved:
+                    norm = normalize_model_name(resolved)
+                    if norm:
+                        return norm
+    except Exception:
+        pass
+
+    return None
+
+
 
 
 class ModelPruner:
@@ -91,8 +155,8 @@ class ModelPruner:
         if self.use_db:
             try:
                 if self.filter_manager is None:
-                    from src.core.bom_filter_manager import BOMFilterManager
-                    self.filter_manager = BOMFilterManager()
+                    from src.core.bom_filter_manager import get_bom_filter_manager
+                    self.filter_manager = get_bom_filter_manager()
                 db_rules = self.filter_manager.get_model_rules_for_pruner(model_name)
                 if db_rules:
                     return db_rules
@@ -280,35 +344,84 @@ class ModelPruner:
 
         return current_nodes
 
-    def prune_excel_file(
+    def auto_detect_model(self, file_path: str | Path) -> str | None:
+        """Intelligently detect machine model name from filename or folder path."""
+        return auto_detect_model_from_path(file_path)
+
+    def prune_file(
         self,
         input_path: str | Path,
-        output_path: str | Path,
+        output_path: str | Path | None = None,
         model_name: str | None = None,
         rules: list[ModelRule] | None = None,
         sheet_name: str | int | None = None,
-    ) -> Path:
-        """Prune an Excel PLM file while preserving 100% of formatting, headers, and column structure.
+        create_backup: bool = True,
+        backup_dir: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Prune an existing PLM Excel file on disk according to model decomposition rules.
 
-        Faithfully mirrors legacy VBA behavior: opens the workbook, identifies rows to delete,
-        and removes them directly from the worksheet so all cell formatting, fonts, colors,
-        column dimensions, and header names are completely retained.
+        Supports:
+        - In-place pruning (default when output_path is None or identical to input_path).
+        - Writing to an alternative destination file.
+        - Automatic safety backup (default: True) into backup_before_filter/ or custom directory.
+        - Full format preservation and .xlsm VBA macro preservation (keep_vba=True).
+        - Safe handling of already-pruned files (xóa thêm/lọc sót logic).
+        - Comprehensive statistics dictionary return.
         """
         import openpyxl
         from src.core.tree_parser import PLMTreeParser
 
-        in_p = Path(input_path)
-        out_p = Path(output_path)
+        in_p = Path(input_path).resolve()
+        if not in_p.is_file():
+            raise FileNotFoundError(f"Tệp PLM không tồn tại: {in_p}")
+
+        if in_p.suffix.lower() == ".xls":
+            raise ValueError(
+                f"Định dạng tệp Excel cũ (.xls) không được hỗ trợ để cắt tỉa trực tiếp: {in_p.name}. "
+                "Vui lòng mở tệp trong Microsoft Excel và lưu dưới định dạng .xlsx hoặc .xlsm trước khi lọc."
+            )
+
+        effective_model = model_name or self.auto_detect_model(in_p)
+        effective_rules = rules if rules is not None else (self.get_rules_for_model(effective_model) if effective_model else [])
+
+        out_p = Path(output_path).resolve() if output_path else in_p
         out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        backup_file_path: Path | None = None
+        if create_backup:
+            b_dir = Path(backup_dir).resolve() if backup_dir else in_p.parent / "backup_before_filter"
+            b_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file_path = b_dir / f"{in_p.stem}_{ts}{in_p.suffix}"
+            try:
+                shutil.copy2(str(in_p), str(backup_file_path))
+                logger.info("Created pre-pruning backup: %s", backup_file_path)
+            except PermissionError as p_err:
+                raise PermissionError(
+                    f"Không thể tạo bản sao lưu vì tệp đang bị khóa: {in_p}. Vui lòng đóng tệp trong Excel trước khi lọc."
+                ) from p_err
+            except Exception as b_err:
+                logger.warning("Could not create backup for %s: %s", in_p, b_err)
 
         parser = PLMTreeParser()
         raw_tree = parser.parse_file(in_p, sheet_name=sheet_name)
-        pruned_tree = self.prune_tree(raw_tree, model_name=model_name, rules=rules)
+        if not effective_model and getattr(raw_tree, "model_name", None):
+            effective_model = raw_tree.model_name
+            if not effective_rules:
+                effective_rules = self.get_rules_for_model(effective_model)
 
+        pruned_tree = self.prune_tree(raw_tree, model_name=effective_model, rules=effective_rules)
         retained_nodes = pruned_tree.flatten()
         retained_row_indices = {n.row_index for n in retained_nodes if n.row_index is not None}
 
-        wb = openpyxl.load_workbook(str(in_p))
+        is_vba = in_p.suffix.lower() in (".xlsm", ".xltm")
+        try:
+            wb = openpyxl.load_workbook(str(in_p), keep_vba=is_vba)
+        except PermissionError as p_err:
+            raise PermissionError(
+                f"Tệp đang được mở bởi ứng dụng khác (Microsoft Excel): {in_p}. Vui lòng đóng tệp trước khi lọc."
+            ) from p_err
+
         try:
             if sheet_name is not None:
                 ws = wb[sheet_name] if isinstance(sheet_name, str) else wb.worksheets[sheet_name]
@@ -345,11 +458,143 @@ class ModelPruner:
             for coord in excess_coords:
                 del ws._cells[coord]
 
-            wb.save(str(out_p))
+            if len(rows_to_delete) > 0 or out_p != in_p:
+                try:
+                    wb.save(str(out_p))
+                except PermissionError as p_err:
+                    raise PermissionError(
+                        f"Không thể ghi đè tệp vì tệp đang mở trong Microsoft Excel: {out_p}. "
+                        "Vui lòng đóng tệp trong Excel và thử lại."
+                    ) from p_err
         finally:
             wb.close()
 
-        return out_p
+        final_rows = max_r - len(rows_to_delete)
+        return {
+            "input_path": str(in_p),
+            "output_path": str(out_p),
+            "backup_path": str(backup_file_path) if backup_file_path else None,
+            "model_name": effective_model or "Unknown",
+            "initial_rows": max_r,
+            "final_rows": final_rows,
+            "deleted_rows": len(rows_to_delete),
+            "rules_count": len(effective_rules),
+            "success": True,
+            "error": None,
+        }
+
+    def prune_excel_file(
+        self,
+        input_path: str | Path,
+        output_path: str | Path,
+        model_name: str | None = None,
+        rules: list[ModelRule] | None = None,
+        sheet_name: str | int | None = None,
+    ) -> Path:
+        """Prune an Excel PLM file while preserving 100% of formatting, headers, and column structure.
+
+        Faithfully mirrors legacy VBA behavior: opens the workbook, identifies rows to delete,
+        and removes them directly from the worksheet so all cell formatting, fonts, colors,
+        column dimensions, and header names are completely retained.
+        """
+        res = self.prune_file(
+            input_path=input_path,
+            output_path=output_path,
+            model_name=model_name,
+            rules=rules,
+            sheet_name=sheet_name,
+            create_backup=False,
+        )
+        return Path(res["output_path"])
+
+    def prune_directory(
+        self,
+        dir_path: str | Path,
+        model_name: str | None = None,
+        rules: list[ModelRule] | None = None,
+        recursive: bool = True,
+        file_pattern: str = "PLM_*.xls*",
+        create_backup: bool = True,
+        backup_dir: str | Path | None = None,
+        output_dir: str | Path | None = None,
+        callback: Callable[[int, int, dict[str, Any]], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Batch prune multiple PLM Excel files located in a directory.
+
+        Args:
+            dir_path: Directory path to scan.
+            model_name: Explicit machine model name or None for auto-detection.
+            rules: Optional explicit list of ModelRule records to apply.
+            recursive: Whether to scan subdirectories recursively.
+            file_pattern: Filename match pattern (default 'PLM_*.xls*').
+            create_backup: Whether to create backups before pruning.
+            backup_dir: Target backup folder or None for local backup_before_filter.
+            output_dir: Target output directory (if None, overwrites in-place).
+            callback: Optional progress callback receiving (current_idx, total_count, file_result).
+
+        Returns:
+            List of result dictionaries.
+        """
+        d_p = Path(dir_path).resolve()
+        if not d_p.is_dir():
+            raise NotADirectoryError(f"Thư mục không tồn tại: {d_p}")
+
+        iterator = d_p.rglob(file_pattern) if recursive else d_p.glob(file_pattern)
+        found_files: list[Path] = []
+        for f in iterator:
+            if not f.is_file():
+                continue
+            if any(b in f.parts for b in ("backup_before_filter", "backupTC14full", ".bak", "old")):
+                continue
+            if f.name.startswith("~$") or f.stem.endswith("_filtered"):
+                continue
+            if f.suffix.lower() in (".xlsx", ".xlsm", ".xltm"):
+                found_files.append(f)
+
+        found_files.sort(key=lambda p: str(p).lower())
+        results: list[dict[str, Any]] = []
+        total = len(found_files)
+
+        for idx, file_p in enumerate(found_files, start=1):
+            out_target = None
+            if output_dir:
+                out_d = Path(output_dir).resolve()
+                out_d.mkdir(parents=True, exist_ok=True)
+                out_target = out_d / file_p.name
+
+            try:
+                res = self.prune_file(
+                    input_path=file_p,
+                    output_path=out_target,
+                    model_name=model_name,
+                    rules=rules,
+                    create_backup=create_backup,
+                    backup_dir=backup_dir,
+                )
+            except Exception as exc:
+                logger.error("Error pruning file %s: %s", file_p, exc)
+                res = {
+                    "input_path": str(file_p),
+                    "output_path": str(out_target or file_p),
+                    "backup_path": None,
+                    "model_name": model_name or "Unknown",
+                    "initial_rows": 0,
+                    "final_rows": 0,
+                    "deleted_rows": 0,
+                    "rules_count": 0,
+                    "success": False,
+                    "error": str(exc),
+                }
+
+            results.append(res)
+            if callback:
+                try:
+                    callback(idx, total, res)
+                except Exception:
+                    pass
+
+        return results
+
 
 
 def prune_by_model(

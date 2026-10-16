@@ -10,7 +10,7 @@ import shutil
 import time
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
 from src.automation.sap.models import (
     CS12Params,
@@ -20,18 +20,87 @@ from src.automation.sap.models import (
 
 logger = logging.getLogger(__name__)
 
+RPC_HRESULTS_U32 = {
+    0x800706BE,  # RPC_S_CALL_FAILED (-2147023170)
+    0x800706BA,  # RPC_S_SERVER_UNAVAILABLE (-2147023174)
+    0x80010108,  # RPC_E_DISCONNECTED (-2147417848)
+    0x800706BF,  # RPC_S_CALL_FAILED_DNE (-2147023169)
+    0x80010105,  # RPC_E_SERVERFAULT (-2147417851)
+    0x80010001,  # RPC_E_CALL_REJECTED (-2147418111)
+    0x80080006,  # CO_E_SERVER_STOPPING (-2146959354)
+    0x8001011F,  # RPC_E_SERVER_DIED (-2147417825)
+    0x80010100,  # RPC_E_SYS_CALL_FAILED (-2147418112)
+    0x8001010E,  # RPC_E_WRONG_THREAD (-2147417842)
+    0x800706D9,  # EPT_S_NOT_REGISTERED (-2147023143)
+    0x800706B5,  # RPC_S_UNKNOWN_IF (-2147023179)
+}
+
+# Bidirectional signed and unsigned representation set
+RPC_HRESULTS = {
+    code if code < 0x80000000 else code - 0x100000000
+    for code in RPC_HRESULTS_U32
+} | RPC_HRESULTS_U32
+
+RPC_ERROR_KEYWORDS = (
+    "remote procedure call failed",
+    "rpc server is unavailable",
+    "the rpc server is unavailable",
+    "rpc_s_call_failed",
+    "rpc_s_server_unavailable",
+    "the object invoked has disconnected",
+    "disconnected from its clients",
+    "-2147023170",
+    "-2147023174",
+    "-2147417848",
+    "0x800706be",
+    "0x800706ba",
+    "0x80010108",
+    "server threw an exception",
+    "call was rejected by callee",
+    "session closed",
+    "session is closed",
+    "session disconnected",
+    "session was disconnected",
+    "session terminated",
+    "session was terminated",
+    "connection to partner",
+    "connection to partner broken",
+    "connection was terminated",
+    "connection terminated",
+    "connection closed",
+    "connection lost",
+    "connection broken",
+    "connection reset",
+    "network connection lost",
+    "wsaeconnreset",
+    "server died",
+    "not connected to sap",
+)
+
 
 class CS12Service:
     """Automates SAP Transaction CS12 (Multilevel BOM Display & Export)."""
 
-    def __init__(self, session: Any = None, connection_manager: Optional[Any] = None):
+    def __init__(
+        self,
+        session: Any = None,
+        connection_manager: Optional[Any] = None,
+        status_callback: Optional[Callable[[str], None]] = None,
+        on_session_refreshed: Optional[Callable[[Any], None]] = None,
+    ):
         """
         Initialize CS12Service.
 
         Args:
             session: Active, authenticated SAP GUI session object.
-            connection_manager: Optional SAPConnectionManager providing active session.
+            connection_manager: Optional SAPConnectionManager providing active session and reconnect capability.
+            status_callback: Optional callable for streaming human-readable log/status messages to caller.
+            on_session_refreshed: Optional callable invoked whenever a new session is established.
         """
+        self.connection_manager = connection_manager
+        self.status_callback = status_callback
+        self.on_session_refreshed = on_session_refreshed
+
         if session is not None:
             self.session = session
         elif connection_manager is not None:
@@ -43,6 +112,97 @@ class CS12Service:
                 self.session = connection_manager
         else:
             self.session = None
+
+    @classmethod
+    def _is_rpc_or_session_error(cls, ex: Optional[BaseException]) -> bool:
+        """Detect whether an exception is caused by COM RPC failure or session disconnection."""
+        if ex is None:
+            return False
+
+        curr: Optional[BaseException] = ex
+        visited = set()
+        while curr is not None and id(curr) not in visited:
+            visited.add(id(curr))
+
+            # 1. Check hresult / winerror attributes
+            for attr in ("hresult", "winerror"):
+                val = getattr(curr, attr, None)
+                if isinstance(val, int) and ((val & 0xFFFFFFFF) in RPC_HRESULTS_U32 or val in RPC_HRESULTS):
+                    return True
+
+            # 2. Check args tuple (common in pywintypes.com_error: (hr, msg, details, ...))
+            if hasattr(curr, "args") and curr.args:
+                for arg in curr.args:
+                    if isinstance(arg, int) and ((arg & 0xFFFFFFFF) in RPC_HRESULTS_U32 or arg in RPC_HRESULTS):
+                        return True
+
+            # 3. Check message text
+            msg = str(curr).lower()
+            if any(kw in msg for kw in RPC_ERROR_KEYWORDS):
+                return True
+
+            curr = getattr(curr, "__cause__", None) or getattr(curr, "__context__", None)
+
+        return False
+
+    def is_session_alive(self) -> bool:
+        """Check if current SAP session is responsive and authenticated."""
+        if self.session is None:
+            return False
+        try:
+            okcd = self.session.findById("wnd[0]/tbar[0]/okcd")
+            return okcd is not None
+        except Exception:
+            return False
+
+    def reacquire_session(self) -> bool:
+        """Re-acquire a fresh SAP session via connection_manager if available."""
+        if self.connection_manager is None:
+            return False
+        try:
+            logger.info("Re-acquiring fresh SAP session via connection_manager...")
+            new_session = None
+            if hasattr(self.connection_manager, "reconnect"):
+                new_session = self.connection_manager.reconnect()
+            elif hasattr(self.connection_manager, "get_session"):
+                if hasattr(self.connection_manager, "disconnect"):
+                    try:
+                        self.connection_manager.disconnect()
+                    except Exception:
+                        pass
+                if hasattr(self.connection_manager, "session"):
+                    self.connection_manager.session = None
+                new_session = self.connection_manager.get_session()
+            elif hasattr(self.connection_manager, "get_or_create_session"):
+                if hasattr(self.connection_manager, "disconnect"):
+                    try:
+                        self.connection_manager.disconnect()
+                    except Exception:
+                        pass
+                new_session = self.connection_manager.get_or_create_session()
+
+            if new_session is not None:
+                self.session = new_session
+                if self.on_session_refreshed is not None:
+                    try:
+                        self.on_session_refreshed(self.session)
+                    except Exception as cb_err:
+                        logger.debug("on_session_refreshed callback error: %s", cb_err)
+                return True
+            self.session = None
+            return False
+        except Exception as ex:
+            logger.error("Failed to re-acquire SAP session via connection_manager: %s", ex)
+            self.session = None
+            return False
+
+    def ensure_active_session(self) -> Any:
+        """Ensure session is alive; reconnects via connection_manager if unresponsive."""
+        if not self.is_session_alive():
+            if self.connection_manager is not None:
+                logger.warning("Phiên SAP hiện tại không phản hồi hoặc đã mất kết nối. Đang tự động kết nối lại...")
+                self.reacquire_session()
+        return self.session
 
     def execute_cs12(
         self,
@@ -93,6 +253,8 @@ class CS12Service:
         """Reset SAP transaction screen to top-level menu via /n."""
         logger.debug("Resetting navigation via /n...")
         try:
+            if self.session is None:
+                return
             okcd = self.session.findById("wnd[0]/tbar[0]/okcd")
             okcd.Text = "/n"
             wnd0 = self.session.findById("wnd[0]")
@@ -105,6 +267,8 @@ class CS12Service:
         """Exit and logoff from SAP via /nex fast logoff."""
         logger.info("Logging off SAP via /nex...")
         try:
+            if self.session is None:
+                return False
             okcd = self.session.findById("wnd[0]/tbar[0]/okcd")
             okcd.Text = "/nex"
             wnd0 = self.session.findById("wnd[0]")
@@ -114,12 +278,17 @@ class CS12Service:
             logger.debug(f"Failed logging off SAP via /nex: {ex}")
             return False
 
-    def execute_cs12_and_export(self, params: CS12Params) -> ExportResult:
+    def execute_cs12_and_export(
+        self,
+        params: CS12Params,
+        allow_retry: bool = True,
+    ) -> ExportResult:
         """
         Execute CS12 query for a single material BOM and export to spreadsheet.
 
         Args:
             params: Parameters including material, plant, bom_usage, alternative, valid_date.
+            allow_retry: Whether to automatically reconnect and retry once on COM RPC failure.
 
         Returns:
             ExportResult detailing success status, output path, or status bar error.
@@ -139,6 +308,18 @@ class CS12Service:
             f"Executing CS12 for Material='{material}', Plant='{params.plant}', "
             f"Usage='{params.bom_usage}', Alt='{params.alternative}', Date='{params.formatted_date_sap}'"
         )
+
+        if self.session is None:
+            if allow_retry and self.connection_manager is not None:
+                self.reacquire_session()
+            if self.session is None:
+                return ExportResult(
+                    success=False,
+                    material=material,
+                    error_message="No active SAP GUI session available.",
+                    status_code="E",
+                    execution_time_sec=time.time() - start_time,
+                )
 
         try:
             # 1. Navigation to initial CS12 screen
@@ -187,6 +368,8 @@ class CS12Service:
                 btn_export.press()
                 self.wait_ready()
             except Exception as ex:
+                if self._is_rpc_or_session_error(ex):
+                    raise
                 self.reset_navigation()
                 return ExportResult(
                     success=False,
@@ -209,6 +392,8 @@ class CS12Service:
                 btn_ok_dialog.press()
                 self.wait_ready()
             except Exception as ex:
+                if self._is_rpc_or_session_error(ex):
+                    raise
                 self.reset_navigation()
                 return ExportResult(
                     success=False,
@@ -230,6 +415,8 @@ class CS12Service:
                 btn_save.press()
                 self.wait_ready()
             except Exception as ex:
+                if self._is_rpc_or_session_error(ex):
+                    raise
                 self.reset_navigation()
                 return ExportResult(
                     success=False,
@@ -241,14 +428,22 @@ class CS12Service:
 
             # 8. Handle Overwrite Confirmation popup (wnd[2] / btnSPOP-OPTION1)
             try:
-                children_count = getattr(getattr(self.session, "Children", None), "Count", 0)
-                if children_count > 1 or hasattr(self.session, "findById"):
-                    btn_replace = self.session.findById("wnd[2]/usr/btnSPOP-OPTION1")
-                    if btn_replace is not None:
-                        logger.info("File already exists on disk; confirming overwrite in SAP popup.")
-                        btn_replace.press()
-                        self.wait_ready()
-            except Exception:
+                children = getattr(self.session, "Children", None)
+                children_count = getattr(children, "Count", 0) if children is not None else 0
+                has_multi_wnd = isinstance(children_count, int) and children_count > 1
+                if has_multi_wnd or hasattr(self.session, "findById"):
+                    try:
+                        btn_replace = self.session.findById("wnd[2]/usr/btnSPOP-OPTION1")
+                        if btn_replace is not None and hasattr(btn_replace, "press"):
+                            logger.info("File already exists on disk; confirming overwrite in SAP popup.")
+                            btn_replace.press()
+                            self.wait_ready()
+                    except Exception as inner_ex:
+                        if self._is_rpc_or_session_error(inner_ex):
+                            raise
+            except Exception as ex:
+                if self._is_rpc_or_session_error(ex):
+                    raise
                 # Overwrite popup did not appear
                 pass
 
@@ -257,7 +452,26 @@ class CS12Service:
                 btn_back = self.session.findById("wnd[0]/tbar[0]/btn[3]")
                 btn_back.press()
                 self.wait_ready()
-            except Exception:
+            except Exception as ex:
+                if self._is_rpc_or_session_error(ex):
+                    # Check if file was already successfully written to disk during this execution
+                    if (
+                        expected_file.exists()
+                        and expected_file.stat().st_size > 0
+                        and expected_file.stat().st_mtime >= start_time
+                    ):
+                        logger.warning(
+                            f"SAP session disconnected during post-export F3 return, but BOM file was successfully written: {expected_file}"
+                        )
+                        self.session = None
+                        return ExportResult(
+                            success=True,
+                            material=material,
+                            file_path=expected_file,
+                            status_code="S",
+                            execution_time_sec=time.time() - start_time,
+                        )
+                    raise
                 pass
 
             # 10. Verify exported file exists and is non-empty
@@ -280,12 +494,55 @@ class CS12Service:
                 )
 
         except Exception as ex:
+            is_rpc = self._is_rpc_or_session_error(ex)
+            if allow_retry and self.connection_manager is not None and is_rpc:
+                warn_msg = (
+                    f"[-] [SAP R3] Phát hiện mất kết nối COM/RPC SAP khi xử lý mã '{material}': {ex}. "
+                    "Nguyên nhân có thể do tài khoản bị đăng nhập ở nơi khác (Multi-Logon kick), "
+                    "phiên làm việc bị ngắt hoặc mạng gián đoạn. Đang tự động kết nối lại và thử tải lại..."
+                )
+                logger.warning(warn_msg)
+                if self.status_callback is not None:
+                    try:
+                        self.status_callback(warn_msg)
+                    except Exception:
+                        pass
+
+                reconnected = self.reacquire_session()
+                if reconnected:
+                    info_msg = f"[+] [SAP R3] Tái lập kết nối SAP GUI thành công! Đang thử tải lại mã BOM '{material}'..."
+                    logger.info(info_msg)
+                    if self.status_callback is not None:
+                        try:
+                            self.status_callback(info_msg)
+                        except Exception:
+                            pass
+                    return self.execute_cs12_and_export(params, allow_retry=False)
+                else:
+                    err_msg = f"[-] [SAP R3] Không thể tái kết nối SAP GUI để thử lại mã '{material}'."
+                    logger.error(err_msg)
+                    if self.status_callback is not None:
+                        try:
+                            self.status_callback(err_msg)
+                        except Exception:
+                            pass
+
             logger.exception(f"Unexpected exception during CS12 export for '{material}': {ex}")
-            self.reset_navigation()
+            if not is_rpc:
+                self.reset_navigation()
+            else:
+                self.session = None
+
+            error_msg_detail = (
+                f"Mất kết nối COM/RPC SAP: {ex}. Đã thử kết nối lại nhưng không thành công."
+                if is_rpc and allow_retry and self.connection_manager is not None
+                else str(ex)
+            )
+
             return ExportResult(
                 success=False,
                 material=material,
-                error_message=str(ex),
+                error_message=error_msg_detail,
                 status_code="E",
                 execution_time_sec=time.time() - start_time,
             )

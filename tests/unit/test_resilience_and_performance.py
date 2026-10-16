@@ -125,7 +125,7 @@ class TestStep3InspectionCaching:
         ws.title = "CTTT"
         ws.cell(row=1, column=1, value="Header")
         ws.cell(row=2, column=17, value="OK")  # Q2 = OK
-        ws.cell(row=3, column=1, value="Part 1")
+        ws.cell(row=3, column=3, value="Part 1")  # item count is based on the part-code column
         wb.save(file_path)
         wb.close()
 
@@ -140,6 +140,39 @@ class TestStep3InspectionCaching:
             assert is_ok2 is True
             assert count2 == 1
             mock_load.assert_not_called()
+
+    def test_blank_template_is_not_submitted(self, qapp: QApplication, tmp_path: Path) -> None:
+        """A member template with no Q2 stamp and no parts must not count as submitted."""
+        step3 = Step3TrackingConsolidationWidget(state=LeaderSessionState(base_dir=tmp_path))
+        file_path = tmp_path / "blank.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "CTTT"
+        ws.cell(row=546, column=17).value = None  # pre-formatted empty rows
+        ws.cell(row=546, column=1).number_format = "@"
+        wb.save(file_path)
+        wb.close()
+
+        is_ok, count, _, _ = step3._inspect_submission_file(file_path)
+        assert is_ok is False
+        assert count == 0
+
+    def test_q2_ok_is_submitted_and_counts_real_parts(self, qapp: QApplication, tmp_path: Path) -> None:
+        step3 = Step3TrackingConsolidationWidget(state=LeaderSessionState(base_dir=tmp_path))
+        file_path = tmp_path / "done.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "CTTT"
+        ws.cell(row=2, column=17, value="OK")
+        ws.cell(row=3, column=3, value="P1")
+        ws.cell(row=4, column=3, value="P2")
+        ws.cell(row=300, column=1).number_format = "@"
+        wb.save(file_path)
+        wb.close()
+
+        is_ok, count, _, _ = step3._inspect_submission_file(file_path)
+        assert is_ok is True
+        assert count == 2
 
 
 class TestBOMFilterManagerLockResilience:

@@ -211,7 +211,10 @@ class AppUpdateManager:
             env["LOCALAPPDATA"] = temp_localappdata
             env["PYTHONPATH"] = str(app_dir)
 
-            cmd = [sys.executable, str(entry_file), "--health-check"]
+            if entry_file.suffix.lower() == ".exe":
+                cmd = [str(entry_file), "--health-check"]
+            else:
+                cmd = [sys.executable, str(entry_file), "--health-check"]
             logger.info("Running health check command: %s", " ".join(cmd))
 
             try:
@@ -339,3 +342,39 @@ class AppUpdateManager:
 
         logger.info("Successfully rolled back active version to: %s", prev_version)
         return True
+
+
+def get_build_version() -> str:
+    """Version of the code that is actually running (not the install pointer).
+
+    Frozen builds ship release.json next to SSBOM_Portable.exe (apps/<version>/release.json);
+    source runs use the repository root release.json.
+    """
+    if getattr(sys, "frozen", False):
+        candidates = [Path(sys.executable).resolve().parent / "release.json"]
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "release.json")
+    else:
+        candidates = [Path(__file__).resolve().parents[2] / "release.json"]
+
+    for cand in candidates:
+        try:
+            if cand.is_file():
+                with open(cand, "r", encoding="utf-8") as fp:
+                    version = json.load(fp).get("version")
+                if version:
+                    return str(version)
+        except Exception as exc:
+            logger.warning("Cannot read build version from %s: %s", cand, exc)
+    return "unknown"
+
+
+def get_build_release_notes() -> str:
+    """Release notes bundled with the running build (release.json 'notes'), if any."""
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+    try:
+        with open(base / "release.json", "r", encoding="utf-8") as fp:
+            return str(json.load(fp).get("notes") or "")
+    except Exception:
+        return ""

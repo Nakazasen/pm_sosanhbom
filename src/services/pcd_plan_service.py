@@ -18,7 +18,7 @@ from typing import Any, List, Optional
 
 import openpyxl
 
-from src.services.machine_dict_service import MachineDictService, MachineInfo
+from src.services.machine_dict_service import MachineDictService, MachineInfo, get_machine_dict_service
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ class PCDPlanService:
         dict_service: MachineDictService | None = None,
     ) -> None:
         self.base_dir = Path(base_dir or DEFAULT_ONEDRIVE_BASE)
-        self.dict_service = dict_service or MachineDictService()
+        self.dict_service = dict_service or get_machine_dict_service()
 
     def find_monthly_plan_file(
         self,
@@ -205,29 +205,28 @@ class PCDPlanService:
                 conf_dir,
             ])
 
-        # 2. Check local workspace pcd_plans directories
-        candidate_paths.extend([
-            Path("data/pcd_plans") / month_str,
-            Path("data/pcd_plans") / year_str / month_str,
-            Path("data/pcd_plans"),
-            Path("apps/1.0.0/data/pcd_plans") / month_str,
-            Path("apps/1.0.0/data/pcd_plans") / year_str / month_str,
-            Path("apps/1.0.0/data/pcd_plans"),
-        ])
+        # 2. Check explicitly provided base_dir (e.g. in tests or custom workspaces)
+        if self.base_dir:
+            candidate_paths.extend([
+                self.base_dir / "Theo tháng (月別)" / year_str / month_str,
+                self.base_dir / "ProductionPlan" / "Theo tháng (月別)" / year_str / month_str,
+                self.base_dir / "ProductionPlan" / year_str / month_str,
+                self.base_dir / year_str / month_str,
+                self.base_dir / "data" / "pcd_plans" / month_str,
+                self.base_dir / "data" / "pcd_plans" / year_str / month_str,
+                self.base_dir / "data" / "pcd_plans",
+                self.base_dir,
+            ])
 
         # 3. Check in OneDrive sync locations (Personal & SharePoint shortcut roots)
         user_home = Path(os.path.expanduser("~"))
         candidate_paths.extend([
-            self.base_dir / "Theo tháng (月別)" / year_str / month_str,
-            self.base_dir / "ProductionPlan" / "Theo tháng (月別)" / year_str / month_str,
-            self.base_dir / "ProductionPlan" / year_str / month_str,
-            self.base_dir / year_str / month_str,
             user_home / "KYOCERA Document Solutions" / "kdtvn_PCD - ProductionPlan" / "Theo tháng (月別)" / year_str / month_str,
             user_home / "KYOCERA Document Solutions" / "kdtvn_PCD - Theo tháng (月別)" / year_str / month_str,
             user_home / "KYOCERA Document Solutions" / "Theo tháng (月別)" / year_str / month_str,
         ])
 
-        # 3. Check LAN directories
+        # 4. Check LAN directories
         lan_roots = [
             Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3"),
             Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更"),
@@ -237,8 +236,16 @@ class PCDPlanService:
                 candidate_paths.append(lr / "PCD" / year_str / month_str)
                 candidate_paths.append(lr / year_str / month_str)
 
-        # 4. Base dir as fallback
-        candidate_paths.append(self.base_dir)
+        # 5. Local workspace fallback (only if not running with custom base_dir)
+        if not self.base_dir or self.base_dir == DEFAULT_ONEDRIVE_BASE:
+            candidate_paths.extend([
+                Path("data/pcd_plans") / month_str,
+                Path("data/pcd_plans") / year_str / month_str,
+                Path("data/pcd_plans"),
+                Path("apps/1.0.0/data/pcd_plans") / month_str,
+                Path("apps/1.0.0/data/pcd_plans") / year_str / month_str,
+                Path("apps/1.0.0/data/pcd_plans"),
+            ])
 
         for p in candidate_paths:
             if p.exists() and p.is_dir() and p not in search_dirs:

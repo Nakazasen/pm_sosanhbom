@@ -33,7 +33,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.gui.styles import get_theme_manager
+from src.core.path_utils import get_app_base_dir
+from src.gui.styles import (
+    apply_smart_dialog_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,7 @@ DEFAULT_MASTER_TEMPLATE = (
     r"\Hang muc can luu\Vinh\Pm_sosanhBOM\form_ssbom.xlsm"
 )
 
+_default_base = get_app_base_dir()
 DEFAULT_SETTINGS: dict[str, Any] = {
     "tc14": {
         "base_url": "http://tcmp3gwb:3000/",
@@ -74,9 +80,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "saplogon_path": r"C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe",
     },
     "paths": {
-        "base_dir": r"D:\Sandbox\pm_sosanhbom",
-        "fix_serial_path": r"D:\Sandbox\pm_sosanhbom\FIX_SERIAL_DLTOOL_VER010.xls",
-        "reports_dir": r"D:\Sandbox\pm_sosanhbom\Reports",
+        "base_dir": str(_default_base),
+        "fix_serial_path": str(_default_base / "FIX_SERIAL_DLTOOL_VER010.xls"),
+        "reports_dir": str(_default_base / "Reports"),
         "default_model": "Virgo",
         "shared_db_path": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\ssbom_master.db",
         "update_dir": r"\\fstvn01\Data\00_KDTVN Common(KDTVN共通)\⑤Production Engineering(製造技術)\Hang muc can luu\Vinh\Pm_sosanhBOM\release_update",
@@ -109,7 +115,17 @@ class SettingsDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Cấu hình Hệ thống (System Settings)")
-        self.resize(580, 480)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=580,
+            ideal_h=480,
+            min_w=460,
+            min_h=340,
+            max_w_ratio=0.92,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
+
         if config_path is not None:
             self.config_path = Path(config_path)
         elif DEFAULT_CONFIG_PATH.exists():
@@ -122,6 +138,10 @@ class SettingsDialog(QDialog):
         self._current_settings: dict[str, Any] = json.loads(json.dumps(DEFAULT_SETTINGS))
         self._init_ui()
         self.load_from_file()
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         """Create tabbed configuration interface."""

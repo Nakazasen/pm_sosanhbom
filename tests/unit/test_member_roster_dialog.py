@@ -134,10 +134,10 @@ class TestMemberRosterDialog:
             dlg._on_update_member()
 
         # Check that table updated column 5 with normalized name
-        assert dlg.member_table.item(0, 5).text() == "Virgo, 6thNext"
+        assert dlg.member_table.item(0, 5).text() == "Virgo, 6th Next"
 
         # Test searching by machine model name
-        dlg.search_edit.setText("6thNext")
+        dlg.search_edit.setText("6th Next")
         assert dlg.member_table.rowCount() == 1
         assert dlg.member_table.item(0, 1).text() == acc_id
 

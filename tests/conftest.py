@@ -20,6 +20,12 @@ import openpyxl
 import pandas as pd
 import pytest
 
+import os
+
+# Unit tests must not launch real Excel; set SSBOM_TEST_REAL_EXCEL=1 to exercise the COM path.
+if os.environ.get("SSBOM_TEST_REAL_EXCEL") != "1":
+    os.environ["SSBOM_DISABLE_EXCEL_COM"] = "1"
+
 
 # ============================================================================
 # Filesystem & Workspace Fixtures

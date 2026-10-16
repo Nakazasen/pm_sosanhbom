@@ -30,7 +30,7 @@ class TestBOMFilterManager:
             assert m in models
 
         virgo_rules = temp_filter_manager.get_rules_for_model("Virgo")
-        assert len(virgo_rules) == 50
+        assert len(virgo_rules) == 62
 
         iris_rules = temp_filter_manager.get_rules_for_model("Iris2024")
         assert len(iris_rules) == 134
@@ -101,19 +101,19 @@ class TestBOMFilterManager:
 
         # Re-import from exported file
         imported_count = clean_mgr.import_from_excel(export_file)
-        assert imported_count == 50
-        assert len(clean_mgr.get_rules_for_model("Virgo")) == 50
+        assert imported_count == 62
+        assert len(clean_mgr.get_rules_for_model("Virgo")) == 62
 
     def test_reset_model_to_default(self, temp_filter_manager):
         """Verify resetting a modified model back to factory defaults."""
         # Add a dummy rule to Virgo
         temp_filter_manager.add_rule("Virgo", "DUMMY RULE", "Full_name")
-        assert len(temp_filter_manager.get_rules_for_model("Virgo")) == 51
+        assert len(temp_filter_manager.get_rules_for_model("Virgo")) == 63
 
         # Reset Virgo
         reset_count = temp_filter_manager.reset_model_to_default("Virgo")
-        assert reset_count == 50
-        assert len(temp_filter_manager.get_rules_for_model("Virgo")) == 50
+        assert reset_count == 62
+        assert len(temp_filter_manager.get_rules_for_model("Virgo")) == 62
 
     def test_model_pruner_dynamic_integration(self, temp_filter_manager):
         """Verify ModelPruner utilizes rules added to BOMFilterManager."""

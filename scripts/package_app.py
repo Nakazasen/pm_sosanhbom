@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("package_app")
 
 APP_NAME = "SSBOM_Manager"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.8"
 DEFAULT_MIN_APP_VERSION = "1.0.0"
 
 # Verified Inno Setup compiler search locations
@@ -70,19 +70,18 @@ class PackageBuilder:
         self.root_dir = root_dir.resolve()
         self.release_json_path = self.root_dir / "release.json"
 
-        # Determine version from release.json if not specified
-        if not version:
-            if self.release_json_path.is_file():
-                try:
-                    with open(self.release_json_path, "r", encoding="utf-8") as fp:
-                        meta = json.load(fp)
-                        self.version = meta.get("version", "1.0.0")
-                except Exception:
-                    self.version = "1.0.0"
-            else:
-                self.version = "1.0.0"
-        else:
-            self.version = version
+        # Determine version and release notes from release.json if not specified
+        self.notes = ""
+        self.version = version or APP_VERSION
+        if self.release_json_path.is_file():
+            try:
+                with open(self.release_json_path, "r", encoding="utf-8") as fp:
+                    meta = json.load(fp)
+                    if not version:
+                        self.version = meta.get("version", APP_VERSION)
+                    self.notes = meta.get("notes", "")
+            except Exception:
+                pass
 
         self.dist_dir = self.root_dir / "dist"
         self.release_artifacts_dir = self.root_dir / "release_artifacts"
@@ -402,7 +401,7 @@ def main() -> None:
     parser.add_argument("--min-app-version", default=DEFAULT_MIN_APP_VERSION, help="Minimum compatible app version")
     parser.add_argument(
         "--release-notes",
-        default="Bản phát hành chính thức hệ thống So Sánh BOM tự động (TC14 & SAP R3).",
+        default=None,
         help="Release notes text (max 2000 chars)",
     )
 
@@ -412,6 +411,8 @@ def main() -> None:
     builder = PackageBuilder(root_dir=root, version=args.version)
     builder.clean_and_prepare()
 
+    rel_notes = args.release_notes or builder.notes or "Bản phát hành chính thức hệ thống So Sánh BOM tự động (TC14 & SAP R3)."
+
     # Always ensure launcher and bundle are assembled
     builder.build_launcher_executable()
     builder.build_portable_executable()
@@ -420,7 +421,7 @@ def main() -> None:
     # Build update package if requested or by default
     mpupdate_path = builder.create_mpupdate_package(
         min_app_version=args.min_app_version,
-        release_notes=args.release_notes,
+        release_notes=rel_notes,
     )
 
     # Inno Setup compilation
@@ -431,7 +432,7 @@ def main() -> None:
         builder.publish_to_lan(
             publish_dir_str=args.publish_dir or str(builder.release_update_dir),
             mpupdate_path=mpupdate_path,
-            release_notes=args.release_notes,
+            release_notes=rel_notes,
             min_app_version=args.min_app_version,
             setup_dir_str=args.setup_dir,
         )

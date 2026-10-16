@@ -413,7 +413,7 @@ class PLMTreeParser:
 
         lvl_col = mapping.get("level", 0)
         id_col = mapping.get("item_id", 2)
-        has_child_col = mapping.get("has_children", 3)
+        has_child_col = mapping.get("has_children")
         qty_col = mapping.get("quantity", 4)
         eff_col = mapping.get("effectivity", 7)
         name_col = mapping.get("item_name", 9)
@@ -436,7 +436,11 @@ class PLMTreeParser:
 
             item_id = _clean_str(row[id_col]) if id_col < len(row) else ""
             item_name = _clean_str(row[name_col]) if name_col < len(row) else ""
-            has_children = _parse_bool(row[has_child_col]) if has_child_col < len(row) else False
+            has_children = (
+                _parse_bool(row[has_child_col])
+                if has_child_col is not None and has_child_col < len(row)
+                else False
+            )
             qty = _parse_float_qty(row[qty_col], default=self.default_qty) if qty_col < len(row) else self.default_qty
             eff = _clean_str(row[eff_col]) if eff_col < len(row) else ""
             rev = _clean_str(row[rev_col]) if rev_col < len(row) else ""
@@ -469,6 +473,14 @@ class PLMTreeParser:
                 roots.append(node)
 
             stack.append(node)
+
+        # A node that actually has child rows is an assembly, regardless of a blank/missing flag column.
+        pending = list(roots)
+        while pending:
+            n = pending.pop()
+            if n.children:
+                n.has_children = True
+                pending.extend(n.children)
 
         return BOMTree(roots=roots, source_file=source_file)
 

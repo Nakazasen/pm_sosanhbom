@@ -10,6 +10,14 @@ from src.gui.styles.theme_manager import (
     get_theme_manager,
     reset_theme_manager,
 )
+from src.gui.styles.screen_utils import (
+    ScreenMetrics,
+    apply_smart_dialog_geometry,
+    compute_smart_geometry,
+    ensure_window_fits_screen,
+    get_screen_metrics,
+    get_target_screen,
+)
 from src.gui.styles.tokens import (
     BORDER_RADIUS,
     BORDER_WIDTH,
@@ -183,4 +191,10 @@ __all__ = [
     "calculate_contrast_ratio",
     "is_wcag_aa",
     "is_wcag_aaa",
+    "ScreenMetrics",
+    "get_target_screen",
+    "get_screen_metrics",
+    "compute_smart_geometry",
+    "apply_smart_dialog_geometry",
+    "ensure_window_fits_screen",
 ]

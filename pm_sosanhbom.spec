@@ -42,6 +42,7 @@ datas = [
     ("src/gui/styles", "src/gui/styles"),
     ("assets", "assets"),
     ("release.json", "."),
+    ("config", "config"),
 ]
 
 a = Analysis(

@@ -188,3 +188,73 @@ class TestF04ModelPruner:
         assert normalize_model_name("") is None
         assert normalize_model_name(None) is None
 
+    def test_spica_pruning_rules_execution(self):
+        """Test 8: Verify Spica decomposition rules (prune_node for 3V2YJ01090 and branch-free Level 2 rules)."""
+        rule_pwb = ModelRule(
+            item_name="PWB SWITCH ASSY",
+            match_mode="Full_name",
+            part_code="3V2YJ01090",
+            action="prune_node",
+            parent_part_code=None,
+        )
+        rule_cover = ModelRule(
+            item_name="COVER LEFT HIGH M",
+            match_mode="Full_name",
+            part_code="31C1T04120",
+            action="prune_children",
+            parent_part_code=None,
+        )
+        rule_drum_part = ModelRule(
+            item_name="DRUM ASSY WITH PACKING",
+            match_mode="Full_name",
+            part_code="31C0L11010",
+            action="prune_children",
+            parent_part_code="3VC0LM1110",
+        )
+
+        pruner = ModelPruner()
+
+        # Build two model trees representing two variants (e.g. EU with TVC1TZ0030, US with TVC0LZ0020)
+        for phantom_code in ["TVC1TZ0030", "TVC0LZ0020"]:
+            root = BOMNode(level=0, item_id="MACHINE_ROOT", item_name="ROOT")
+            phantom = BOMNode(level=1, item_id=phantom_code, item_name="PHANTOM")
+            
+            # PWB node with children
+            pwb = BOMNode(level=2, item_id="3V2YJ01090", item_name="PWB SWITCH ASSY", has_children=True)
+            pwb.add_child(BOMNode(level=3, item_id="CHILD1", item_name="RESISTOR"))
+            
+            # Cover node with children
+            cover = BOMNode(level=2, item_id="31C1T04120", item_name="COVER LEFT HIGH M", has_children=True)
+            cover.add_child(BOMNode(level=3, item_id="CHILD2", item_name="SCREW"))
+            
+            # Drum node with children
+            drum = BOMNode(level=2, item_id="3VC0LM1110", item_name="DRUM UNIT", has_children=True)
+            drum_part = BOMNode(level=3, item_id="31C0L11010", item_name="DRUM ASSY WITH PACKING", has_children=True)
+            drum_part.add_child(BOMNode(level=4, item_id="SUB_PART", item_name="BEARING"))
+            drum.add_child(drum_part)
+
+            phantom.children.extend([pwb, cover, drum])
+            root.add_child(phantom)
+
+            tree = BOMTree(roots=[root])
+            pruned = pruner.prune_tree(tree, rules=[rule_pwb, rule_cover, rule_drum_part])
+
+            # 1. 3V2YJ01090 must be completely eliminated (prune_node)
+            phantom_out = pruned.roots[0].children[0]
+            remaining_ids = [c.item_id for c in phantom_out.children]
+            assert "3V2YJ01090" not in remaining_ids, f"3V2YJ01090 must be deleted in variant {phantom_code}"
+            assert "CHILD1" not in remaining_ids
+
+            # 2. COVER LEFT HIGH M must be kept, but its children pruned
+            assert "31C1T04120" in remaining_ids
+            cover_out = next(c for c in phantom_out.children if c.item_id == "31C1T04120")
+            assert len(cover_out.children) == 0, f"Children of 31C1T04120 must be pruned in variant {phantom_code}"
+
+            # 3. Drum part under 3VC0LM1110 must have its children pruned
+            assert "3VC0LM1110" in remaining_ids
+            drum_out = next(c for c in phantom_out.children if c.item_id == "3VC0LM1110")
+            drum_part_out = drum_out.children[0]
+            assert drum_part_out.item_id == "31C0L11010"
+            assert len(drum_part_out.children) == 0, "Children of 31C0L11010 must be pruned"
+
+

@@ -165,9 +165,23 @@ def transform_24_to_14_columns(
 
     res: List[List[Any]] = [CANONICAL_14_COLUMNS]
 
+    def _row_level(row: List[Any]) -> int:
+        try:
+            raw = row[lvl_col] if len(row) > lvl_col and row[lvl_col] is not None else 0
+            return int(str(raw).lstrip(".").strip())
+        except Exception:
+            return 0
+
+    # Decide "Has Children" from the raw tree, before any sub-level collapsing.
+    raw_parent_ids: set[int] = set()
+    for i in range(1, len(raw_rows) - 1):
+        if _row_level(raw_rows[i + 1]) > _row_level(raw_rows[i]):
+            raw_parent_ids.add(id(raw_rows[i]))
+
     for idx in range(1, len(source_rows)):
         r = source_rows[idx]
         home_idx = idx
+        has_children_str = "True" if id(r) in raw_parent_ids else "False"
 
         # Level
         try:
@@ -220,7 +234,7 @@ def transform_24_to_14_columns(
             lvl_val,         # Level (0, 1, 2...)
             item_type,       # Item Type
             item_id,         # Item Id
-            None,            # Has Children
+            has_children_str,  # Has Children
             qty_str,         # Quantity
             None,            # 1st Parts
             flag_str,        # 2nd BOM Flag

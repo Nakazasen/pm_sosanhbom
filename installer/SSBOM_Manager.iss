@@ -3,7 +3,9 @@
 ; Cài theo chuẩn D:\Sandbox\MP2027\huongdansetup_autoupdate.md
 
 #define AppName "SSBOM Manager"
-#define AppVersion "1.0.1"
+#ifndef AppVersion
+  #define AppVersion "1.0.8"
+#endif
 #define AppPublisher "Kyocera Document Technology Vietnam - Production Engineering"
 #define LauncherExe "SSBOM_Launcher.exe"
 
@@ -36,6 +38,7 @@ Source: "..\current.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update_sources.default.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\locales\*"; DestDir: "{app}\locales"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\config\*"; DestDir: "{app}\config"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\apps\{#AppVersion}\*"; DestDir: "{app}\apps\{#AppVersion}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

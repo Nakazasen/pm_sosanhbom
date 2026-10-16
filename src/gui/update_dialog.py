@@ -101,53 +101,74 @@ class UpdateDialog(QDialog):
 
         self._init_ui()
 
+    @staticmethod
+    def _palette(is_dark: bool) -> dict[str, str]:
+        """Theme-aware colors: every background is paired with an explicit text color."""
+        if is_dark:
+            return {
+                "card_bg": "#151D2A", "border": "#2A374A", "text": "#F1F5F9",
+                "muted": "#94A3B8", "title": "#60A5FA", "new": "#4ADE80",
+                "edit_bg": "#0B0F17", "ok": "#4ADE80", "err": "#F87171",
+            }
+        return {
+            "card_bg": "#F8FAFC", "border": "#CBD5E1", "text": "#0F172A",
+            "muted": "#475569", "title": "#1D4ED8", "new": "#15803D",
+            "edit_bg": "#FFFFFF", "ok": "#15803D", "err": "#B91C1C",
+        }
+
     def _init_ui(self) -> None:
         theme_mgr = get_theme_manager()
         self.setWindowIcon(theme_mgr.get_styled_icon("refresh"))
+        self._colors = c = self._palette(theme_mgr.is_dark())
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        # Header card
+        # Header card (child labels inherit explicit text color via QLabel selector)
         header_card = QFrame()
+        header_card.setObjectName("update_header_card")
         header_card.setStyleSheet(
-            "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px;"
+            f"QFrame#update_header_card {{ background-color: {c['card_bg']}; "
+            f"border: 1px solid {c['border']}; border-radius: 6px; }}"
+            f"QFrame#update_header_card QLabel {{ background: transparent; border: none; color: {c['text']}; }}"
         )
         card_layout = QVBoxLayout(header_card)
-        card_layout.setContentsMargins(8, 8, 8, 8)
+        card_layout.setContentsMargins(14, 12, 14, 12)
+        card_layout.setSpacing(6)
 
         title_lbl = QLabel("Có Phiên Bản Mới Sẵn Sàng!")
         title_font = QFont()
         title_font.setPointSize(12)
         title_font.setBold(True)
         title_lbl.setFont(title_font)
-        title_lbl.setStyleSheet("color: #0d6efd;")
+        title_lbl.setStyleSheet(f"color: {c['title']};")
         card_layout.addWidget(title_lbl)
 
         version_info = QLabel(
-            f"<b>Phiên bản hiện tại:</b> <span style='color: #6c757d;'>v{self.current_version}</span> "
-            f"➔ <b>Phiên bản mới:</b> <span style='color: #198754;'>v{self.candidate.version}</span>"
+            f"<b>Phiên bản hiện tại:</b> <span style='color: {c['muted']};'>v{self.current_version}</span> "
+            f"➔ <b>Phiên bản mới:</b> <span style='color: {c['new']};'>v{self.candidate.version}</span>"
         )
         version_info.setTextFormat(Qt.TextFormat.RichText)
         card_layout.addWidget(version_info)
 
         size_mb = self.candidate.package_size / (1024 * 1024)
         meta_info = QLabel(f"Dung lượng gói: {size_mb:.2f} MB | Chính sách: HASH_ONLY_LAN")
-        meta_info.setStyleSheet("color: #6c757d; font-size: 11px;")
+        meta_info.setStyleSheet(f"color: {c['muted']}; font-size: 11px;")
         card_layout.addWidget(meta_info)
 
         layout.addWidget(header_card)
 
         # Notes section
         notes_lbl = QLabel("Nội dung thay đổi & ghi chú phát hành:")
-        notes_lbl.setStyleSheet("font-weight: bold;")
+        notes_lbl.setStyleSheet(f"font-weight: bold; color: {c['text']};")
         layout.addWidget(notes_lbl)
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setReadOnly(True)
         self.notes_edit.setPlainText(self.candidate.release_notes or "Không có ghi chú bổ sung.")
         self.notes_edit.setStyleSheet(
-            "background-color: #ffffff; border: 1px solid #ced4da; border-radius: 4px; padding: 6px;"
+            f"QTextEdit {{ background-color: {c['edit_bg']}; color: {c['text']}; "
+            f"border: 1px solid {c['border']}; border-radius: 4px; padding: 6px; }}"
         )
         layout.addWidget(self.notes_edit)
 
@@ -161,7 +182,7 @@ class UpdateDialog(QDialog):
 
         # Status text
         self.status_lbl = QLabel("Sẵn sàng tải xuống từ mạng nội bộ công ty.")
-        self.status_lbl.setStyleSheet("color: #495057; font-style: italic;")
+        self.status_lbl.setStyleSheet(f"color: {c['muted']}; font-style: italic;")
         layout.addWidget(self.status_lbl)
 
         # Action buttons
@@ -217,7 +238,7 @@ class UpdateDialog(QDialog):
         if success:
             self.progress_bar.setValue(100)
             self.status_lbl.setText("✓ " + message)
-            self.status_lbl.setStyleSheet("color: #198754; font-weight: bold;")
+            self.status_lbl.setStyleSheet(f"color: {self._colors['ok']}; font-weight: bold;")
             self.btn_action.setText("Khởi Động Lại Ngay")
             self.btn_action.setIcon(theme_mgr.get_styled_icon("refresh", color="#FFFFFF"))
             self.btn_action.setEnabled(True)
@@ -228,7 +249,7 @@ class UpdateDialog(QDialog):
             self.btn_action.clicked.connect(self._restart_app)
         else:
             self.status_lbl.setText("✗ " + message)
-            self.status_lbl.setStyleSheet("color: #dc3545; font-weight: bold;")
+            self.status_lbl.setStyleSheet(f"color: {self._colors['err']}; font-weight: bold;")
             self.btn_action.setText("Thử lại")
             self.btn_action.setIcon(theme_mgr.get_styled_icon("rotate-ccw", color="#FFFFFF"))
             self.btn_action.setEnabled(True)

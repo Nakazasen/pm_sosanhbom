@@ -38,10 +38,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.member_database import MemberDatabaseManager, MemberRecord
-from src.gui.styles import get_theme_manager
+from src.core.member_database import MemberDatabaseManager, MemberRecord, get_member_database_manager
+from src.gui.styles import (
+    apply_smart_dialog_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+)
 from src.reporting.excel_generator import STANDARD_SUB_UNITS
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 
 
 def normalize_machine_tokens(raw_text: str) -> str:
@@ -117,7 +121,7 @@ class SelectMachinesDialog(QDialog):
     def __init__(self, available_models: list[str], current_models: list[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Chọn Dòng Máy Phụ Trách")
-        self.resize(380, 480)
+        apply_smart_dialog_geometry(self, ideal_w=380, ideal_h=480, min_w=300, min_h=340)
 
         # Normalize and deduplicate available models
         cleaned_avail = []
@@ -132,6 +136,10 @@ class SelectMachinesDialog(QDialog):
         # Normalize selected models
         self.selected_models = {re.sub(r"\s+", "", m.strip()).lower() for m in current_models if m.strip()}
         self._init_ui()
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -218,17 +226,30 @@ class MemberRosterDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Quản lý Danh sách Thành viên (CSDL SQLite Dùng Chung)")
-        self.resize(1060, 640)
-        self.setMinimumSize(900, 540)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=1060,
+            ideal_h=640,
+            min_w=750,
+            min_h=400,
+            max_w_ratio=0.94,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
 
-        self.db_manager = MemberDatabaseManager(base_dir=base_dir, remote_db_path=remote_db_path)
-        self.dict_service = MachineDictService()
+        self.db_manager = get_member_database_manager(base_dir=base_dir, remote_db_path=remote_db_path)
+        self.dict_service = get_machine_dict_service()
         self.known_models = self.dict_service.get_model_names()
         self.theme_mgr = get_theme_manager()
         self._selected_member: MemberRecord | None = None
 
         self._init_ui()
         self._load_roster_data()
+
+    def showEvent(self, event: Any) -> None:
+        """Ensure member roster dialog fits cleanly without taskbar overlap."""
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
@@ -422,8 +443,9 @@ class MemberRosterDialog(QDialog):
         self.btn_sync.clicked.connect(self._load_roster_data)
         bottom_bar.addWidget(self.btn_sync)
 
-        self.btn_import_excel = QPushButton("📥 Nạp từ Danhsachthanhvien.xlsm")
-        self.btn_import_excel.setToolTip("Đọc danh sách nhân sự từ file Danhsachthanhvien.xlsm trên mạng LAN")
+        self.btn_import_excel = QPushButton("🔄 Nạp lại từ Excel (Refresh)")
+        self.btn_import_excel.setIcon(self.theme_mgr.get_styled_icon("refresh"))
+        self.btn_import_excel.setToolTip("Đọc và nạp lại danh sách nhân sự mới nhất từ file Danhsachthanhvien.xlsm trên mạng LAN")
         self.btn_import_excel.clicked.connect(self._on_import_excel_clicked)
         bottom_bar.addWidget(self.btn_import_excel)
 

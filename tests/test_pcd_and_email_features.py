@@ -107,6 +107,28 @@ class TestMachineDictService:
         assert m_new is not None
         assert m_new.machine_name == "PolarisNext"
 
+    def test_reload_from_excel(self, mock_dict_excel: Path):
+        """Verify reloading from Excel immediately updates dictionary in-memory when file changes."""
+        svc = MachineDictService(excel_path=mock_dict_excel)
+        assert svc.load() is True
+        assert svc.lookup_machine_code("0D99") is None
+
+        # Simulate external modification of mock_dict_excel
+        wb = openpyxl.load_workbook(str(mock_dict_excel))
+        ws = wb["Master"]
+        ws.append(["Spica Next", "Spica Next", "KDC", "0D99", "50ppm", "CC3", "pe_spica@kdcf.com"])
+        wb.save(str(mock_dict_excel))
+        wb.close()
+
+        # Reload from excel
+        success, msg = svc.reload_from_excel()
+        assert success is True
+        assert "SpicaNext" in svc.get_model_names()
+        m = svc.lookup_machine_code("0D99")
+        assert m is not None
+        assert m.machine_name == "SpicaNext"
+        assert "CC3" in svc.get_all_email_groups()
+
 
 class TestPCDPlanService:
     def test_parse_plan_file(self, mock_dict_excel: Path, mock_pcd_plan_excel: Path):

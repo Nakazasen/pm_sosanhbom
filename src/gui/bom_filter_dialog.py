@@ -43,10 +43,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.bom_filter_manager import BOMFilterManager, BOMRuleRecord
+from src.core.bom_filter_manager import BOMFilterManager, BOMRuleRecord, get_bom_filter_manager
 from src.core.default_rules import DEFAULT_MODEL_RULES
 from src.gui.styles import get_theme_manager
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class BOMFilterConfigDialog(QDialog):
         self.resize(target_w, target_h)
         self.setMinimumSize(780, 380)
 
-        self.filter_manager = filter_manager or BOMFilterManager()
+        self.filter_manager = filter_manager or get_bom_filter_manager()
         self.current_model: str = initial_model or ""
         self.current_rules: list[BOMRuleRecord] = []
         self.editing_rule_id: int | None = None
@@ -278,6 +278,15 @@ class BOMFilterConfigDialog(QDialog):
         bottom_bar = QHBoxLayout(self.bottom_frame)
         bottom_bar.setContentsMargins(8, 6, 8, 6)
         bottom_bar.setSpacing(8)
+
+        self.btn_apply_existing = QPushButton("⚡ Áp Dụng Cho File Có Sẵn...")
+        self.btn_apply_existing.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
+        self.btn_apply_existing.setStyleSheet(
+            "background-color: #2563EB; color: white; border-radius: 4px; padding: 6px 12px;"
+        )
+        self.btn_apply_existing.setToolTip("Duyệt file hoặc thư mục PLM trên máy và chạy bộ lọc ngay mà không cần tải lại từ Teamcenter")
+        self.btn_apply_existing.clicked.connect(self._on_apply_existing_files)
+        bottom_bar.addWidget(self.btn_apply_existing)
 
         self.btn_visual_builder = QPushButton("🌳 Tạo Lọc Trực Quan Từ Cây BOM...")
         self.btn_visual_builder.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
@@ -763,7 +772,7 @@ class BOMFilterConfigDialog(QDialog):
     def _on_add_model(self) -> None:
         """Add a new model to the list."""
         try:
-            known_models = MachineDictService().get_model_names()
+            known_models = get_machine_dict_service().get_model_names()
         except Exception:
             known_models = []
         text, ok = QInputDialog.getText(
@@ -915,3 +924,14 @@ class BOMFilterConfigDialog(QDialog):
             self.current_model = model_name
             self._load_models(select_model=model_name)
             self._refresh_rules_table()
+
+    def _on_apply_existing_files(self) -> None:
+        """Open the Standalone BOM Filtering dialog for existing files."""
+        from src.gui.standalone_bom_filter_dialog import StandaloneBOMFilterDialog
+        dlg = StandaloneBOMFilterDialog(
+            initial_model=self.current_model,
+            filter_manager=self.filter_manager,
+            parent=self,
+        )
+        dlg.exec()
+

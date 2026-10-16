@@ -18,7 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 
 from PyQt6.QtCore import QDate, QObject, QSize, QThread, QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QGuiApplication, QTextCursor
@@ -53,7 +53,11 @@ from PyQt6.QtWidgets import (
 from src.automation.tc2412.standardizer import (
     standardize_plm_file,
 )
-from src.gui.styles import get_theme_manager
+from src.gui.styles import (
+    apply_smart_dialog_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -312,49 +316,82 @@ def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
     """
     try:
         from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
 
         # 1. Step 10: Ensure Template is 'Custom'
         try:
-            tmpl_containers = panel.find_elements(
-                By.XPATH,
-                ".//*[contains(text(),'Template')]/following::div[contains(@class,'sw-lov-container')][1]"
-                " | .//div[@data-locator='Template']"
-                " | .//input[@placeholder='Template' or @aria-label='Template']/.."
+            tmpl_inputs = panel.find_elements(
+                By.CSS_SELECTOR,
+                "input[aria-label*='Template'], input[placeholder*='Template']"
             )
-            if tmpl_containers:
-                tmpl_input = tmpl_containers[0].find_elements(By.CSS_SELECTOR, "input")
-                curr_val = (tmpl_input[0].get_attribute("value") or tmpl_containers[0].text or "").strip() if tmpl_input else tmpl_containers[0].text.strip()
+            if not tmpl_inputs:
+                tmpl_inputs = driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "form.sw-command-panel input[aria-label*='Template'], input[aria-label*='Template']"
+                )
+            if not tmpl_inputs:
+                tmpl_inputs = panel.find_elements(
+                    By.XPATH,
+                    ".//*[contains(text(),'Template')]/following::input[1]"
+                )
+
+            if tmpl_inputs:
+                tmpl_input = tmpl_inputs[0]
+                curr_val = (tmpl_input.get_attribute("value") or "").strip()
                 if "Custom" not in curr_val:
-                    tmpl_click = tmpl_input[0] if tmpl_input else tmpl_containers[0]
-                    tmpl_click.click()
+                    driver.execute_script("arguments[0].scrollIntoView(true);", tmpl_input)
+                    tmpl_input.click()
+                    time.sleep(0.5)
+                    tmpl_input.send_keys(Keys.CONTROL + "a")
+                    tmpl_input.send_keys(Keys.BACKSPACE)
+                    tmpl_input.send_keys("Custom")
                     time.sleep(1)
+
                     custom_opts = driver.find_elements(
                         By.XPATH,
                         "//div[contains(@class,'sw-lov')]//li[normalize-space()='Custom' or contains(.,'Custom')]"
                         " | //div[contains(@class,'aw-popup')]//li[normalize-space()='Custom' or contains(.,'Custom')]"
+                        " | //div[contains(@class,'sw-popup')]//li[normalize-space()='Custom' or contains(.,'Custom')]"
+                        " | //li[normalize-space()='Custom']"
                     )
                     if custom_opts:
-                        custom_opts[0].click()
-                        time.sleep(1.5)
+                        try:
+                            custom_opts[0].click()
+                        except Exception:
+                            driver.execute_script("arguments[0].click();", custom_opts[0])
+                    else:
+                        tmpl_input.send_keys(Keys.ENTER)
+                    time.sleep(2)
         except Exception as t_err:
             logger.debug("Template selection error: %s", t_err)
 
+        # Check if KTCT_Trong is already active in panel
         panel_text = getattr(panel, "text", "")
         if "KTCT_Trong" in panel_text:
             return True
 
         # 2. Step 11: Click Column Arrangement icon and select KTCT_Trong
-        arr_btns = panel.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
-        if not arr_btns:
-            arr_btns = driver.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
-        if not arr_btns:
-            arr_btns = panel.find_elements(
-                By.XPATH,
-                ".//*[contains(text(),'Arrangement')]/following::button[1]"
-                " | .//button[contains(@title,'Column') or contains(@aria-label,'Column') or contains(@command-id,'Arrange')]"
-            )
-        if arr_btns:
-            arr_btns[0].click()
+        arr_btn = None
+        for _ in range(5):
+            arr_btns = panel.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
+            if not arr_btns:
+                arr_btns = driver.find_elements(By.CSS_SELECTOR, "button[command-id='Arm0ArrangeViewConfigs']")
+            if not arr_btns:
+                arr_btns = panel.find_elements(
+                    By.XPATH,
+                    ".//*[contains(text(),'Arrangement')]/following::button[1]"
+                    " | .//button[contains(@title,'Column') or contains(@aria-label,'Column') or contains(@command-id,'Arrange')]"
+                )
+            if arr_btns:
+                arr_btn = arr_btns[0]
+                break
+            time.sleep(1)
+
+        if arr_btn:
+            try:
+                arr_btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", arr_btn)
             time.sleep(2)
 
             menu_items = driver.find_elements(
@@ -363,13 +400,64 @@ def ensure_ktct_trong_arrangement(driver, panel, wait) -> bool:
             )
             for m in menu_items:
                 if (m.text or "").strip() == "KTCT_Trong" or "KTCT_Trong" in (m.text or ""):
-                    m.click()
+                    try:
+                        m.click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", m)
                     time.sleep(2)
                     return True
         return False
     except Exception as exc:
         logger.warning("Failed selecting KTCT_Trong arrangement: %s", exc)
         return False
+
+
+def _minimize_sap_window(session: Any = None) -> None:
+    """Minimize SAP GUI main window to prevent focus stealing."""
+    if session is not None:
+        try:
+            wnd0 = session.findById("wnd[0]")
+            if hasattr(wnd0, "iconify"):
+                wnd0.iconify()
+            elif hasattr(wnd0, "Iconify"):
+                wnd0.Iconify()
+        except Exception:
+            pass
+
+    # Windows API minimize non-activating
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+
+        def _min_sap_win(hwnd, _):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                class_buf = ctypes.create_unicode_buffer(256)
+                user32.GetClassNameW(hwnd, class_buf, 256)
+                cls_name = class_buf.value
+                val = buf.value
+
+                # Target actual SAP GUI frontend windows, avoiding generic browser tabs or editors
+                is_sap_class = cls_name.startswith("SAP_") or cls_name.startswith("Sap")
+                is_sap_title = (
+                    "SAP Easy Access" in val
+                    or "SAP R/3" in val
+                    or "SAP GUI" in val
+                    or "cs12" in val.lower()
+                    or val.startswith("SAP ")
+                )
+                is_excluded = any(excl in val for excl in ("Chrome", "Edge", "Firefox", "Notepad", "Code"))
+
+                if (is_sap_class or is_sap_title) and not is_excluded:
+                    user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+        user32.EnumWindows(WNDENUMPROC(_min_sap_win), 0)
+    except Exception:
+        pass
 
 
 @dataclass
@@ -422,7 +510,7 @@ def parse_part_numbers(raw_text: str) -> List[str]:
     return [item.part_number for item in parse_bom_items(raw_text)]
 
 
-PART_REGEX = re.compile(r"(?:PLM_|R3_)?([0-9]{3}[A-Z0-9]{7})", re.IGNORECASE)
+PART_REGEX = re.compile(r"(?:PLM_|R3_)?((?:[0-9]{3}|[A-Z][0-9]{2})[A-Z0-9]{7})", re.IGNORECASE)
 
 
 @dataclass
@@ -628,7 +716,7 @@ class UnifiedBOMDownloadWorker(QObject):
         self.sap_auto_logout = sap_auto_logout
         self.part_model_map = part_model_map or {}
         self.apply_bolocbom = apply_bolocbom
-        self._machine_dict = MachineDictService()
+        self._machine_dict = get_machine_dict_service()
 
     @pyqtSlot()
     def run(self) -> None:
@@ -682,7 +770,7 @@ class UnifiedBOMDownloadWorker(QObject):
                 from selenium.webdriver.support import expected_conditions as EC
                 from selenium.webdriver.support.ui import WebDriverWait
 
-                from src.automation.tc2412.client import TC2412AutomationClient
+                from src.automation.tc2412.client import TC2412AutomationClient, safe_trigger_export_to_excel
                 from src.automation.tc2412.session import BrowserConfig, TC2412SessionManager
                 from src.security.credentials import CredentialManager
 
@@ -798,7 +886,10 @@ class UnifiedBOMDownloadWorker(QObject):
                                         (By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText, div.aw-splm-tableRow")
                                     )
                                 )
-                                root_cell.click()
+                                try:
+                                    root_cell.click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", root_cell)
                                 time.sleep(1)
                             except Exception:
                                 pass
@@ -808,7 +899,10 @@ class UnifiedBOMDownloadWorker(QObject):
                                     (By.CSS_SELECTOR, "button[command-id='Awb0Expand'], [command-id='Awb0Expand']")
                                 )
                             )
-                            exp_btn.click()
+                            try:
+                                exp_btn.click()
+                            except Exception:
+                                driver.execute_script("arguments[0].click();", exp_btn)
                             time.sleep(1.5)
 
                             cmds = driver.find_elements(
@@ -818,18 +912,24 @@ class UnifiedBOMDownloadWorker(QObject):
                                 c for c in cmds if "expand below" in (c.text or "").lower() or c.get_attribute("command-id") == "Awb0ExpandBelow"
                             ]
                             if exp_below:
-                                exp_below[0].click()
+                                try:
+                                    exp_below[0].click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", exp_below[0])
                                 self.log_message.emit("   [*] Đang mở rộng toàn bộ cây BOM...")
                                 time.sleep(15)
 
-                            # 4. Select all rows
-                            sel_all_btn = wait.until(
-                                EC.element_to_be_clickable(
-                                    (By.CSS_SELECTOR, "button[command-id='Awp0SelectAll'], [command-id='Awp0SelectAll']")
+                            # 4. Giữ chọn dòng gốc (Bỏ bước Select All theo khuyến nghị Slide 4:
+                            # giúp xuất toàn bộ cây cấu trúc assembly nhanh hơn, tránh lỗi tải DOM ảo và không làm vỡ Template).
+                            try:
+                                root_cell = driver.find_element(
+                                    By.CSS_SELECTOR,
+                                    "div.aw-splm-tableRow[data-indexnumber='0'], div.aw-splm-tableRow",
                                 )
-                            )
-                            sel_all_btn.click()
-                            time.sleep(2)
+                                driver.execute_script("arguments[0].click();", root_cell)
+                                time.sleep(1)
+                            except Exception:
+                                pass
 
                             # 5. Open Export to Excel
                             exp_imp_btn = wait.until(
@@ -837,19 +937,28 @@ class UnifiedBOMDownloadWorker(QObject):
                                     (By.CSS_SELECTOR, "button[command-id='Arm0ExportImport'], [command-id='Arm0ExportImport']")
                                 )
                             )
-                            exp_imp_btn.click()
+                            try:
+                                exp_imp_btn.click()
+                            except Exception:
+                                driver.execute_script("arguments[0].click();", exp_imp_btn)
                             time.sleep(2)
 
-                            popup = wait.until(
-                                EC.presence_of_element_located(
-                                    (By.CSS_SELECTOR, "div.aw-popup-commandListContainer, div.aw-popup, div.sw-popup")
+                            try:
+                                safe_trigger_export_to_excel(driver, timeout=10)
+                            except Exception:
+                                popup = wait.until(
+                                    EC.presence_of_element_located(
+                                        (By.CSS_SELECTOR, "div.aw-popup-commandListContainer, div.aw-popup, div.sw-popup")
+                                    )
                                 )
-                            )
-                            for it in popup.find_elements(By.CSS_SELECTOR, ".aw-widgets-cellListItem, .aw-command, button, a, div"):
-                                txt = (it.text or "").strip().lower()
-                                if "export to excel" in txt and "import" not in txt:
-                                    it.click()
-                                    break
+                                for it in popup.find_elements(By.CSS_SELECTOR, ".aw-widgets-cellListItem, .aw-command, button, a, div"):
+                                    txt = (it.text or "").strip().lower()
+                                    if "export to excel" in txt and "import" not in txt:
+                                        try:
+                                            it.click()
+                                        except Exception:
+                                            driver.execute_script("arguments[0].click();", it)
+                                        break
                             time.sleep(4)
 
                             # 6. Panel configuration
@@ -872,8 +981,12 @@ class UnifiedBOMDownloadWorker(QObject):
                                         By.XPATH, "./ancestor::label | ./ancestor::div[contains(@class,'checkbox')]"
                                     )
                                     if "background" in parent_lbl.text.lower():
-                                        if cb.is_selected():
-                                            cb.click()
+                                        is_checked = cb.is_selected() or cb.get_attribute("aria-checked") == "true" or "checked" in (cb.get_attribute("class") or "")
+                                        if is_checked:
+                                            try:
+                                                cb.click()
+                                            except Exception:
+                                                driver.execute_script("arguments[0].click();", cb)
                                             time.sleep(0.5)
                                 except Exception:
                                     pass
@@ -1033,35 +1146,18 @@ class UnifiedBOMDownloadWorker(QObject):
                     self.log_message.emit("[*] [SAP R3] Đang kết nối tới SAP GUI (chế độ chạy ngầm / ẩn)...")
                     conn_mgr = SAPConnectionManager()
                     session = conn_mgr.get_or_create_session()
+                    _minimize_sap_window(session)
 
-                    # Minimize SAP main window to prevent focus stealing
-                    try:
-                        wnd0 = session.findById("wnd[0]")
-                        if hasattr(wnd0, "iconify"):
-                            wnd0.iconify()
-                        elif hasattr(wnd0, "Iconify"):
-                            wnd0.Iconify()
-                    except Exception:
-                        pass
+                    def _on_sap_status(msg: str) -> None:
+                        self.log_message.emit(msg)
 
-                    # Windows API minimize non-activating
-                    try:
-                        import ctypes
-                        user32 = ctypes.windll.user32
-                        def _min_sap_win(hwnd, _):
-                            length = user32.GetWindowTextLengthW(hwnd)
-                            if length > 0:
-                                buf = ctypes.create_unicode_buffer(length + 1)
-                                user32.GetWindowTextW(hwnd, buf, length + 1)
-                                if "SAP" in buf.value or "cs12" in buf.value.lower():
-                                    user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE
-                            return True
-                        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-                        user32.EnumWindows(WNDENUMPROC(_min_sap_win), 0)
-                    except Exception:
-                        pass
-
-                    sap_service = CS12Service(session=session)
+                    # Dynamic session management: pass connection_manager so CS12Service can auto-reconnect on RPC loss
+                    sap_service = CS12Service(
+                        session=session,
+                        connection_manager=conn_mgr,
+                        status_callback=_on_sap_status,
+                        on_session_refreshed=_minimize_sap_window,
+                    )
                     self.log_message.emit("[+] [SAP R3] Kết nối phiên SAP GUI thành công (chế độ ẩn hoàn toàn)!")
                 except Exception as conn_exc:
                     sap_tip = "Gợi ý: Mở SAP GUI (đăng nhập vào hệ thống P1J) và kiểm tra mục Scripting đã Enable"
@@ -1111,9 +1207,15 @@ class UnifiedBOMDownloadWorker(QObject):
             finally:
                 if conn_mgr is not None and self.sap_auto_logout:
                     try:
-                        self.log_message.emit("\n[*] [SAP R3] Đang tự động đăng xuất và thoát tài khoản SAP R3 (/nex)...")
-                        conn_mgr.logoff_and_exit(close_saplogon=True)
-                        self.log_message.emit("[+] [SAP R3] Đã thoát tài khoản và đóng ứng dụng SAP GUI an toàn.")
+                        if sap_service is not None or conn_mgr.is_connected():
+                            self.log_message.emit("\n[*] [SAP R3] Đang tự động đăng xuất và thoát tài khoản SAP R3 (/nex)...")
+                            logged_off = conn_mgr.logoff_and_exit(close_saplogon=True)
+                            if logged_off:
+                                self.log_message.emit("[+] [SAP R3] Đã thoát tài khoản và đóng ứng dụng SAP GUI an toàn.")
+                            else:
+                                self.log_message.emit("[*] [SAP R3] Phiên SAP GUI đã đóng hoặc đã ngắt kết nối trước đó; đã dọn dẹp tiến trình an toàn.")
+                        else:
+                            conn_mgr.logoff_and_exit(close_saplogon=True)
                     except Exception as logout_err:
                         self.log_message.emit(f"[-] [SAP R3] Cảnh báo khi thoát SAP GUI: {logout_err}")
 
@@ -1176,10 +1278,23 @@ class BOMScanDialog(QDialog):
         self._scanned_items: List[BOMPartStatus] = []
 
         self.setWindowTitle("Quét & Lựa chọn Mã BOM (Phân tích PLM & SAP R3)")
-        self.resize(800, 530)
-        self.setMinimumSize(720, 440)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=800,
+            ideal_h=530,
+            min_w=580,
+            min_h=360,
+            max_w_ratio=0.92,
+            max_h_ratio=0.84,
+            margin_bottom=20,
+        )
         self._init_ui()
         self._refresh_scan()
+
+    def showEvent(self, event: Any) -> None:
+        """Ensure scan dialog is securely clamped within available screen boundaries."""
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         theme_mgr = get_theme_manager()
@@ -1311,6 +1426,15 @@ class BOMScanDialog(QDialog):
         self.lbl_selected_summary.setStyleSheet("font-weight: bold; color: #0F172A;")
         bottom_layout.addWidget(self.lbl_selected_summary)
 
+        self.btn_apply_filter = QPushButton("⚡ Lọc lại file có sẵn...")
+        self.btn_apply_filter.setFont(QFont("Calibri", 9, QFont.Weight.Bold))
+        self.btn_apply_filter.setStyleSheet(
+            "background-color: #2563EB; color: white; border-radius: 4px; padding: 6px 12px;"
+        )
+        self.btn_apply_filter.setToolTip("Lọc lại các file Excel PLM trong thư mục này theo bộ quy tắc mà không cần tải lại từ TC24")
+        self.btn_apply_filter.clicked.connect(self._on_apply_standalone_filter)
+        bottom_layout.addWidget(self.btn_apply_filter)
+
         self.btn_confirm = QPushButton(" Nạp vào danh sách tải")
         self.btn_confirm.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_confirm.setStyleSheet(
@@ -1324,6 +1448,15 @@ class BOMScanDialog(QDialog):
         bottom_layout.addWidget(self.btn_close)
 
         layout.addLayout(bottom_layout)
+
+    def _on_apply_standalone_filter(self) -> None:
+        """Open Standalone BOM Filtering dialog initialized with the current scan directory."""
+        from src.gui.standalone_bom_filter_dialog import StandaloneBOMFilterDialog
+        dlg = StandaloneBOMFilterDialog(
+            initial_path=self.dest_dir if self.dest_dir and self.dest_dir.exists() else None,
+            parent=self,
+        )
+        dlg.exec()
 
     def _browse_scan_dir(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -1553,7 +1686,7 @@ class PLMDownloadDialog(QDialog):
         self._config_path = config_path or (
             DEFAULT_CONFIG_PATH if DEFAULT_CONFIG_PATH.exists() else FALLBACK_CONFIG_PATH
         )
-        self._machine_dict = MachineDictService()
+        self._machine_dict = get_machine_dict_service()
         self._initial_model = initial_model
         self._default_base_dir = default_dir.parent if default_dir else None
         self._project_parts = [p.strip().upper() for p in (project_parts or []) if p.strip()]
@@ -1573,18 +1706,96 @@ class PLMDownloadDialog(QDialog):
         self._detected_models_map: Dict[str, str] = {}
 
         self.setWindowTitle("Tải Tự Động BOM Đa Nguồn (Siemens TC24 & SAP R3)")
-        self.resize(880, 720)
-        self.setMinimumSize(780, 520)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=880,
+            ideal_h=680,
+            min_w=640,
+            min_h=380,
+            max_w_ratio=0.94,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
         self._init_ui()
         self._update_smart_suggestion()
+
+    def showEvent(self, event: Any) -> None:
+        """Ensure download dialog is safely positioned within available work area."""
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
+
+    def closeEvent(self, event: Any) -> None:
+        """Safely stop any running background worker and thread when closing dialog."""
+        self._clean_up_thread()
+        super().closeEvent(event)
+
+    def _clean_up_thread(self) -> None:
+        """Safely stop and release worker and thread resources."""
+        thread = getattr(self, "thread", None)
+        if thread is not None:
+            if hasattr(thread, "isRunning") and hasattr(thread, "quit"):
+                try:
+                    if thread.isRunning():
+                        thread.quit()
+                        if hasattr(thread, "wait"):
+                            finished_clean = thread.wait(3000)
+                            if not finished_clean and thread.isRunning():
+                                # Thread still running (e.g. hung in COM / network call).
+                                # Keep reference alive in _stale_threads so Python GC does not invoke
+                                # C++ destructor while thread is active, which would cause qFatal abort.
+                                if not hasattr(self, "_stale_threads"):
+                                    self._stale_threads = []
+                                self._stale_threads.append(thread)
+                                thread.finished.connect(
+                                    lambda t=thread: self._stale_threads.remove(t)
+                                    if hasattr(self, "_stale_threads") and t in self._stale_threads
+                                    else None
+                                )
+                                self.thread = None
+                except Exception:
+                    pass
+            if self.thread is not None and hasattr(thread, "deleteLater"):
+                try:
+                    thread.deleteLater()
+                except Exception:
+                    pass
+            self.thread = None
+
+        worker = getattr(self, "worker", None)
+        if worker is not None:
+            if hasattr(worker, "deleteLater"):
+                try:
+                    worker.deleteLater()
+                except Exception:
+                    pass
+            self.worker = None
+
+    def _on_thread_finished(self) -> None:
+        """Slot invoked when QThread finishes its event loop."""
+        thread = getattr(self, "thread", None)
+        if thread is not None:
+            if hasattr(thread, "deleteLater"):
+                try:
+                    thread.deleteLater()
+                except Exception:
+                    pass
+            self.thread = None
+        worker = getattr(self, "worker", None)
+        if worker is not None:
+            if hasattr(worker, "deleteLater"):
+                try:
+                    worker.deleteLater()
+                except Exception:
+                    pass
+            self.worker = None
 
     def _init_ui(self) -> None:
         theme_mgr = get_theme_manager()
         self.setWindowIcon(theme_mgr.get_styled_icon("download"))
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(10, 8, 10, 8)
+        main_layout.setSpacing(4)
 
         # ---------------------------------------------------------------------
         # Scroll Area: Chứa Hướng dẫn, Ô nhập BOM, Cấu hình & Nhật ký
@@ -1594,18 +1805,19 @@ class PLMDownloadDialog(QDialog):
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         scroll_content = QWidget()
         layout = QVBoxLayout(scroll_content)
-        layout.setContentsMargins(2, 2, 6, 2)
-        layout.setSpacing(10)
+        layout.setContentsMargins(2, 2, 4, 2)
+        layout.setSpacing(6 if getattr(self, "_is_compact", False) else 8)
 
         # Header with non-tech explanation
         header_box = QGroupBox()
         header_box.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;")
         hb_layout = QVBoxLayout(header_box)
-        hb_layout.setContentsMargins(12, 8, 12, 8)
-        hb_layout.setSpacing(4)
+        hb_layout.setContentsMargins(10, 6, 10, 6)
+        hb_layout.setSpacing(2)
 
         title_lbl = QLabel("<b>HƯỚNG DẪN 3 BƯỚC TẢI BOM TỰ ĐỘNG</b>")
         title_lbl.setStyleSheet("color: #1e293b; font-size: 13px;")
@@ -1811,8 +2023,10 @@ class PLMDownloadDialog(QDialog):
             "110C132NL0"
         )
         self.txt_parts.setFont(QFont("Consolas", 10))
-        self.txt_parts.setMinimumHeight(75)
-        self.txt_parts.setMaximumHeight(110)
+        min_txt_h = 55 if getattr(self, "_is_compact", False) else 70
+        max_txt_h = 85 if getattr(self, "_is_compact", False) else 105
+        self.txt_parts.setMinimumHeight(min_txt_h)
+        self.txt_parts.setMaximumHeight(max_txt_h)
         self.txt_parts.textChanged.connect(self._on_text_changed)
         part_layout.addWidget(self.txt_parts)
 
@@ -1942,8 +2156,10 @@ class PLMDownloadDialog(QDialog):
         self.log_box.setReadOnly(True)
         self.log_box.setFont(QFont("Consolas", 10))
         self.log_box.setStyleSheet("background-color: #F8FAFC; border: 1px solid #CBD5E1; color: #0F172A; font-family: Consolas, monospace;")
-        self.log_box.setMinimumHeight(65)
-        self.log_box.setMaximumHeight(95)
+        min_log_h = 45 if getattr(self, "_is_compact", False) else 60
+        max_log_h = 80 if getattr(self, "_is_compact", False) else 95
+        self.log_box.setMinimumHeight(min_log_h)
+        self.log_box.setMaximumHeight(max_log_h)
         exec_layout.addWidget(self.log_box)
 
         layout.addWidget(exec_group)
@@ -1957,8 +2173,8 @@ class PLMDownloadDialog(QDialog):
         # ---------------------------------------------------------------------
         bottom_dock = QWidget()
         bottom_dock_layout = QVBoxLayout(bottom_dock)
-        bottom_dock_layout.setContentsMargins(0, 2, 0, 0)
-        bottom_dock_layout.setSpacing(4)
+        bottom_dock_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_dock_layout.setSpacing(2)
 
         # Thanh tiến độ và nhãn trạng thái trực quan
         status_prog_layout = QHBoxLayout()
@@ -1969,22 +2185,22 @@ class PLMDownloadDialog(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setFixedHeight(12)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p%")
         self.progress_bar.setStyleSheet("""
             QProgressBar {
                 border: 1px solid #CBD5E1;
-                border-radius: 4px;
+                border-radius: 3px;
                 text-align: center;
-                height: 14px;
-                font-size: 10px;
+                height: 12px;
+                font-size: 9px;
                 font-weight: bold;
                 background-color: #F1F5F9;
             }
             QProgressBar::chunk {
                 background-color: #2563EB;
-                border-radius: 3px;
+                border-radius: 2px;
             }
         """)
         status_prog_layout.addWidget(self.progress_bar, stretch=1)
@@ -1993,13 +2209,20 @@ class PLMDownloadDialog(QDialog):
         # Bước 3: Nút bấm thực thi
         btn_box = QGroupBox("Bước 3: Chọn lệnh tải tự động")
         btn_layout = QHBoxLayout(btn_box)
+        btn_layout.setContentsMargins(8, 4, 8, 4)
+        btn_layout.setSpacing(6)
+
+        is_compact = getattr(self, "_is_compact", False)
+        btn_padding_primary = "6px 14px" if is_compact else "8px 18px"
+        btn_padding_secondary = "6px 10px" if is_compact else "8px 14px"
+        btn_font_size = 10 if is_compact else 11
 
         # Button 1: Download BOTH (Primary - Highly visible)
         self.btn_both = QPushButton(" Tải đồng thời cả PLM && SAP R3")
         self.btn_both.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
-        self.btn_both.setFont(QFont("Calibri", 11, QFont.Weight.Bold))
+        self.btn_both.setFont(QFont("Calibri", btn_font_size, QFont.Weight.Bold))
         self.btn_both.setStyleSheet(
-            "background-color: #2563EB; color: white; padding: 10px 20px; border-radius: 5px;"
+            f"background-color: #2563EB; color: white; padding: {btn_padding_primary}; border-radius: 5px;"
         )
         self.btn_both.clicked.connect(lambda: self._trigger_download(MODE_BOTH))
         btn_layout.addWidget(self.btn_both)
@@ -2009,7 +2232,7 @@ class PLMDownloadDialog(QDialog):
         self.btn_plm_only.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_plm_only.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_plm_only.setStyleSheet(
-            "background-color: #0284C7; color: white; padding: 10px 14px; border-radius: 5px;"
+            f"background-color: #0284C7; color: white; padding: {btn_padding_secondary}; border-radius: 5px;"
         )
         self.btn_plm_only.clicked.connect(lambda: self._trigger_download(MODE_PLM))
         btn_layout.addWidget(self.btn_plm_only)
@@ -2019,14 +2242,14 @@ class PLMDownloadDialog(QDialog):
         self.btn_sap_only.setIcon(theme_mgr.get_styled_icon("download", color="#FFFFFF"))
         self.btn_sap_only.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
         self.btn_sap_only.setStyleSheet(
-            "background-color: #059669; color: white; padding: 10px 14px; border-radius: 5px;"
+            f"background-color: #059669; color: white; padding: {btn_padding_secondary}; border-radius: 5px;"
         )
         self.btn_sap_only.clicked.connect(lambda: self._trigger_download(MODE_SAP))
         btn_layout.addWidget(self.btn_sap_only)
 
         self.btn_close = QPushButton("Đóng")
         self.btn_close.setFont(QFont("Calibri", 10))
-        self.btn_close.setStyleSheet("padding: 10px 16px;")
+        self.btn_close.setStyleSheet(f"padding: {btn_padding_secondary};")
         self.btn_close.clicked.connect(self.close)
         btn_layout.addWidget(self.btn_close)
 
@@ -2460,6 +2683,9 @@ class PLMDownloadDialog(QDialog):
                     if info and info.machine_name:
                         part_model_map[item.part_number] = info.machine_name
 
+        # Clean up any previously running worker/thread before starting a new run
+        self._clean_up_thread()
+
         # Start background worker
         self.thread = QThread()
         self.worker = UnifiedBOMDownloadWorker(
@@ -2484,9 +2710,8 @@ class PLMDownloadDialog(QDialog):
         self.worker.progress.connect(self._on_progress)
         self.worker.log_message.connect(self._on_log)
         self.worker.finished.connect(self._on_finished)
-
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.finished.connect(self.thread.quit)
+        self.thread.finished.connect(self._on_thread_finished)
 
         self.thread.start()
 
@@ -2507,9 +2732,16 @@ class PLMDownloadDialog(QDialog):
 
     def _on_finished(self, success: bool, msg: str) -> None:
         self._set_ui_busy(False)
-        successful_ops = getattr(self.worker, "successful_ops", 0) if self.worker else (1 if success else 0)
-        total_ops = getattr(self.worker, "total_ops", 1) if self.worker else 1
-        error_messages = getattr(self.worker, "error_messages", []) if self.worker else []
+        successful_ops = 1 if success else 0
+        total_ops = 1
+        error_messages = []
+        if getattr(self, "worker", None) is not None:
+            try:
+                successful_ops = getattr(self.worker, "successful_ops", successful_ops)
+                total_ops = getattr(self.worker, "total_ops", total_ops)
+                error_messages = getattr(self.worker, "error_messages", error_messages)
+            except RuntimeError:
+                pass
 
         if successful_ops == 0:
             # 1. Total Failure (Red)

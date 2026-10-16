@@ -22,8 +22,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-import openpyxl
-import pandas as pd
 from PyQt6.QtCore import QDate, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -58,8 +56,14 @@ from PyQt6.QtWidgets import (
 
 from src.core.date_filter import DateFilter
 from src.core.model_pruner import ModelPruner
+from src.core.path_utils import get_app_base_dir, is_unc_path_accessible, safe_exists
 from src.core.reconciliation import ReconciliationEngine, ReconciliationResult
-from src.gui.styles import get_theme_manager, tokens
+from src.gui.styles import (
+    apply_smart_dialog_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+    tokens,
+)
 from src.reporting.excel_generator import (
     COLOR_GREEN_FILL_HEX,
     COLOR_GREEN_FONT_HEX,
@@ -69,7 +73,7 @@ from src.reporting.excel_generator import (
     ExcelReportGenerator,
 )
 from src.reporting.outlook_mailer import EmailPreview, OutlookMailer
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 
 logger = logging.getLogger(__name__)
 
@@ -205,18 +209,24 @@ class MemberSubmissionStatus:
     error_message: str = ""
 
 
+def _get_default_leader_base_dir() -> Path:
+    unc_path = Path(
+        r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3"
+    )
+    try:
+        if is_unc_path_accessible(unc_path, timeout=0.5) and safe_exists(unc_path):
+            return unc_path
+    except Exception:
+        pass
+    return get_app_base_dir()
+
+
 @dataclass
 class LeaderSessionState:
     """Global session state for the 4-step sequential wizard."""
     model_name: str = "Virgo"
     stage: ProjectStage = ProjectStage.MA_1
-    base_dir: Path = field(
-        default_factory=lambda: (
-            Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3")
-            if Path(r"\\fstvn01\Data\10_Production Engineering Department(製造技術部)\02.製造技術課\PE Dept\4A. QUAN LY BOM-TDTK-BOM管理-設計変更\SO SANH PLM-CTTT-R3").exists()
-            else Path(r"D:\Sandbox\pm_sosanhbom")
-        )
-    )
+    base_dir: Path = field(default_factory=_get_default_leader_base_dir)
 
     # Step 1
     machines: list[MachineTarget] = field(default_factory=list)
@@ -277,6 +287,7 @@ class BatchReconciliationWorker(QObject):
     def run(self) -> None:
         """Run batch reconciliation pipeline."""
         try:
+            import pandas as pd
             self.progress.emit(10, "Đang tổng hợp dữ liệu CTTT từ các công đoạn...")
             df_cttt = pd.DataFrame(self.collected_cttt)
 
@@ -332,8 +343,22 @@ class EmailPreviewDialog(QDialog):
         self.preview = preview
         self.mailer = mailer
         self.setWindowTitle("Xem trước Email Thông báo (Outlook Notification Preview)")
-        self.resize(780, 620)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=780,
+            ideal_h=600,
+            min_w=600,
+            min_h=380,
+            max_w_ratio=0.92,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
+
         self._init_ui()
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -559,8 +584,22 @@ class ModelMachineManagerDialog(QDialog):
         self.current_stage = current_stage
 
         self.setWindowTitle("Quản Lý Model Máy & Giai Đoạn & Nhóm Mail (file_loaimay_nhommail.xlsx)")
-        self.resize(680, 640)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=680,
+            ideal_h=600,
+            min_w=580,
+            min_h=380,
+            max_w_ratio=0.92,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
+
         self._init_ui()
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -585,6 +624,13 @@ class ModelMachineManagerDialog(QDialog):
         self.btn_new_model.setStyleSheet("background-color: #1E3A8A; color: white; font-weight: bold; padding: 5px 10px;")
         self.btn_new_model.clicked.connect(self._prompt_new_model)
         h_sel.addWidget(self.btn_new_model)
+
+        self.btn_quick_reload = QPushButton("🔄 Tải lại Excel")
+        self.btn_quick_reload.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_quick_reload.setStyleSheet("background-color: #0891B2; color: white; font-weight: bold; padding: 5px 10px;")
+        self.btn_quick_reload.setToolTip("Tải lại toàn bộ dữ liệu Model, Mã máy và Nhóm Mail từ file Excel Master (file_loaimay_nhommail.xlsx)")
+        self.btn_quick_reload.clicked.connect(self._on_refresh_dict_clicked)
+        h_sel.addWidget(self.btn_quick_reload)
         model_layout.addLayout(h_sel)
 
         h_stage = QHBoxLayout()
@@ -679,6 +725,13 @@ class ModelMachineManagerDialog(QDialog):
         self.btn_open_excel.setStyleSheet("background-color: #4B5563; color: white; font-weight: bold; padding: 4px 10px;")
         self.btn_open_excel.clicked.connect(self._open_excel_dictionary)
         h_email_btns.addWidget(self.btn_open_excel)
+
+        self.btn_refresh_dict = QPushButton("🔄 Tải Lại Từ Excel (Refresh)")
+        self.btn_refresh_dict.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_refresh_dict.setStyleSheet("background-color: #0891B2; color: white; font-weight: bold; padding: 4px 12px;")
+        self.btn_refresh_dict.setToolTip("Nạp lại toàn bộ dữ liệu Model máy, Mã máy 4 ký tự và Nhóm Mail từ file Excel Master mới nhất")
+        self.btn_refresh_dict.clicked.connect(self._on_refresh_dict_clicked)
+        h_email_btns.addWidget(self.btn_refresh_dict)
 
         email_layout.addLayout(h_email_btns)
 
@@ -838,6 +891,17 @@ class ModelMachineManagerDialog(QDialog):
         else:
             QMessageBox.warning(self, "Không tìm thấy file", f"File Excel từ điển không tồn tại tại:\n{excel_path}")
 
+    def _on_refresh_dict_clicked(self) -> None:
+        """Reload dictionary from Excel master and refresh dialog UI."""
+        ok, msg = self.dict_service.reload_from_excel()
+        if ok:
+            self._reload_model_list()
+            self._refresh_display()
+            self.model_selected.emit(self.current_model)
+            QMessageBox.information(self, "Tải Lại Thành Công", msg)
+        else:
+            QMessageBox.warning(self, "Lỗi Tải Lại", msg)
+
     def _prompt_new_model(self) -> None:
         from PyQt6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(
@@ -927,11 +991,12 @@ class Step1ProjectSetupWidget(QWidget):
         super().__init__(parent)
         self.state = state
         self.mailer = mailer or OutlookMailer()
-        self.dict_service = MachineDictService()
+        self.dict_service = get_machine_dict_service()
         self._is_updating_machine_table: bool = False
         self._is_switching_model: bool = False
         self._init_ui()
-        self._populate_defaults()
+        if parent is None or not isinstance(parent, LeaderWorkspaceView):
+            self._populate_defaults()
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -989,6 +1054,18 @@ class Step1ProjectSetupWidget(QWidget):
         self.btn_manage_models.clicked.connect(self._open_model_machine_manager_dialog)
         row1_layout.addWidget(self.btn_manage_models)
         self.btn_add_model = self.btn_manage_models
+
+        self.btn_reload_dict = QPushButton("🔄 Tải lại từ điển")
+        self.btn_reload_dict.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_reload_dict.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_reload_dict.setMinimumHeight(28)
+        self.btn_reload_dict.setToolTip("Nạp lại dữ liệu Model máy và Mã máy mới nhất từ file Excel Master (file_loaimay_nhommail.xlsx) [F5]")
+        self.btn_reload_dict.setStyleSheet(
+            "QPushButton { background-color: #0891B2; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #0E7490; }"
+        )
+        self.btn_reload_dict.clicked.connect(self._reload_machine_dict_from_excel)
+        row1_layout.addWidget(self.btn_reload_dict)
 
         row1_layout.addWidget(QLabel("Giai đoạn:"))
         self.stage_combo = NoScrollComboBox()
@@ -1180,6 +1257,7 @@ class Step1ProjectSetupWidget(QWidget):
         self.staff_table.setColumnWidth(3, 115)
         h_staff.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self.staff_table.setColumnWidth(4, 130)
+        self.staff_table.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
         staff_layout.addWidget(self.staff_table)
 
         tables_layout.addWidget(staff_group, stretch=2)
@@ -1205,8 +1283,8 @@ class Step1ProjectSetupWidget(QWidget):
         """Import member roster from Danhsachthanhvien.xlsx / .xlsm and refresh Table 1.3."""
         base_dir = getattr(self.state, "base_dir", None)
         try:
-            from src.core.member_database import MemberDatabaseManager
-            db = MemberDatabaseManager(base_dir=base_dir)
+            from src.core.member_database import get_member_database_manager
+            db = get_member_database_manager(base_dir=base_dir)
             path = db.get_member_excel_path()
             if not path.exists():
                 QMessageBox.warning(
@@ -1237,8 +1315,8 @@ class Step1ProjectSetupWidget(QWidget):
         """Reload roster from database and update staff table while preserving assignments."""
         base_dir = getattr(self.state, "base_dir", None)
         try:
-            from src.core.member_database import MemberDatabaseManager
-            db = MemberDatabaseManager(base_dir=base_dir)
+            from src.core.member_database import get_member_database_manager
+            db = get_member_database_manager(base_dir=base_dir)
             members = db.get_members(active_only=True)
             if not members:
                 return
@@ -1289,70 +1367,76 @@ class Step1ProjectSetupWidget(QWidget):
             sub = combo_sub.currentText() if isinstance(combo_sub, QComboBox) else (sub_item.text() if sub_item else "")
             existing_assignments[acc_id] = (is_app, mach, sub)
 
-        self.staff_table.setRowCount(0)
-        self.state.staff_roster.clear()
+        self.staff_table.setUpdatesEnabled(False)
+        self.staff_table.blockSignals(True)
+        try:
+            self.staff_table.setRowCount(0)
+            self.state.staff_roster.clear()
 
-        sub_unit_cycle = list(STANDARD_SUB_UNITS)
-        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
+            sub_unit_cycle = list(STANDARD_SUB_UNITS)
+            default_model = self.model_combo.currentText().strip() or "(Tất cả)"
 
-        for idx, m in enumerate(members):
-            acc_id = m.account_id
-            dept = m.department
-            def_sub = m.default_sub_unit
-            m_mach = getattr(m, "machine_names", "") or ""
-            model_matched = self._matches_model(m_mach, default_model)
+            for idx, m in enumerate(members):
+                acc_id = m.account_id
+                dept = m.department
+                def_sub = m.default_sub_unit
+                m_mach = getattr(m, "machine_names", "") or ""
+                model_matched = self._matches_model(m_mach, default_model)
 
-            if not force_model_match and acc_id in existing_assignments:
-                is_app, assigned_mach, assigned_unit = existing_assignments[acc_id]
-            else:
-                is_app = model_matched
-                assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-                assigned_mach = default_model if is_app else "(Không áp dụng)"
+                if not force_model_match and acc_id in existing_assignments:
+                    is_app, assigned_mach, assigned_unit = existing_assignments[acc_id]
+                else:
+                    is_app = model_matched
+                    assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
+                    assigned_mach = default_model if is_app else "(Không áp dụng)"
 
-            assignment = StaffAssignment(
-                engineer_name=acc_id,
-                department=dept,
-                is_applied=is_app,
-                machine_code=assigned_mach,
-                sub_unit=assigned_unit,
-                full_name=m.full_name,
-            )
-            self.state.staff_roster.append(assignment)
+                assignment = StaffAssignment(
+                    engineer_name=acc_id,
+                    department=dept,
+                    is_applied=is_app,
+                    machine_code=assigned_mach,
+                    sub_unit=assigned_unit,
+                    full_name=m.full_name,
+                )
+                self.state.staff_roster.append(assignment)
 
-            r = self.staff_table.rowCount()
-            self.staff_table.insertRow(r)
+                r = self.staff_table.rowCount()
+                self.staff_table.insertRow(r)
 
-            chk = QCheckBox()
-            chk.setChecked(is_app)
-            chk_widget = QWidget()
-            chk_layout = QHBoxLayout(chk_widget)
-            chk_layout.addWidget(chk)
-            chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chk_layout.setContentsMargins(0, 0, 0, 0)
-            self.staff_table.setCellWidget(r, 0, chk_widget)
-            chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
+                chk = QCheckBox()
+                chk.setChecked(is_app)
+                chk_widget = QWidget()
+                chk_layout = QHBoxLayout(chk_widget)
+                chk_layout.addWidget(chk)
+                chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                chk_layout.setContentsMargins(0, 0, 0, 0)
+                self.staff_table.setCellWidget(r, 0, chk_widget)
+                chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
 
-            disp_name = f"{m.full_name} ({acc_id})" if m.full_name and m.full_name != acc_id else acc_id
-            item_eng = QTableWidgetItem(disp_name)
-            item_eng.setData(Qt.ItemDataRole.UserRole, acc_id)
-            self.staff_table.setItem(r, 1, item_eng)
+                disp_name = f"{m.full_name} ({acc_id})" if m.full_name and m.full_name != acc_id else acc_id
+                item_eng = QTableWidgetItem(disp_name)
+                item_eng.setData(Qt.ItemDataRole.UserRole, acc_id)
+                self.staff_table.setItem(r, 1, item_eng)
 
-            self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
-            self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
-            self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
+                self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
+                self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
+                self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
-            combo_sub = NoScrollComboBox()
-            combo_sub.setEditable(True)
-            combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-            combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
-            for u in STANDARD_SUB_UNITS:
-                combo_sub.addItem(u)
-            combo_sub.setEditText(assigned_unit)
-            self.staff_table.setCellWidget(r, 4, combo_sub)
-            combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
+                combo_sub = NoScrollComboBox()
+                combo_sub.setEditable(True)
+                combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+                combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
+                for u in STANDARD_SUB_UNITS:
+                    combo_sub.addItem(u)
+                combo_sub.setEditText(assigned_unit)
+                self.staff_table.setCellWidget(r, 4, combo_sub)
+                combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
 
-        self._sync_staff_machine_options()
-        self._filter_staff_table()
+            self._sync_staff_machine_options()
+            self._filter_staff_table()
+        finally:
+            self.staff_table.blockSignals(False)
+            self.staff_table.setUpdatesEnabled(True)
 
     def _get_settings_path(self) -> Path:
         base_dir = getattr(self.state, "base_dir", None)
@@ -1560,8 +1644,8 @@ class Step1ProjectSetupWidget(QWidget):
         base_dir = getattr(self.state, "base_dir", None)
         members_data = []
         try:
-            from src.core.member_database import MemberDatabaseManager, MemberRecord
-            db = MemberDatabaseManager(base_dir=base_dir)
+            from src.core.member_database import get_member_database_manager, MemberRecord
+            db = get_member_database_manager(base_dir=base_dir)
             members = db.get_members(active_only=True)
             if members:
                 members_data = members
@@ -1585,66 +1669,71 @@ class Step1ProjectSetupWidget(QWidget):
                 MemberRecord(account_id=eng, full_name=eng, department="Cơ 3", default_sub_unit="", machine_names="(Tất cả)") for eng in ROSTER_MECHA_3
             ]
 
-        self.staff_table.setRowCount(0)
-        self.state.staff_roster.clear()
+        self.staff_table.setUpdatesEnabled(False)
+        self.staff_table.blockSignals(True)
+        try:
+            self.staff_table.setRowCount(0)
+            self.state.staff_roster.clear()
 
-        sub_unit_cycle = list(STANDARD_SUB_UNITS)
-        default_model = self.model_combo.currentText().strip() or "(Tất cả)"
+            sub_unit_cycle = list(STANDARD_SUB_UNITS)
+            default_model = self.model_combo.currentText().strip() or "(Tất cả)"
 
-        for idx, m in enumerate(members_data):
-            eng = m.account_id
-            dept = m.department
-            def_sub = m.default_sub_unit
-            m_mach = getattr(m, "machine_names", "") or ""
-            model_matched = self._matches_model(m_mach, default_model)
+            for idx, m in enumerate(members_data):
+                eng = m.account_id
+                dept = m.department
+                def_sub = m.default_sub_unit
+                m_mach = getattr(m, "machine_names", "") or ""
+                model_matched = self._matches_model(m_mach, default_model)
 
-            assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
-            assigned_mach = default_model if model_matched else "(Không áp dụng)"
-            assignment = StaffAssignment(
-                engineer_name=eng,
-                department=dept,
-                is_applied=model_matched,
-                machine_code=assigned_mach,
-                sub_unit=assigned_unit,
-                full_name=m.full_name,
-            )
-            self.state.staff_roster.append(assignment)
+                assigned_unit = def_sub if def_sub in STANDARD_SUB_UNITS else sub_unit_cycle[idx % len(sub_unit_cycle)]
+                assigned_mach = default_model if model_matched else "(Không áp dụng)"
+                assignment = StaffAssignment(
+                    engineer_name=eng,
+                    department=dept,
+                    is_applied=model_matched,
+                    machine_code=assigned_mach,
+                    sub_unit=assigned_unit,
+                    full_name=m.full_name,
+                )
+                self.state.staff_roster.append(assignment)
 
-            r = self.staff_table.rowCount()
-            self.staff_table.insertRow(r)
+                r = self.staff_table.rowCount()
+                self.staff_table.insertRow(r)
 
-            # Checkbox
-            chk = QCheckBox()
-            chk.setChecked(model_matched)
-            chk_widget = QWidget()
-            chk_layout = QHBoxLayout(chk_widget)
-            chk_layout.addWidget(chk)
-            chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chk_layout.setContentsMargins(0, 0, 0, 0)
-            self.staff_table.setCellWidget(r, 0, chk_widget)
-            chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
+                # Checkbox
+                chk = QCheckBox()
+                chk.setChecked(model_matched)
+                chk_widget = QWidget()
+                chk_layout = QHBoxLayout(chk_widget)
+                chk_layout.addWidget(chk)
+                chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                chk_layout.setContentsMargins(0, 0, 0, 0)
+                self.staff_table.setCellWidget(r, 0, chk_widget)
+                chk.toggled.connect(lambda checked, row=r: self._on_staff_checkbox_toggled(row, checked))
 
-            disp_name = f"{m.full_name} ({eng})" if m.full_name and m.full_name != eng else eng
-            item_eng = QTableWidgetItem(disp_name)
-            item_eng.setData(Qt.ItemDataRole.UserRole, eng)
-            self.staff_table.setItem(r, 1, item_eng)
-            self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
-            self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
-            self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
+                disp_name = f"{m.full_name} ({eng})" if m.full_name and m.full_name != eng else eng
+                item_eng = QTableWidgetItem(disp_name)
+                item_eng.setData(Qt.ItemDataRole.UserRole, eng)
+                self.staff_table.setItem(r, 1, item_eng)
+                self.staff_table.setItem(r, 2, QTableWidgetItem(dept))
+                self.staff_table.setItem(r, 3, QTableWidgetItem(assigned_mach))
+                self.staff_table.setItem(r, 4, QTableWidgetItem(assigned_unit))
 
-            combo_sub = NoScrollComboBox()
-            combo_sub.setEditable(True)
-            combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-            combo_sub.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
-            for u in STANDARD_SUB_UNITS:
-                combo_sub.addItem(u)
-            combo_sub.setEditText(assigned_unit)
-            self.staff_table.setCellWidget(r, 4, combo_sub)
-            combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
+                combo_sub = NoScrollComboBox()
+                combo_sub.setEditable(True)
+                combo_sub.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+                for u in STANDARD_SUB_UNITS:
+                    combo_sub.addItem(u)
+                combo_sub.setEditText(assigned_unit)
+                self.staff_table.setCellWidget(r, 4, combo_sub)
+                combo_sub.currentTextChanged.connect(lambda txt, row=r: self._on_staff_subunit_combo_changed(row, txt))
 
-        # Synchronize dynamic dropdown options for column "Mã máy"
-        self._sync_staff_machine_options()
-        self._filter_staff_table()
+            # Synchronize dynamic dropdown options for column "Mã máy"
+            self._sync_staff_machine_options()
+            self._filter_staff_table()
+        finally:
+            self.staff_table.blockSignals(False)
+            self.staff_table.setUpdatesEnabled(True)
 
     def _add_machine_row(self, code: str = "", note: str = "", is_excluded: bool = False, model_name: str = "") -> None:
         was_updating = self._is_updating_machine_table
@@ -1806,6 +1895,38 @@ class Step1ProjectSetupWidget(QWidget):
         dlg.stage_selected.connect(self._on_stage_selected_from_dialog)
         dlg.populate_codes_requested.connect(self._on_populate_codes_from_dialog)
         dlg.exec()
+        all_models = self.dict_service.get_model_names()
+        current = self.model_combo.currentText().strip()
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItems(all_models)
+        idx = self.model_combo.findText(current)
+        if idx >= 0:
+            self.model_combo.setCurrentIndex(idx)
+        elif all_models:
+            self.model_combo.setCurrentIndex(0)
+        self.model_combo.blockSignals(False)
+        self._sync_staff_machine_options()
+
+    def _reload_machine_dict_from_excel(self) -> None:
+        """Force reloading dictionary directly from Excel file."""
+        ok, msg = self.dict_service.reload_from_excel()
+        if ok:
+            all_models = self.dict_service.get_model_names()
+            current = self.model_combo.currentText().strip()
+            self.model_combo.blockSignals(True)
+            self.model_combo.clear()
+            self.model_combo.addItems(all_models)
+            idx = self.model_combo.findText(current)
+            if idx >= 0:
+                self.model_combo.setCurrentIndex(idx)
+            elif all_models:
+                self.model_combo.setCurrentIndex(0)
+            self.model_combo.blockSignals(False)
+            self._sync_staff_machine_options()
+            QMessageBox.information(self, "Tải Lại Từ Điển", msg)
+        else:
+            QMessageBox.warning(self, "Lỗi Tải Lại", msg)
 
     def _on_model_selected_from_dialog(self, model_name: str) -> None:
         """Handle model selection from management dialog."""
@@ -2024,65 +2145,70 @@ class Step1ProjectSetupWidget(QWidget):
             if m not in options:
                 options.append(m)
 
-        for r in range(self.staff_table.rowCount()):
-            combo = self.staff_table.cellWidget(r, 3)
-            if not isinstance(combo, NoScrollComboBox):
-                combo = NoScrollComboBox()
-                combo.setEditable(True)
-                combo.setStyleSheet("QComboBox { padding: 1px 4px; font-size: 11px; }")
-                self.staff_table.setCellWidget(r, 3, combo)
-            else:
-                combo.setEditable(True)
+        self.staff_table.setUpdatesEnabled(False)
+        self.staff_table.blockSignals(True)
+        try:
+            for r in range(self.staff_table.rowCount()):
+                combo = self.staff_table.cellWidget(r, 3)
+                if not isinstance(combo, NoScrollComboBox):
+                    combo = NoScrollComboBox()
+                    combo.setEditable(True)
+                    self.staff_table.setCellWidget(r, 3, combo)
+                else:
+                    combo.setEditable(True)
 
-            chk_w = self.staff_table.cellWidget(r, 0)
-            is_checked = False
-            if chk_w:
-                chk = chk_w.findChild(QCheckBox)
-                if chk:
-                    is_checked = chk.isChecked()
+                chk_w = self.staff_table.cellWidget(r, 0)
+                is_checked = False
+                if chk_w:
+                    chk = chk_w.findChild(QCheckBox)
+                    if chk:
+                        is_checked = chk.isChecked()
 
-            current_text = combo.currentText().strip()
-            if not current_text:
+                current_text = combo.currentText().strip()
+                if not current_text:
+                    item = self.staff_table.item(r, 3)
+                    if item:
+                        current_text = item.text().strip()
+
+                if not is_checked and (not current_text or current_text != "(Không áp dụng)"):
+                    current_text = "(Không áp dụng)"
+
+                combo.blockSignals(True)
+                combo.clear()
+                for opt in options:
+                    combo.addItem(opt)
+
+                if current_text in options:
+                    combo.setCurrentText(current_text)
+                elif current_text:
+                    combo.setEditText(current_text)
+                elif active_models and is_checked:
+                    combo.setCurrentText(active_models[0])
+                elif not is_checked:
+                    combo.setCurrentText("(Không áp dụng)")
+                else:
+                    combo.setCurrentIndex(0)
+
+                val = combo.currentText()
                 item = self.staff_table.item(r, 3)
                 if item:
-                    current_text = item.text().strip()
+                    item.setText(val)
+                else:
+                    self.staff_table.setItem(r, 3, QTableWidgetItem(val))
 
-            if not is_checked and (not current_text or current_text != "(Không áp dụng)"):
-                current_text = "(Không áp dụng)"
+                if r < len(self.state.staff_roster):
+                    self.state.staff_roster[r].machine_code = val
 
-            combo.blockSignals(True)
-            combo.clear()
-            for opt in options:
-                combo.addItem(opt)
+                combo.blockSignals(False)
 
-            if current_text in options:
-                combo.setCurrentText(current_text)
-            elif current_text:
-                combo.setEditText(current_text)
-            elif active_models and is_checked:
-                combo.setCurrentText(active_models[0])
-            elif not is_checked:
-                combo.setCurrentText("(Không áp dụng)")
-            else:
-                combo.setCurrentIndex(0)
-
-            val = combo.currentText()
-            item = self.staff_table.item(r, 3)
-            if item:
-                item.setText(val)
-            else:
-                self.staff_table.setItem(r, 3, QTableWidgetItem(val))
-
-            if r < len(self.state.staff_roster):
-                self.state.staff_roster[r].machine_code = val
-
-            combo.blockSignals(False)
-
-            try:
-                combo.currentTextChanged.disconnect()
-            except Exception:
-                pass
-            combo.currentTextChanged.connect(lambda txt, row=r: self._on_staff_machine_combo_changed(row, txt))
+                try:
+                    combo.currentTextChanged.disconnect()
+                except Exception:
+                    pass
+                combo.currentTextChanged.connect(lambda txt, row=r: self._on_staff_machine_combo_changed(row, txt))
+        finally:
+            self.staff_table.blockSignals(False)
+            self.staff_table.setUpdatesEnabled(True)
 
     def _on_staff_checkbox_toggled(self, row: int, checked: bool) -> None:
         """Handle toggling of 'Áp dụng' checkbox for a member."""
@@ -2554,6 +2680,7 @@ class Step1ProjectSetupWidget(QWidget):
             if template_path and template_path.exists():
                 shutil.copyfile(str(template_path), str(target_path))
             else:
+                import openpyxl
                 wb = openpyxl.Workbook()
                 ws_cttt = wb.active
                 ws_cttt.title = "CTTT"
@@ -2681,6 +2808,14 @@ class Step2DataSourcingWidget(QWidget):
         )
         self.btn_visual_filter.clicked.connect(self.open_visual_bom_builder_dialog)
 
+        self.btn_standalone_filter = QPushButton("⚡ Lọc Lại File Có Sẵn...")
+        self.btn_standalone_filter.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+        self.btn_standalone_filter.setStyleSheet(
+            "background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 4px;"
+        )
+        self.btn_standalone_filter.setToolTip("Duyệt file hoặc thư mục PLM trên máy và áp dụng bộ lọc trực tiếp không cần TC24")
+        self.btn_standalone_filter.clicked.connect(self.open_standalone_bom_filter_dialog)
+
         self.btn_refresh_sourcing = QPushButton("Làm mới trạng thái")
         self.btn_refresh_sourcing.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_refresh_sourcing.clicked.connect(self.refresh_sourcing_table)
@@ -2691,6 +2826,7 @@ class Step2DataSourcingWidget(QWidget):
         btn_layout.addWidget(self.btn_filter_bom)
         btn_layout.addWidget(self.btn_config_bom_filter)
         btn_layout.addWidget(self.btn_visual_filter)
+        btn_layout.addWidget(self.btn_standalone_filter)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_refresh_sourcing)
 
@@ -2999,6 +3135,22 @@ class Step2DataSourcingWidget(QWidget):
         )
         dlg.exec()
 
+    def open_standalone_bom_filter_dialog(self) -> None:
+        """Open the Standalone BOM filtering dialog for existing files."""
+        from src.gui.standalone_bom_filter_dialog import StandaloneBOMFilterDialog
+        initial_file = None
+        for m in self.state.machines:
+            if not m.is_excluded and m.plm_file and m.plm_file.exists():
+                initial_file = m.plm_file
+                break
+        dlg = StandaloneBOMFilterDialog(
+            initial_model=self.state.model_name,
+            initial_path=initial_file or (self.state.base_dir / self.state.model_name if self.state.model_name else None),
+            parent=self,
+        )
+        dlg.exec()
+
+
 
 # =============================================================================
 # Step 3 Widget: Theo Dõi & Tổng Hợp (Live Scan & Fail-Closed Gate)
@@ -3014,6 +3166,7 @@ class Step3TrackingConsolidationWidget(QWidget):
         self.state = state
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self.scan_submissions)
+        self._submission_file_cache: dict[str, tuple[float, int, bool, int, int, int]] = {}
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -3177,7 +3330,9 @@ class Step3TrackingConsolidationWidget(QWidget):
                 if not is_ok:
                     pending_engineers.append(f"{f.stem} ({m.machine_code})")
 
-        # Mode B: Fallback / Legacy Sub-unit Directories (model_dir / CTTT / <sub_unit>)
+        mode_a_files = scanned_files_count
+
+        # Mode B: Sub-unit Directories (model_dir / CTTT / <sub_unit>)
         cttt_base = model_dir / "CTTT"
         if not cttt_base.exists():
             found_cttt = list((self.state.base_dir / self.state.model_name).rglob("CTTT"))
@@ -3186,43 +3341,99 @@ class Step3TrackingConsolidationWidget(QWidget):
             elif (self.state.base_dir / "CTTT").exists():
                 cttt_base = self.state.base_dir / "CTTT"
 
-        if scanned_files_count == 0 and cttt_base.exists():
-            for unit in STANDARD_SUB_UNITS:
-                unit_dir = cttt_base / unit
-                submission_file: Path | None = None
-                item_count = 0
-                author = "-"
-                time_str = "-"
-                is_ok = False
+        if cttt_base.exists():
+            # Collect all candidate sub-unit directories
+            unit_dirs: dict[str, Path] = {}
+            for u in STANDARD_SUB_UNITS:
+                unit_dirs[u] = cttt_base / u
+            for sub_p in cttt_base.iterdir():
+                if sub_p.is_dir() and sub_p.name not in ("phutrach", "old", "backup", "~$") and sub_p.name not in unit_dirs:
+                    unit_dirs[sub_p.name] = sub_p
 
-                if unit_dir.exists():
-                    files = list(unit_dir.glob("formnguoidung_*.xlsx")) + list(unit_dir.glob("*.xlsx"))
-                    if files:
-                        files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                        submission_file = files[0]
+            scanned_paths = {s.file_path.resolve() for s in self.state.submissions if s.file_path}
+
+            for unit_name, unit_dir in unit_dirs.items():
+                if not unit_dir.is_dir():
+                    continue
+
+                all_files = [
+                    f for f in unit_dir.glob("*.xls*")
+                    if not f.name.startswith("~$")
+                    and not any(k in f.name.lower() for k in ["tonghop", "bom_", "plm", "r3"])
+                    and f.parent.name != "phutrach"
+                ]
+
+                if not all_files:
+                    # Empty unit folders are created for every standard unit. When member
+                    # files exist in the machine folders, every assigned engineer already
+                    # has a row, so empty unit folders add nothing. Only the legacy flow
+                    # (no machine-folder files) reports an assigned empty unit as pending.
+                    unit_assigned = any((r.sub_unit or "") == unit_name for r in self.state.staff_roster)
+                    unit_covered = any(s.sub_unit == unit_name for s in self.state.submissions)
+                    if mode_a_files > 0 or not unit_assigned or unit_covered:
+                        continue
+                    statuses[unit_name] = {
+                        "status": "Chưa nộp",
+                        "file": None,
+                        "item_count": 0,
+                        "author": "",
+                        "time": "-",
+                    }
+                    m_code = active_machines[0].machine_code if active_machines else (self.state.model_name or "")
+                    sub = MemberSubmissionStatus(
+                        machine_code=m_code,
+                        sub_unit=unit_name,
+                        engineer_name="",
+                        file_path=None,
+                        is_submitted_ok=False,
+                        item_count=0,
+                        msi_count=0,
+                        label_count=0,
+                        modified_time=None,
+                    )
+                    self.state.submissions.append(sub)
+                    pending_engineers.append(f"{unit_name}/(Chưa nộp)")
+
+                for submission_file in all_files:
+                    if submission_file.resolve() in scanned_paths:
+                        continue
+                    scanned_files_count += 1
+                    scanned_paths.add(submission_file.resolve())
+
+                    try:
                         mtime = datetime.datetime.fromtimestamp(submission_file.stat().st_mtime)
-                        time_str = mtime.strftime("%d/%m/%Y %H:%M")
-                        is_ok, item_count, _, _ = self._inspect_submission_file(submission_file, is_legacy_unit=True)
-                        author = submission_file.stem
+                    except (OSError, ValueError):
+                        mtime = datetime.datetime.now()
+                    time_str = mtime.strftime("%d/%m/%Y %H:%M")
+                    is_ok, item_count, msi_cnt, lbl_cnt = self._inspect_submission_file(submission_file, is_legacy_unit=True)
+                    author = submission_file.stem
 
-                sub = MemberSubmissionStatus(
-                    machine_code=self.state.model_name,
-                    sub_unit=unit,
-                    engineer_name=author,
-                    file_path=submission_file,
-                    is_submitted_ok=is_ok,
-                    item_count=item_count,
-                )
-                self.state.submissions.append(sub)
-                statuses[unit] = {
-                    "status": "Đã nộp" if is_ok else "Chưa nộp",
-                    "file": submission_file,
-                    "item_count": item_count,
-                    "author": author,
-                    "time": time_str,
-                }
-                if not is_ok:
-                    pending_engineers.append(f"{unit}")
+                    m_code = active_machines[0].machine_code if active_machines else self.state.model_name
+
+                    sub = MemberSubmissionStatus(
+                        machine_code=m_code,
+                        sub_unit=unit_name,
+                        engineer_name=author,
+                        file_path=submission_file,
+                        is_submitted_ok=is_ok,
+                        item_count=item_count,
+                        msi_count=msi_cnt,
+                        label_count=lbl_cnt,
+                        modified_time=mtime,
+                    )
+                    self.state.submissions.append(sub)
+                    info = {
+                        "status": "Đã nộp" if is_ok else "Chưa nộp",
+                        "file": submission_file,
+                        "item_count": item_count,
+                        "author": author,
+                        "time": time_str,
+                    }
+                    statuses[unit_name] = info
+                    statuses[f"{unit_name}_{author}"] = info
+                    statuses[author] = info
+                    if not is_ok:
+                        pending_engineers.append(f"{unit_name}/{author}")
 
         # Populate table
         for idx, sub in enumerate(self.state.submissions, start=1):
@@ -3283,31 +3494,56 @@ class Step3TrackingConsolidationWidget(QWidget):
         return statuses
 
     def _inspect_submission_file(self, file_path: Path, is_legacy_unit: bool = False) -> tuple[bool, int, int, int]:
-        """Inspect Excel file for CTTT!Q2 == 'OK' and record counts."""
+        """Inspect Excel file for CTTT!Q2 == 'OK' and record counts with mtime/size caching."""
+        cache_key = f"{str(file_path)}::{is_legacy_unit}"
+        try:
+            st = file_path.stat()
+            mtime = st.st_mtime
+            size = st.st_size
+        except (OSError, ValueError):
+            return False, 0, 0, 0
+
+        # Handle 0-byte or corrupted files
+        if size == 0:
+            return False, 0, 0, 0
+
+        cached = getattr(self, "_submission_file_cache", None)
+        if cached is not None and cache_key in cached:
+            c_mtime, c_size, is_ok, item_count, msi_count, label_count = cached[cache_key]
+            if c_mtime == mtime and c_size == size:
+                return is_ok, item_count, msi_count, label_count
+
         is_ok = False
         item_count = 0
         msi_count = 0
         label_count = 0
 
-        # Handle 0-byte or corrupted files
-        if not file_path.exists() or file_path.stat().st_size == 0:
-            return False, 0, 0, 0
-
         try:
+            import openpyxl
             wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = None
             if "CTTT" in wb.sheetnames:
                 ws = wb["CTTT"]
-                q2_raw = ws["Q2"].value
+            elif len(wb.sheetnames) > 0:
+                ws = wb.worksheets[0]
+
+            if ws is not None:
+                q2_raw = ws["Q2"].value if ws.max_column >= 17 else None
+                # Count rows that really hold a part code (col C); templates keep
+                # hundreds of pre-formatted empty rows, so max_row is not a count.
+                item_count = 0
+                for (code_cell,) in ws.iter_rows(min_row=3, min_col=3, max_col=3, values_only=True):
+                    code = str(code_cell or "").strip().upper()
+                    if code and code not in ("NONE", "MÃ LINH KIỆN", "PART NUMBER", "PARTS NO"):
+                        item_count += 1
                 if q2_raw is not None:
                     q2_val = str(q2_raw).strip().upper()
                     is_ok = (q2_val == "OK")
                 else:
-                    # In legacy unit directories (e.g. CTTT/LSU), an uploaded file without Q2 cell
-                    # defaults to submitted
-                    is_ok = is_legacy_unit
-                item_count = max(0, ws.max_row - 1)
+                    # No Q2 stamp: only legacy sub-unit files with real data may pass.
+                    is_ok = is_legacy_unit and item_count > 0
             else:
-                is_ok = is_legacy_unit
+                is_ok = False
 
             if "MSI" in wb.sheetnames:
                 ws_msi = wb["MSI"]
@@ -3320,6 +3556,10 @@ class Step3TrackingConsolidationWidget(QWidget):
             logger.warning("Could not read workbook %s: %s (fail-closed, not OK)", file_path, exc)
             is_ok = False
             item_count = 0
+
+        if not hasattr(self, "_submission_file_cache") or self._submission_file_cache is None:
+            self._submission_file_cache = {}
+        self._submission_file_cache[cache_key] = (mtime, size, is_ok, item_count, msi_count, label_count)
 
         return is_ok, item_count, msi_count, label_count
 
@@ -3344,28 +3584,23 @@ class Step3TrackingConsolidationWidget(QWidget):
             )
             return False
 
-
-        active_machines = [m for m in self.state.machines if not m.is_excluded]
         self.state.consolidated_cttt.clear()
         self.state.consolidated_msi.clear()
         self.state.consolidated_labels.clear()
 
-        for m in active_machines:
-            m_dir = m.folder_path or (self.state.base_dir / (m.model_name or self.state.model_name) / m.machine_code)
-            if not m_dir.exists():
-                continue
-
-            phutrach_dir = m_dir / "phutrach"
-            phutrach_dir.mkdir(parents=True, exist_ok=True)
-
-            m_subs = [s for s in self.state.submissions if s.machine_code == m.machine_code and s.file_path]
-            for sub in m_subs:
-                if sub.file_path and sub.file_path.exists():
-                    self._extract_member_data(sub.file_path, sub.engineer_name)
-                    # Move to phutrach/
-                    dest_file = phutrach_dir / sub.file_path.name
+        # Consolidate all scanned submissions (machine folders or sub-unit folders)
+        for sub in self.state.submissions:
+            if sub.file_path and sub.file_path.exists():
+                self._extract_member_data(sub.file_path, sub.engineer_name, sub_unit=sub.sub_unit)
+                # Archive to phutrach/ within parent directory
+                phutrach_dir = sub.file_path.parent / "phutrach"
+                phutrach_dir.mkdir(parents=True, exist_ok=True)
+                dest_file = phutrach_dir / sub.file_path.name
+                try:
                     shutil.move(str(sub.file_path), str(dest_file))
                     sub.file_path = dest_file
+                except Exception as exc:
+                    logger.warning("Could not move %s to %s: %s", sub.file_path, dest_file, exc)
 
         self.state.step3_completed = True
         self.step_completed.emit(True)
@@ -3374,28 +3609,58 @@ class Step3TrackingConsolidationWidget(QWidget):
             self,
             "Thông báo cập nhật",
             f"Đã cập nhật xong danh sách linh kiện vào dữ liệu tổng hợp.\n\n"
-            f"📁 Các file thành viên đã được tổng hợp và lưu trữ tại:\n"
-            f"<Thư mục gốc>\\<Tên Model>\\<Mã máy>\\phutrach\\",
+            f"📁 Các file thành viên đã được tổng hợp và lưu trữ tại thư mục phutrach/ tương ứng.",
         )
         return True
 
-    def _extract_member_data(self, file_path: Path, engineer_name: str) -> None:
+    def _extract_member_data(self, file_path: Path, engineer_name: str, sub_unit: str = "HONTAI") -> None:
         """Extract CTTT, MSI, and Label items into session state."""
         try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+            ws = None
             if "CTTT" in wb.sheetnames:
                 ws = wb["CTTT"]
-                for r in range(3, ws.max_row + 1):
-                    p_code = str(ws.cell(r, 3).value or "").strip().upper()
-                    if p_code and p_code != "NONE":
+            elif len(wb.sheetnames) > 0:
+                ws = wb.worksheets[0]
+
+            def _at(row: tuple, col: int) -> Any:
+                return row[col - 1] if len(row) >= col else None
+
+            if ws is not None:
+                for row in ws.iter_rows(min_row=3, max_col=15, values_only=True):
+                    p_code = str(_at(row, 3) or "").strip().upper()
+                    if p_code and p_code not in ("NONE", "MÃ LINH KIỆN", "PART NUMBER", "PARTS NO"):
+                        raw_sub = str(_at(row, 1) or "").strip()
+                        sub_val = raw_sub if raw_sub and raw_sub.upper() != "NONE" else sub_unit
                         self.state.consolidated_cttt.append({
-                            "SUB": str(ws.cell(r, 1).value or "LSU"),
-                            "TRANG CTTT": str(ws.cell(r, 2).value or "01"),
+                            "SUB": sub_val,
+                            "TRANG CTTT": str(_at(row, 2) or "01"),
                             "MÃ LINH KIỆN": p_code,
-                            "TÊN LINH KIỆN": str(ws.cell(r, 4).value or ""),
-                            "SỐ LƯỢNG": float(ws.cell(r, 5).value or 1.0),
+                            "TÊN LINH KIỆN": str(_at(row, 4) or ""),
+                            "SỐ LƯỢNG": float(_at(row, 5) or 1.0),
                             "PHỤ TRÁCH": engineer_name,
-                            "Giải thích": str(ws.cell(r, 15).value or ""),
+                            "Giải thích": str(_at(row, 15) or ""),
+                        })
+            if "MSI" in wb.sheetnames:
+                ws_msi = wb["MSI"]
+                for row in ws_msi.iter_rows(min_row=2, max_col=5, values_only=True):
+                    val_a = _at(row, 1)
+                    if val_a:
+                        self.state.consolidated_msi.append({
+                            "A": val_a,
+                            "B": _at(row, 2),
+                            "D": _at(row, 4),
+                            "E": _at(row, 5),
+                        })
+            if "Label_7980_7990" in wb.sheetnames:
+                ws_lbl = wb["Label_7980_7990"]
+                for row in ws_lbl.iter_rows(min_row=2, max_col=3, values_only=True):
+                    val_c = _at(row, 3)
+                    if val_c:
+                        self.state.consolidated_labels.append({
+                            "C": val_c,
+                            "PHUTRACH": engineer_name,
                         })
             wb.close()
         except Exception as exc:
@@ -3469,6 +3734,51 @@ class Step4ComparisonReportingWidget(QWidget):
 
         h_sel.addStretch()
         comp_layout.addLayout(h_sel)
+
+        # Row 2: BOM Update Actions (PLM & R3)
+        h_upd = QHBoxLayout()
+        h_upd.addWidget(QLabel("Cập nhật BOM mới:"))
+
+        self.btn_update_plm = QPushButton("🔄 Cập nhật PLM vào BOM")
+        self.btn_update_plm.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_update_plm.setStyleSheet(
+            "background-color: #2563EB; color: white; padding: 6px 14px; border-radius: 4px; font-weight: bold;"
+        )
+        self.btn_update_plm.setToolTip("Cập nhật file PLM Teamcenter mới vào workbook BOM và tự động kế thừa giải trình")
+        self.btn_update_plm.clicked.connect(self._on_update_plm_clicked)
+        h_upd.addWidget(self.btn_update_plm)
+
+        self.btn_update_r3 = QPushButton("🔄 Cập nhật R3 vào BOM")
+        self.btn_update_r3.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_update_r3.setStyleSheet(
+            "background-color: #D97706; color: white; padding: 6px 14px; border-radius: 4px; font-weight: bold;"
+        )
+        self.btn_update_r3.setToolTip("Cập nhật file SAP R3 CS12 mới vào workbook BOM và làm mới Pivot Table")
+        self.btn_update_r3.clicked.connect(self._on_update_r3_clicked)
+        h_upd.addWidget(self.btn_update_r3)
+
+        self.btn_update_both = QPushButton("⚡ Cập nhật cả PLM & R3")
+        self.btn_update_both.setIcon(get_theme_manager().get_styled_icon("rotate-ccw"))
+        self.btn_update_both.setStyleSheet(
+            "background-color: #7C3AED; color: white; padding: 6px 14px; border-radius: 4px; font-weight: bold;"
+        )
+        self.btn_update_both.setToolTip("Cập nhật đồng thời cả PLM và R3 mới vào workbook BOM")
+        self.btn_update_both.clicked.connect(self._on_update_both_clicked)
+        h_upd.addWidget(self.btn_update_both)
+
+        self.btn_filter_discrepancies = QPushButton("🔍 Lọc Bất Đồng Bộ (NG/#N/A)")
+        self.btn_filter_discrepancies.setIcon(get_theme_manager().get_styled_icon("search"))
+        self.btn_filter_discrepancies.setStyleSheet(
+            "background-color: #0284C7; color: white; padding: 6px 14px; border-radius: 4px; font-weight: bold;"
+        )
+        self.btn_filter_discrepancies.setToolTip(
+            "Tự động lọc và chỉ hiển thị các dòng NG hoặc #N/A trong file BOM (tương đương nút Lọc dữ liệu cần so sánh của VBA)"
+        )
+        self.btn_filter_discrepancies.clicked.connect(self._on_filter_discrepancies_clicked)
+        h_upd.addWidget(self.btn_filter_discrepancies)
+
+        h_upd.addStretch()
+        comp_layout.addLayout(h_upd)
 
         self.lbl_bom_status = QLabel("Chưa tạo file BOM tổng hợp.")
         self.lbl_bom_status.setStyleSheet("font-style: italic; color: #495057;")
@@ -3648,8 +3958,8 @@ class Step4ComparisonReportingWidget(QWidget):
         if idx >= 0:
             self.combo_active_machine.setCurrentIndex(idx)
 
-    def generate_master_bom_file(self) -> Path | None:
-        """Generate BOM_<Machine_Code>.xlsm matching form_ssbom layout and refresh Pivot Tables."""
+    def _get_active_machine_context(self) -> tuple[str, Any, str, Path, Path]:
+        """Resolve current active machine code, model, machine dir, and BOM path."""
         m_code = self.combo_active_machine.currentText().strip() or (
             self.state.machines[0].machine_code if self.state.machines else "110C103NL0"
         )
@@ -3657,15 +3967,68 @@ class Step4ComparisonReportingWidget(QWidget):
         model = m_target.model_name if m_target and m_target.model_name else self.state.model_name
         m_dir = m_target.folder_path if m_target and m_target.folder_path else (self.state.base_dir / model / m_code)
         m_dir.mkdir(parents=True, exist_ok=True)
+        bom_file = m_dir / f"BOM_{m_code}.xlsm"
+        if not bom_file.exists() and self.state.last_bom_file and self.state.last_bom_file.exists():
+            bom_file = self.state.last_bom_file
+        return m_code, m_target, model, m_dir, bom_file
 
+    def _find_or_browse_file(
+        self,
+        pattern: str,
+        folder: Path,
+        dialog_title: str,
+        preferred_path: Path | None = None,
+    ) -> Path | None:
+        """Helper to locate candidate raw file or prompt user to browse."""
+        if preferred_path and preferred_path.exists():
+            return preferred_path
+
+        candidates = [
+            f for f in folder.glob(pattern)
+            if f.is_file() and not f.name.startswith("~$") and "capnhat" not in str(f).lower()
+        ]
+        if candidates:
+            return candidates[0]
+
+        chosen, _ = QFileDialog.getOpenFileName(
+            self,
+            dialog_title,
+            str(folder),
+            "BOM Spreadsheet Files (*.xlsx *.xls *.xlsm *.csv *.txt);;All Files (*.*)",
+        )
+        return Path(chosen) if chosen else None
+
+    def generate_master_bom_file(self) -> Path | None:
+        """Generate BOM_<Machine_Code>.xlsm matching form_ssbom layout and refresh Pivot Tables."""
+        m_code, m_target, model, m_dir, out_path = self._get_active_machine_context()
         out_path = m_dir / f"BOM_{m_code}.xlsm"
+
         try:
             plm_p = m_target.plm_file if m_target else None
             r3_p = m_target.r3_file if m_target else None
 
+            # Auto-discover PLM and R3 files if not explicitly linked
+            if plm_p is None or not plm_p.exists():
+                plm_candidates = [
+                    f for f in m_dir.glob("*PLM*.*")
+                    if f.is_file() and not f.name.startswith("~$") and "capnhat" not in str(f).lower()
+                ]
+                if plm_candidates:
+                    plm_p = plm_candidates[0]
+
+            if r3_p is None or not r3_p.exists():
+                r3_candidates = [
+                    f for f in m_dir.glob("*R3*.*")
+                    if f.is_file() and not f.name.startswith("~$") and "capnhat" not in str(f).lower()
+                ]
+                if r3_candidates:
+                    r3_p = r3_candidates[0]
+
             res_path = self.excel_generator.generate_report(
                 output_path=out_path,
                 cttt_data=self.state.consolidated_cttt,
+                plm_data=plm_p,
+                r3_data=r3_p,
                 model_name=model,
                 target_date=datetime.date.today().strftime("%d/%m/%Y"),
             )
@@ -3703,6 +4066,131 @@ class Step4ComparisonReportingWidget(QWidget):
             logger.error("Error generating master BOM file: %s", exc)
             QMessageBox.critical(self, "Lỗi tạo BOM", f"Không thể tạo file BOM tổng:\n{exc}")
             return None
+
+    def _on_update_plm_clicked(self) -> None:
+        """Update PLM sheet in BOM comparison workbook with annotation inheritance."""
+        m_code, m_target, model, m_dir, bom_file = self._get_active_machine_context()
+        if not bom_file.exists():
+            reply = QMessageBox.question(
+                self,
+                "Chưa có File BOM Tổng",
+                f"File so sánh BOM ({bom_file.name}) chưa được tạo.\nBạn có muốn tự động tạo mới file BOM trước không?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                res = self.generate_master_bom_file()
+                if not res:
+                    return
+                bom_file = res
+            else:
+                return
+
+        plm_preferred = m_target.plm_file if m_target else None
+        plm_file = self._find_or_browse_file(
+            "*PLM*.*", m_dir, f"Chọn file PLM mới cho máy {m_code}", plm_preferred
+        )
+        if not plm_file or not plm_file.exists():
+            QMessageBox.warning(self, "Không tìm thấy file PLM", f"Không tìm thấy file PLM mới trong thư mục:\n{m_dir}")
+            return
+
+        try:
+            from src.core.inheritance_engine import InheritanceEngine
+            engine = InheritanceEngine()
+            summary = engine.update_workbook_with_inheritance(
+                workbook_path=bom_file,
+                new_plm_data=plm_file,
+                source_raw_file=plm_file,
+            )
+            self.lbl_bom_status.setText(f"✓ Cập nhật PLM thành công: {summary.inherited_count} kế thừa, lưu {summary.archived_sheet_name}")
+            self.lbl_bom_status.setStyleSheet("color: #2563EB; font-weight: bold;")
+            QMessageBox.information(
+                self,
+                "Cập nhật PLM Hoàn tất",
+                f"Đã cập nhật PLM mới vào file: {bom_file.name}\n"
+                f"- Tổng linh kiện mới: {summary.total_new_parts}\n"
+                f"- Số linh kiện kế thừa giải trình: {summary.inherited_count}\n"
+                f"- Bản sao lưu sheet: '{summary.archived_sheet_name}'\n"
+                f"- File nguồn PLM cũ lưu tại: capnhat/old/",
+            )
+        except Exception as exc:
+            logger.error("Error updating PLM in workbook: %s", exc)
+            QMessageBox.critical(self, "Lỗi cập nhật PLM", f"Không thể cập nhật PLM vào BOM:\n{exc}")
+
+    def _on_update_r3_clicked(self) -> None:
+        """Update R3 sheet in BOM comparison workbook and refresh Pivot Table."""
+        m_code, m_target, model, m_dir, bom_file = self._get_active_machine_context()
+        if not bom_file.exists():
+            reply = QMessageBox.question(
+                self,
+                "Chưa có File BOM Tổng",
+                f"File so sánh BOM ({bom_file.name}) chưa được tạo.\nBạn có muốn tự động tạo mới file BOM trước không?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                res = self.generate_master_bom_file()
+                if not res:
+                    return
+                bom_file = res
+            else:
+                return
+
+        r3_preferred = m_target.r3_file if m_target else None
+        r3_file = self._find_or_browse_file(
+            "*R3*.*", m_dir, f"Chọn file R3 CS12 mới cho máy {m_code}", r3_preferred
+        )
+        if not r3_file or not r3_file.exists():
+            QMessageBox.warning(self, "Không tìm thấy file R3", f"Không tìm thấy file R3 mới trong thư mục:\n{m_dir}")
+            return
+
+        try:
+            from src.core.inheritance_engine import InheritanceEngine
+            engine = InheritanceEngine()
+            summary = engine.update_r3_in_workbook(
+                workbook_path=bom_file,
+                new_r3_data=r3_file,
+                source_raw_file=r3_file,
+            )
+            self.lbl_bom_status.setText(f"✓ Cập nhật R3 thành công: {summary.total_new_parts} linh kiện, lưu {summary.archived_sheet_name}")
+            self.lbl_bom_status.setStyleSheet("color: #D97706; font-weight: bold;")
+            QMessageBox.information(
+                self,
+                "Cập nhật R3 Hoàn tất",
+                f"Đã cập nhật SAP R3 mới vào file: {bom_file.name}\n"
+                f"- Tổng linh kiện R3 mới: {summary.total_new_parts}\n"
+                f"- Bản sao lưu sheet: '{summary.archived_sheet_name}'\n"
+                f"- File nguồn R3 cũ lưu tại: capnhat/old/\n"
+                f"- Pivot Table R3 đã được đồng bộ.",
+            )
+        except Exception as exc:
+            logger.error("Error updating R3 in workbook: %s", exc)
+            QMessageBox.critical(self, "Lỗi cập nhật R3", f"Không thể cập nhật R3 vào BOM:\n{exc}")
+
+    def _on_update_both_clicked(self) -> None:
+        """Update both PLM and R3 into BOM comparison workbook in a single workflow."""
+        self._on_update_plm_clicked()
+        self._on_update_r3_clicked()
+
+    def _on_filter_discrepancies_clicked(self) -> None:
+        """Filter BOM comparison workbook to show only discrepancy rows (NG / #N/A) matching legacy locdl_ss."""
+        m_code, m_target, model, m_dir, bom_file = self._get_active_machine_context()
+        if not bom_file.exists():
+            QMessageBox.warning(self, "Chưa có file BOM", "Vui lòng bấm 'Tạo File BOM Tổng' trước khi thực hiện lọc.")
+            return
+
+        try:
+            from src.core.inheritance_engine import filter_discrepancies_in_workbook
+            counts = filter_discrepancies_in_workbook(bom_file)
+            msg = (
+                f"Đã áp dụng bộ lọc bất đồng bộ (NG / #N/A) vào file:\n{bom_file.name}\n\n"
+                f"- Sheet CTTT: {counts['CTTT']} linh kiện NG/#N/A\n"
+                f"- Sheet PLM: {counts['PLM']} linh kiện thiếu CTTT\n"
+                f"- Sheet CTTT_Total: {counts['CTTT_Total']} linh kiện lệch tổng SL\n\n"
+                f"Các dòng OK đã được ẩn để dễ dàng kiểm tra. Bạn có thể mở file để xem ngay."
+            )
+            QMessageBox.information(self, "Lọc Dữ Liệu So Sánh Hoàn Tất", msg)
+        except Exception as exc:
+            logger.error("Error filtering discrepancies: %s", exc)
+            QMessageBox.critical(self, "Lỗi lọc dữ liệu", f"Không thể lọc bất đồng bộ trong file BOM:\n{exc}")
 
     def _open_bom_file(self) -> None:
         if self.state.last_bom_file and self.state.last_bom_file.exists():
@@ -3994,7 +4482,7 @@ class LeaderWorkspaceView(QWidget):
         base_dir: Path | None = None,
     ) -> None:
         super().__init__(parent)
-        self.base_dir = Path(base_dir or r"D:\Sandbox\pm_sosanhbom")
+        self.base_dir = Path(base_dir) if base_dir else get_app_base_dir()
         self.state = LeaderSessionState(base_dir=self.base_dir)
 
         # Services & state
@@ -4008,6 +4496,12 @@ class LeaderWorkspaceView(QWidget):
         self._init_ui()
         self._wire_signals()
         self.refresh_kpi_cards()
+
+        import sys
+        if "pytest" in sys.modules:
+            self.step1_widget._populate_defaults()
+        else:
+            QTimer.singleShot(0, self.step1_widget._populate_defaults)
 
     def _build_kpi_panel(self) -> QWidget:
         container = QWidget(self)
@@ -4123,12 +4617,16 @@ class LeaderWorkspaceView(QWidget):
 
     def _wrap_step_scroll(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea(self)
-        scroll.setWidget(widget)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        widget.setUpdatesEnabled(False)
+        try:
+            scroll.setWidget(widget)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        finally:
+            widget.setUpdatesEnabled(True)
         return scroll
 
     def on_theme_changed(self, effective_theme: str) -> None:
@@ -4151,66 +4649,69 @@ class LeaderWorkspaceView(QWidget):
             self.btn_quick_reset.setIcon(theme_mgr.get_styled_icon("refresh"))
 
     def _init_ui(self) -> None:
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(6, 4, 6, 4)
-        main_layout.setSpacing(4)
+        self.setUpdatesEnabled(False)
+        try:
+            main_layout = QVBoxLayout(self)
+            main_layout.setContentsMargins(6, 4, 6, 4)
+            main_layout.setSpacing(4)
 
-        # 0. Compact KPI Header Panel (4 KPI Cards + 3 Quick Action Buttons)
-        self.kpi_panel = self._build_kpi_panel()
-        main_layout.addWidget(self.kpi_panel)
+            # 0. Compact KPI Header Panel (4 KPI Cards + 3 Quick Action Buttons)
+            self.kpi_panel = self._build_kpi_panel()
+            main_layout.addWidget(self.kpi_panel)
 
-        # 1. Wizard Step Breadcrumb Header
-        self.nav_header = WizardStepHeader(self)
-        main_layout.addWidget(self.nav_header)
+            # 1. Wizard Step Breadcrumb Header
+            self.nav_header = WizardStepHeader(self)
+            main_layout.addWidget(self.nav_header)
 
-        # 2. QStackedWidget with the 4 steps wrapped in scroll areas
-        self.step_stack = QStackedWidget(self)
+            # 2. QStackedWidget with the 4 steps wrapped in scroll areas
+            self.step_stack = QStackedWidget(self)
 
-        self.step1_widget = Step1ProjectSetupWidget(self.state, mailer=self.mailer, parent=self)
-        self.step2_widget = Step2DataSourcingWidget(self.state, self)
-        self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
-        self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
+            self.step1_widget = Step1ProjectSetupWidget(self.state, mailer=self.mailer, parent=self)
+            self.step2_widget = Step2DataSourcingWidget(self.state, self)
+            self.step3_widget = Step3TrackingConsolidationWidget(self.state, self)
+            self.step4_widget = Step4ComparisonReportingWidget(self.state, self)
 
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
-        self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
+            self.step_stack.addWidget(self._wrap_step_scroll(self.step1_widget))
+            self.step_stack.addWidget(self._wrap_step_scroll(self.step2_widget))
+            self.step_stack.addWidget(self._wrap_step_scroll(self.step3_widget))
+            self.step_stack.addWidget(self._wrap_step_scroll(self.step4_widget))
 
+            main_layout.addWidget(self.step_stack, stretch=1)
 
-        main_layout.addWidget(self.step_stack, stretch=1)
+            # 3. Footer Navigation Bar
+            footer_layout = QHBoxLayout()
 
-        # 3. Footer Navigation Bar
-        footer_layout = QHBoxLayout()
+            self.btn_prev = QPushButton("Quay lại Bước trước")
+            self.btn_prev.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+            self.btn_prev.setEnabled(False)
+            self.btn_prev.clicked.connect(self.go_previous_step)
+            footer_layout.addWidget(self.btn_prev)
 
-        self.btn_prev = QPushButton("Quay lại Bước trước")
-        self.btn_prev.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
-        self.btn_prev.setEnabled(False)
-        self.btn_prev.clicked.connect(self.go_previous_step)
-        footer_layout.addWidget(self.btn_prev)
+            footer_layout.addStretch()
 
-        footer_layout.addStretch()
+            # Shared progress indicators (backward compatible with tests)
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFixedWidth(200)
+            self.progress_bar.setTextVisible(True)
+            footer_layout.addWidget(self.progress_bar)
 
-        # Shared progress indicators (backward compatible with tests)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFixedWidth(200)
-        self.progress_bar.setTextVisible(True)
-        footer_layout.addWidget(self.progress_bar)
+            self.lbl_progress_status = QLabel("Sẵn sàng")
+            self.lbl_progress_status.setStyleSheet("font-style: italic; color: #495057;")
+            footer_layout.addWidget(self.lbl_progress_status)
 
-        self.lbl_progress_status = QLabel("Sẵn sàng")
-        self.lbl_progress_status.setStyleSheet("font-style: italic; color: #495057;")
-        footer_layout.addWidget(self.lbl_progress_status)
+            footer_layout.addStretch()
 
-        footer_layout.addStretch()
+            self.btn_next = QPushButton("Tiếp tục sang Bước tiếp theo")
+            self.btn_next.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
+            self.btn_next.setStyleSheet("background-color: #0078D4; color: white; border-radius: 4px; padding: 6px 14px;")
+            self.btn_next.clicked.connect(self.go_next_step)
+            footer_layout.addWidget(self.btn_next)
 
-        self.btn_next = QPushButton("Tiếp tục sang Bước tiếp theo")
-        self.btn_next.setFont(QFont("Calibri", 10, QFont.Weight.Bold))
-        self.btn_next.setStyleSheet("background-color: #0078D4; color: white; border-radius: 4px; padding: 6px 14px;")
-        self.btn_next.clicked.connect(self.go_next_step)
-        footer_layout.addWidget(self.btn_next)
-
-        main_layout.addLayout(footer_layout)
+            main_layout.addLayout(footer_layout)
+        finally:
+            self.setUpdatesEnabled(True)
 
     def _wire_signals(self) -> None:
         self.nav_header.step_clicked.connect(self.switch_to_step)

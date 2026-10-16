@@ -56,5 +56,15 @@ Sirius2/
 Polaris/
 Mebius/
 Spica/
+# App distributions and updates (large binaries)
+apps/
+release_update/*.mpupdate
+*.mpupdate
+*.zip
+
+# Local test data & logs
+logs/
+sample_data/
+VIRGO2/
 backup_before_*_filter/
 *.bak

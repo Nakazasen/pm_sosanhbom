@@ -41,7 +41,7 @@ class TestBOMFilterConfigDialog:
 
         assert dlg.model_list.count() >= 6
         assert dlg.current_model == "Virgo"
-        assert dlg.rules_table.rowCount() == 50
+        assert dlg.rules_table.rowCount() == 62
 
     def test_search_rules_filtering(self, temp_mgr_and_dialog):
         """Verify filtering rules by typing into search box."""
@@ -57,7 +57,7 @@ class TestBOMFilterConfigDialog:
 
         # Clear search
         dlg.rule_search_box.setText("")
-        assert dlg.rules_table.rowCount() == 50
+        assert dlg.rules_table.rowCount() == 62
 
     def test_add_and_edit_rule_via_form(self, temp_mgr_and_dialog):
         """Verify adding and editing a rule using the dialog's form."""
@@ -70,11 +70,11 @@ class TestBOMFilterConfigDialog:
         dlg.txt_notes.setText("Test note from unit test")
         dlg._on_save_rule()
 
-        assert dlg.rules_table.rowCount() == 51
+        assert dlg.rules_table.rowCount() == 63
 
         # Check DB
         virgo_rules = mgr.get_rules_for_model("Virgo")
-        assert len(virgo_rules) == 51
+        assert len(virgo_rules) == 63
         new_rule = [r for r in virgo_rules if r.item_name == "TEST NEW SENSOR"][0]
         assert new_rule.match_mode == "Part_name"
         assert new_rule.part_code == "302TEST001"
@@ -92,4 +92,4 @@ class TestBOMFilterConfigDialog:
         del_success = mgr.delete_rule(new_rule.id)
         assert del_success is True
         dlg._refresh_rules_table()
-        assert dlg.rules_table.rowCount() == 50
+        assert dlg.rules_table.rowCount() == 62

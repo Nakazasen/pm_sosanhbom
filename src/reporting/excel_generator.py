@@ -360,8 +360,8 @@ class ExcelReportGenerator:
 
         row = 5
         if not df_jig.empty:
-            for idx, r_data in df_jig.iterrows():
-                ws.cell(row=row, column=2, value=idx + 1).alignment = self.align_center
+            for idx, r_data in enumerate(df_jig.to_dict(orient="records"), start=1):
+                ws.cell(row=row, column=2, value=idx).alignment = self.align_center
                 ws.cell(row=row, column=3, value=r_data.get("jig_code", r_data.get("MÃ JIG", "")))
                 ws.cell(row=row, column=4, value=r_data.get("jig_name", r_data.get("TÊN JIG", "")))
                 ws.cell(row=row, column=5, value=r_data.get("fixed_code", r_data.get("MSI", ""))).alignment = self.align_center
@@ -425,7 +425,7 @@ class ExcelReportGenerator:
 
         row = 2
         if not df_msi.empty:
-            for _, r in df_msi.iterrows():
+            for r in df_msi.to_dict(orient="records"):
                 ws.cell(row=row, column=1, value=str(r.get("barcode_part", r.get("Mã LK Barcode", ""))))
                 c_unit_code = ws.cell(row=row, column=2, value=str(r.get("unit_code", r.get("Mã UNIT/linh kiện bản mạch", ""))))
                 ws.cell(row=row, column=3, value=str(r.get("unit_name", r.get("Tên UNIT", ""))))
@@ -536,7 +536,7 @@ class ExcelReportGenerator:
 
         row = 3
         if not df_cttt.empty:
-            for _, r in df_cttt.iterrows():
+            for r in df_cttt.to_dict(orient="records"):
                 ws.cell(row=row, column=1, value=str(r.get("SUB", r.get("sub", ""))))
                 ws.cell(row=row, column=2, value=str(r.get("TRANG CTTT", r.get("page", ""))))
                 ws.cell(row=row, column=3, value=str(r.get("MÃ LINH KIỆN", r.get("part_code", ""))))
@@ -632,7 +632,7 @@ class ExcelReportGenerator:
         row = 2
         missing_parts_set = set()
         if df_missing is not None and not df_missing.empty:
-            for _, mr in df_missing.iterrows():
+            for mr in df_missing.to_dict(orient="records"):
                 p = str(mr.get("part_code", mr.get("Item Id", ""))).strip().upper()
                 if p:
                     missing_parts_set.add(p)
@@ -640,7 +640,7 @@ class ExcelReportGenerator:
         source_df = df_plm if not df_plm.empty else (df_missing if df_missing is not None else pd.DataFrame())
 
         if not source_df.empty:
-            for _, r in source_df.iterrows():
+            for r in source_df.to_dict(orient="records"):
                 ws.cell(row=row, column=1, value=r.get("level", 1)).alignment = self.align_center
                 ws.cell(row=row, column=2, value=str(r.get("item_type", "Part")))
                 part_id = str(r.get("item_id", r.get("part_code", ""))).strip().upper()
@@ -706,7 +706,7 @@ class ExcelReportGenerator:
 
         row = 2
         if not df_r3.empty:
-            for _, r in df_r3.iterrows():
+            for r in df_r3.to_dict(orient="records"):
                 ws.cell(row=row, column=1, value=r.get("level", r.get("Level", 1))).alignment = self.align_center
                 ws.cell(row=row, column=2, value=str(r.get("material", r.get("part_code", r.get("Component", "")))))
                 ws.cell(row=row, column=3, value=str(r.get("description", r.get("part_name", r.get("Object Description", "")))))
@@ -753,7 +753,7 @@ class ExcelReportGenerator:
 
         row = 2
         if not df_totals.empty:
-            for _, r in df_totals.iterrows():
+            for r in df_totals.to_dict(orient="records"):
                 ws.cell(row=row, column=1, value=str(r.get("part_code", r.get("Row Labels", ""))))
 
                 c_cttt = ws.cell(row=row, column=2, value=float(r.get("cttt_total_qty", r.get("CTTT_TOTAL", 0.0))))

@@ -348,7 +348,7 @@ class TestInheritanceEngine:
         self, sample_ssbom_workbook: Path
     ) -> None:
         """Verify refresh_workbook_pivots executes safely without unhandled crashes when COM fails."""
-        with patch("win32com.client.Dispatch", side_effect=RuntimeError("COM Dispatch Error")):
+        with patch("win32com.client.DispatchEx", side_effect=RuntimeError("COM Dispatch Error")):
             result = refresh_workbook_pivots(sample_ssbom_workbook)
             assert result is False
 
@@ -360,14 +360,15 @@ class TestInheritanceEngine:
         assert result is False
 
     def test_refresh_workbook_pivots_mocked_success(
-        self, sample_ssbom_workbook: Path
+        self, sample_ssbom_workbook: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Verify win32com invocation path calls RefreshAll, Save, Close, and Quit."""
+        monkeypatch.delenv("SSBOM_DISABLE_EXCEL_COM", raising=False)
         mock_excel = MagicMock()
         mock_wb = MagicMock()
         mock_excel.Workbooks.Open.return_value = mock_wb
 
-        with patch("win32com.client.Dispatch", return_value=mock_excel):
+        with patch("win32com.client.DispatchEx", return_value=mock_excel):
             engine = InheritanceEngine()
             ok = engine.refresh_workbook_pivots(sample_ssbom_workbook)
             assert ok is True

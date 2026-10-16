@@ -128,6 +128,14 @@ def main() -> int:
         entrypoint_path, active_ver = resolver.resolve()
     except Exception as exc:
         logger.error("Failed to resolve active application: %s", exc)
+        try:
+            import datetime
+            log_dir = install_root / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            err_file = log_dir / "launcher_error.log"
+            err_file.write_text(f"[{datetime.datetime.now()}] Launcher error:\n{exc}\n", encoding="utf-8")
+        except Exception:
+            pass
         print(f"[LAUNCHER ERROR] {exc}", file=sys.stderr)
         return 1
 

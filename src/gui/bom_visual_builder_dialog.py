@@ -44,11 +44,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.bom_filter_manager import BOMFilterManager
+from src.core.bom_filter_manager import BOMFilterManager, get_bom_filter_manager
 from src.core.models import BOMNode, BOMTree
 from src.core.tree_parser import BOMTreeParser
 from src.gui.styles import get_theme_manager
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +335,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.resize(target_w, target_h)
         self.setMinimumSize(780, 380)
 
-        self.filter_manager = filter_manager or BOMFilterManager()
+        self.filter_manager = filter_manager or get_bom_filter_manager()
         self.current_model: str = initial_model or ""
         self.raw_tree: BOMTree | None = None
         self.file_path: Path | None = Path(initial_file) if initial_file else None
@@ -847,7 +847,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
         """Populate model combobox from database and dictionary service."""
         models = self.filter_manager.get_all_models()
         try:
-            known = MachineDictService().get_model_names()
+            known = get_machine_dict_service().get_model_names()
         except Exception:
             known = []
         all_models = sorted(list(set(models + known)), key=lambda s: s.lower())
@@ -996,7 +996,14 @@ class BOMVisualRuleBuilderDialog(QDialog):
 
         if parent_part_code is None and parent_item is not None:
             p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
-            parent_part_code = p_data.get("item_id")
+            p_level = p_data.get("level", 0)
+            has_level_0 = bool(
+                (self.raw_tree and any(getattr(r, "level", 0) == 0 for r in self.raw_tree.roots))
+                or (self.tree_widget.topLevelItemCount() > 0 and self.tree_widget.topLevelItem(0).text(1) == "L0")
+            )
+            min_branch_level = 2 if has_level_0 else 1
+            if p_level >= min_branch_level:
+                parent_part_code = p_data.get("item_id")
 
         node_code = (node.item_id or "").strip().upper()
         node_name = (node.item_name or "").strip().upper()
@@ -1090,6 +1097,15 @@ class BOMVisualRuleBuilderDialog(QDialog):
         item.setTextAlignment(4, Qt.AlignmentFlag.AlignCenter)
         item.setTextAlignment(5, Qt.AlignmentFlag.AlignCenter)
 
+        # Ensure nodes at level <= 1 (or level 0 in partial BOM) never have parent_part_code assigned
+        has_level_0 = bool(
+            (self.raw_tree and any(getattr(r, "level", 0) == 0 for r in self.raw_tree.roots))
+            or (self.tree_widget.topLevelItemCount() > 0 and self.tree_widget.topLevelItem(0).text(1) == "L0")
+        )
+        min_branch_level = 2 if has_level_0 else 1
+        if node.level < min_branch_level:
+            parent_part_code = None
+
         # Unique branch/node identifier
         node_key = f"{parent_path}/{node.item_id}_r{node.row_index or id(node)}"
         current_path = f"{parent_path}/{node.item_id}" if parent_path else (node.item_id or "")
@@ -1142,9 +1158,13 @@ class BOMVisualRuleBuilderDialog(QDialog):
         item.setTextAlignment(6, Qt.AlignmentFlag.AlignCenter)
 
         # Recurse for children
-        my_part_code = node.item_id
+        # In a full BOM hierarchy (starts at Level 0), Level 1 is the Phantom Root
+        # which varies across model variants, so nodes at level <= 1 do not propagate
+        # branch constraints. Only functional modules from Level 2 downwards (or root
+        # modules if no Level 0 exists in synthetic/partial BOM) pass parent_part_code.
+        child_parent_code = node.item_id if node.level >= min_branch_level else None
         for child in node.children:
-            child_item = self._create_tree_item(child, parent_part_code=my_part_code, parent_path=current_path)
+            child_item = self._create_tree_item(child, parent_part_code=child_parent_code, parent_path=current_path)
             item.addChild(child_item)
 
         return item
@@ -1159,7 +1179,14 @@ class BOMVisualRuleBuilderDialog(QDialog):
         parent_part_code = None
         if parent_item:
             p_data = parent_item.data(0, Qt.ItemDataRole.UserRole) or {}
-            parent_part_code = p_data.get("item_id")
+            p_level = p_data.get("level", 0)
+            has_level_0 = bool(
+                (self.raw_tree and any(getattr(r, "level", 0) == 0 for r in self.raw_tree.roots))
+                or (self.tree_widget.topLevelItemCount() > 0 and self.tree_widget.topLevelItem(0).text(1) == "L0")
+            )
+            min_branch_level = 2 if has_level_0 else 1
+            if p_level >= min_branch_level:
+                parent_part_code = p_data.get("item_id")
 
         item = self._create_tree_item(node, parent_part_code=parent_part_code, parent_path=parent_path)
         if parent_item:
@@ -1354,8 +1381,10 @@ class BOMVisualRuleBuilderDialog(QDialog):
         self.lbl_stats_filtered.setText(
             f"Sau khi lọc: {surviving_nodes:,} ({pct_reduction:.1f}% giảm)"
         )
-        rule_count = len(self.node_rule_actions) if self.node_rule_actions else len(self.rule_actions)
-        self.lbl_stats_rules.setText(f"Quy tắc đã chọn: {rule_count} quy tắc")
+        node_count = len(self.node_rule_actions) if self.node_rule_actions else len(self.rule_actions)
+        rule_total = len(getattr(self, "existing_model_rules", []) or [])
+        suffix = f" (bộ lọc có {rule_total} quy tắc)" if rule_total else ""
+        self.lbl_stats_rules.setText(f"Cụm bị áp quy tắc: {node_count} cụm{suffix}")
 
     def _get_style_resources(self) -> dict[str, Any]:
         """Cache QBrush and QFont objects to avoid tens of thousands of allocations per styling pass."""
@@ -1449,7 +1478,7 @@ class BOMVisualRuleBuilderDialog(QDialog):
     def _update_review_mode_ui(self) -> None:
         """Update review mode checkbox text with current rule count."""
         count = len(self.configured_nodes) if self.configured_nodes else len(self.rule_actions)
-        self.chk_review_rules.setText(f"📋 Chỉ xem cụm đã chọn quy tắc ({count})")
+        self.chk_review_rules.setText(f"📋 Chỉ xem cụm bị áp quy tắc ({count} cụm)")
 
     def _on_review_mode_toggled(self, checked: bool) -> None:
         """Handle toggle of review / audit mode."""

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.core.path_utils import safe_exists, safe_is_file
 from src.services.update_security import (
     CHUNK_SIZE_BYTES,
     UpdateSecurityError,
@@ -92,30 +93,42 @@ class UpdateDeliveryService:
     def load_sources_configuration(self) -> Dict[str, Any]:
         """Load sources config in ascending priority:
 
-        1. Default bundled: update_sources.default.json
+        1. Default bundled: update_sources.default.json (searched in base_dir, exe dir, repo root)
         2. Runtime override: <base_dir>/update_sources.json
         3. Company policy: %PROGRAMDATA%/SSBOM_Manager/update_sources.json
+        4. Fallback: <base_dir>/config/settings.json (paths.update_dir)
         """
+        import sys
+
         config: Dict[str, Any] = {
             "schema": 1,
             "startup_check": True,
             "sources": [],
         }
 
-        # 1. Default bundled
-        default_file = self.base_dir / "update_sources.default.json"
-        if default_file.is_file():
-            try:
-                with open(default_file, "r", encoding="utf-8") as fp:
-                    data = json.load(fp)
-                    if isinstance(data, dict):
-                        config.update(data)
-            except Exception as exc:
-                logger.warning("Could not read bundled sources config: %s", exc)
+        # 1. Default bundled - check base_dir, sys.executable dir, _MEIPASS, or repo root
+        candidates = [self.base_dir / "update_sources.default.json"]
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(sys.executable).resolve().parent
+            candidates.append(exe_dir / "update_sources.default.json")
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                candidates.append(Path(meipass) / "update_sources.default.json")
+
+        for default_file in candidates:
+            if safe_is_file(default_file):
+                try:
+                    with open(default_file, "r", encoding="utf-8") as fp:
+                        data = json.load(fp)
+                        if isinstance(data, dict):
+                            config.update(data)
+                            break
+                except Exception as exc:
+                    logger.warning("Could not read bundled sources config from %s: %s", default_file, exc)
 
         # 2. Local user override
         override_file = self.base_dir / "update_sources.json"
-        if override_file.is_file():
+        if safe_is_file(override_file):
             try:
                 with open(override_file, "r", encoding="utf-8") as fp:
                     data = json.load(fp)
@@ -126,7 +139,7 @@ class UpdateDeliveryService:
 
         # 3. Company policy
         policy_file = self.programdata_dir / "update_sources.json"
-        if policy_file.is_file():
+        if safe_is_file(policy_file):
             try:
                 with open(policy_file, "r", encoding="utf-8") as fp:
                     data = json.load(fp)
@@ -134,6 +147,25 @@ class UpdateDeliveryService:
                         config.update(data)
             except Exception as exc:
                 logger.warning("Could not read company policy sources config: %s", exc)
+
+        # 4. Fallback to settings.json update_dir ONLY IF sources is empty
+        if not config.get("sources"):
+            settings_paths = [self.base_dir / "config" / "settings.json"]
+            for cfg_file in settings_paths:
+                if safe_is_file(cfg_file):
+                    try:
+                        with open(cfg_file, "r", encoding="utf-8") as fp:
+                            settings_data = json.load(fp)
+                        update_dir = settings_data.get("paths", {}).get("update_dir", "").strip()
+                        if update_dir:
+                            config["sources"] = [{
+                                "type": "folder",
+                                "location": update_dir,
+                                "enabled": True,
+                            }]
+                        break
+                    except Exception as exc:
+                        logger.debug("Could not read update_dir from settings.json: %s", exc)
 
         return config
 
@@ -163,23 +195,33 @@ class UpdateDeliveryService:
             except Exception as exc:
                 logger.warning("Failed inspecting update source '%s': %s", location, exc)
 
+        if best_candidate:
+            logger.info(
+                "Phát hiện bản cập nhật mới v%s (bản hiện tại: v%s)",
+                best_candidate.version,
+                self.current_version,
+            )
         return best_candidate
 
     def _inspect_source(self, src_type: str, location: str) -> Optional[UpdateCandidate]:
         """Inspect a single source for latest.json catalog."""
         if src_type == "folder":
             folder_path = Path(location)
-            if not folder_path.exists():
+            if not safe_exists(folder_path):
                 logger.debug("LAN source folder does not exist: %s", folder_path)
                 return None
 
             latest_file = folder_path / "latest.json"
-            if not latest_file.is_file():
+            if not safe_is_file(latest_file):
                 logger.debug("No latest.json found in: %s", folder_path)
                 return None
 
-            with open(latest_file, "r", encoding="utf-8") as fp:
-                catalog_data = json.load(fp)
+            try:
+                with open(latest_file, "r", encoding="utf-8") as fp:
+                    catalog_data = json.load(fp)
+            except Exception as exc:
+                logger.warning("Could not parse %s: %s", latest_file, exc)
+                return None
 
             return self._parse_catalog_data(catalog_data, source_location=location)
 

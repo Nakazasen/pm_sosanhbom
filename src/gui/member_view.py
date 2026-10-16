@@ -20,9 +20,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-import openpyxl
-from openpyxl.styles import Font, PatternFill
 import pandas as pd
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
@@ -48,6 +47,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.msi_engine import FixSerialMaster, MSIEngine, evaluate_msi_branch
+from src.core.path_utils import get_app_base_dir
 from src.core.reconciliation import (
     ReconciliationEngine,
     _clean_part_code,
@@ -56,7 +56,7 @@ from src.core.reconciliation import (
 )
 from src.gui.leader_view import ROSTER_MECHA_1, ROSTER_MECHA_2, ROSTER_MECHA_3
 from src.gui.styles import get_theme_manager, tokens
-from src.services.machine_dict_service import MachineDictService
+from src.services.machine_dict_service import MachineDictService, get_machine_dict_service
 from src.gui.styles.tokens import (
     COLOR_DARK_STATUS_DIFF_BG,
     COLOR_DARK_STATUS_DIFF_TEXT,
@@ -241,7 +241,7 @@ class MemberWorkspaceView(QWidget):
         base_dir: Path | None = None,
     ) -> None:
         super().__init__(parent)
-        self.base_dir = Path(base_dir or r"D:\Sandbox\pm_sosanhbom")
+        self.base_dir = Path(base_dir) if base_dir else get_app_base_dir()
         self.reconciliation_engine = ReconciliationEngine()
         self.msi_engine = MSIEngine()
         self.fix_serial_master = FixSerialMaster()
@@ -324,6 +324,13 @@ class MemberWorkspaceView(QWidget):
         self.lbl_ref_status = QLabel("Chưa nạp BOM đối chiếu")
         self.lbl_ref_status.setStyleSheet("color: #6c757d; font-style: italic;")
         row_a.addWidget(self.lbl_ref_status)
+
+        self.btn_update_bom = QPushButton("🔄 Cập nhật BOM (PLM/R3)...")
+        self.btn_update_bom.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_update_bom.setStyleSheet("background-color: #2563EB; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px;")
+        self.btn_update_bom.setToolTip("Cập nhật file PLM hoặc SAP R3 mới vào workbook BOM (tương đương Nút 7 & 8 VBA)")
+        self.btn_update_bom.clicked.connect(self._open_bom_update_dialog)
+        row_a.addWidget(self.btn_update_bom)
         banner_layout.addLayout(row_a)
 
         # Row B: Auto-detected badges & status
@@ -368,8 +375,8 @@ class MemberWorkspaceView(QWidget):
         self.author_edit.setPlaceholderText("Gõ tên người phụ trách (VD: Son_mecha1, Duy_mecha1...)")
         author_names: list[str] = []
         try:
-            from src.core.member_database import MemberDatabaseManager
-            db = MemberDatabaseManager(base_dir=self.base_dir)
+            from src.core.member_database import get_member_database_manager
+            db = get_member_database_manager(base_dir=self.base_dir)
             author_names = db.get_all_account_names()
         except Exception as e:
             logger.warning(f"Could not load author names from DB: {e}")
@@ -382,7 +389,7 @@ class MemberWorkspaceView(QWidget):
         row_c.addWidget(self.author_edit)
 
         row_c.addWidget(QLabel("Mã Model:"))
-        self.dict_service = MachineDictService()
+        self.dict_service = get_machine_dict_service()
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
@@ -394,6 +401,13 @@ class MemberWorkspaceView(QWidget):
         elif models:
             self.model_combo.setCurrentIndex(0)
         row_c.addWidget(self.model_combo)
+
+        self.btn_reload_models = QPushButton()
+        self.btn_reload_models.setIcon(get_theme_manager().get_styled_icon("refresh"))
+        self.btn_reload_models.setToolTip("Tải lại danh sách Model từ file Excel từ điển (file_loaimay_nhommail.xlsx) [F5]")
+        self.btn_reload_models.clicked.connect(self._reload_models_from_excel)
+        row_c.addWidget(self.btn_reload_models)
+
         row_c.addStretch()
         banner_layout.addLayout(row_c)
 
@@ -779,7 +793,8 @@ class MemberWorkspaceView(QWidget):
 
         # 5. Read existing data and Q2 seal from workbook
         try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
             if "CTTT" in wb.sheetnames:
                 ws_cttt = wb["CTTT"]
                 # Check Q2 status
@@ -1129,6 +1144,25 @@ class MemberWorkspaceView(QWidget):
         self.engineer_name = new_author.strip()
         self.lbl_engineer_name.setText(self.engineer_name or "-")
 
+    def _reload_models_from_excel(self) -> None:
+        """Reload models directly from Excel dictionary."""
+        ok, msg = self.dict_service.reload_from_excel()
+        if ok:
+            models = self.dict_service.get_model_names()
+            cur = self.model_combo.currentText().strip()
+            self.model_combo.blockSignals(True)
+            self.model_combo.clear()
+            self.model_combo.addItems(models)
+            idx = self.model_combo.findText(cur)
+            if idx >= 0:
+                self.model_combo.setCurrentIndex(idx)
+            elif models:
+                self.model_combo.setCurrentIndex(0)
+            self.model_combo.blockSignals(False)
+            QMessageBox.information(self, "Tải Lại Model", msg)
+        else:
+            QMessageBox.warning(self, "Lỗi Tải Lại", msg)
+
     def import_cttt_from_file(self) -> None:
         """Import component rows from user-selected Excel (.xlsx, .xls) or CSV file."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1141,6 +1175,7 @@ class MemberWorkspaceView(QWidget):
             return
 
         try:
+            import pandas as pd
             p = Path(file_path)
             if p.suffix.lower() == ".csv":
                 df = pd.read_csv(p)
@@ -1159,16 +1194,16 @@ class MemberWorkspaceView(QWidget):
 
             self.clear_cttt_table()
             count = 0
-            for _, r in df.iterrows():
-                p_code = str(r[col_part]).strip()
+            for r in df.to_dict(orient="records"):
+                p_code = str(r.get(col_part, "")).strip()
                 if not p_code or p_code.lower() == "nan":
                     continue
-                p_name = str(r[col_name]) if col_name and pd.notna(r[col_name]) else ""
+                p_name = str(r[col_name]) if col_name and pd.notna(r.get(col_name)) else ""
                 try:
-                    p_qty = float(r[col_qty]) if col_qty and pd.notna(r[col_qty]) else 1.0
+                    p_qty = float(r[col_qty]) if col_qty and pd.notna(r.get(col_qty)) else 1.0
                 except (ValueError, TypeError):
                     p_qty = 1.0
-                p_page = str(r[col_page]) if col_page and pd.notna(r[col_page]) else "01"
+                p_page = str(r[col_page]) if col_page and pd.notna(r.get(col_page)) else "01"
 
                 self.add_cttt_row(page=p_page, part_code=p_code, part_name=p_name, quantity=p_qty)
                 count += 1
@@ -1463,6 +1498,13 @@ class MemberWorkspaceView(QWidget):
                 except Exception as exc:
                     QMessageBox.warning(self, "Lỗi nạp R3", f"Không thể đọc tệp R3: {exc}")
 
+    def _open_bom_update_dialog(self) -> None:
+        """Open BOM Update Dialog (modernizing Buttons 7 & 8 VBA) with current machine directory."""
+        from src.gui.bom_update_dialog import BOMUpdateDialog
+
+        dlg = BOMUpdateDialog(parent=self, initial_dir=self.current_machine_dir)
+        dlg.exec()
+
     def set_reference_data(
         self,
         plm_data: pd.DataFrame | None = None,
@@ -1496,13 +1538,13 @@ class MemberWorkspaceView(QWidget):
             qty_col = next((c for c in self.plm_data.columns if any(k in str(c).upper().replace(".", "").replace("'", "") for k in ["QUANTITY", "QTY", "SL", "SOLUONG", "SỐ LƯỢNG", "SỐLƯỢNG"]) or any(k in str(c).upper() for k in ["Q.TY", "Q'TY", "Q.TY."])), None)
             rev_col = next((c for c in self.plm_data.columns if any(k in str(c).upper() for k in ["REVISION", "REV", "ITEM_REV", "RELEASE STATUS"])), None)
             if id_col and qty_col:
-                for _, pr in self.plm_data.iterrows():
-                    code = str(pr[id_col]).strip().upper()
+                for pr in self.plm_data.to_dict(orient="records"):
+                    code = str(pr.get(id_col, "")).strip().upper()
                     try:
-                        q = float(pr[qty_col])
+                        q = float(pr.get(qty_col, 0.0))
                     except (ValueError, TypeError):
                         q = 0.0
-                    r_val = str(pr[rev_col]).strip() if rev_col and pd.notna(pr[rev_col]) else "A"
+                    r_val = str(pr[rev_col]).strip() if rev_col and pd.notna(pr.get(rev_col)) else "A"
                     prev_q, _ = plm_dict.get(code, (0.0, r_val))
                     plm_dict[code] = (prev_q + q, r_val)
 
@@ -1513,13 +1555,13 @@ class MemberWorkspaceView(QWidget):
             qty_col = next((c for c in self.r3_data.columns if any(k in str(c).upper().replace(".", "").replace("'", "") for k in ["QUANTITY", "QTY", "SL", "SOLUONG", "SỐ LƯỢNG", "SỐLƯỢNG"]) or any(k in str(c).upper() for k in ["Q.TY", "Q'TY", "Q.TY."])), None)
             rev_col = next((c for c in self.r3_data.columns if any(k in str(c).upper() for k in ["REVLEV", "REVISION", "REV"])), None)
             if mat_col and qty_col:
-                for _, rr in self.r3_data.iterrows():
-                    code = str(rr[mat_col]).strip().upper()
+                for rr in self.r3_data.to_dict(orient="records"):
+                    code = str(rr.get(mat_col, "")).strip().upper()
                     try:
-                        q = float(rr[qty_col])
+                        q = float(rr.get(qty_col, 0.0))
                     except (ValueError, TypeError):
                         q = 0.0
-                    r_val = str(rr[rev_col]).strip() if rev_col and pd.notna(rr[rev_col]) else "A"
+                    r_val = str(rr[rev_col]).strip() if rev_col and pd.notna(rr.get(rev_col)) else "A"
                     prev_q, _ = r3_dict.get(code, (0.0, r_val))
                     r3_dict[code] = (prev_q + q, r_val)
 
@@ -1721,6 +1763,9 @@ class MemberWorkspaceView(QWidget):
             target_file = target_dir / f"formnguoidung_{sub_unit}_{timestamp}.xlsx"
 
         try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill
+
             # Load or create workbook
             if target_file.exists():
                 wb = openpyxl.load_workbook(target_file)
@@ -1874,6 +1919,8 @@ class MemberWorkspaceView(QWidget):
         """Execute 'Mở khóa chỉnh sửa file': Clear Q2 cell, restore status, enable editing."""
         if self.current_assignment_file is not None and self.current_assignment_file.exists():
             try:
+                import openpyxl
+                from openpyxl.styles import Font, PatternFill
                 wb = openpyxl.load_workbook(self.current_assignment_file)
                 if "CTTT" in wb.sheetnames:
                     ws_cttt = wb["CTTT"]

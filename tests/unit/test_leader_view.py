@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import openpyxl
+import pandas as pd
 import pytest
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDateEdit, QMessageBox, QTableWidgetItem
@@ -577,6 +578,66 @@ class TestLeaderWizardStep3:
         assert (phutrach_dir / "Son_mecha1.xlsm").exists()
         assert not pkg1.exists()
 
+    def test_multi_file_assy_in_subunit_folder(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When 4 ASSY files are placed in <model>/CTTT/HONTAI, all 4 are scanned and consolidated."""
+        monkeypatch.setattr(QMessageBox, "information", lambda p, t, m: None)
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step1 = view.step1_widget
+        step3 = view.step3_widget
+
+        model_name = "Libra235ppm"
+        step1.model_combo.setCurrentText(model_name)
+        step1.sync_state_from_ui()
+
+        # Create CTTT/HONTAI folder
+        hontai_dir = tmp_path / model_name / "CTTT" / "HONTAI"
+        hontai_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create 4 ASSY files with parts
+        for i in range(1, 5):
+            f_path = hontai_dir / f"ASSY{i}.xlsx"
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "CTTT"
+            ws["Q2"] = "OK"
+            # Add header in row 2
+            ws.append(["SUB", "TRANG CTTT", "MÃ LINH KIỆN", "TÊN LINH KIỆN", "SỐ LƯỢNG"])
+            # Add data in row 3 (col C=code, col D=name, col E=qty, col O=explain)
+            row_data = ["HONTAI", f"0{i}", f"302FP0201{i}", f"PART_HONTAI_{i}", float(i)] + [""] * 9 + [f"EXPLAIN_{i}"]
+            ws.append(row_data)
+            wb.save(f_path)
+            wb.close()
+
+        # Scan submissions in Step 3
+        step3.scan_submissions()
+        assert len(step3.state.submissions) == 4
+        assert step3.submission_table.rowCount() == 4
+        assert step3.state.all_members_ok is True
+        assert step3.btn_consolidate.isEnabled() is True
+
+        # Execute consolidation
+        success = step3.execute_consolidation()
+        assert success is True
+        assert step3.state.step3_completed is True
+
+        # Verify all 4 files' items are consolidated into state.consolidated_cttt
+        assert len(step3.state.consolidated_cttt) == 4
+        part_codes = {item["MÃ LINH KIỆN"] for item in step3.state.consolidated_cttt}
+        assert part_codes == {"302FP02011", "302FP02012", "302FP02013", "302FP02014"}
+
+        # Verify all 4 files are archived to HONTAI/phutrach/
+        phutrach_dir = hontai_dir / "phutrach"
+        assert phutrach_dir.exists()
+        for i in range(1, 5):
+            assert (phutrach_dir / f"ASSY{i}.xlsx").exists()
+            assert not (hontai_dir / f"ASSY{i}.xlsx").exists()
+
+
 
 # =============================================================================
 # Step 4 Tests
@@ -673,6 +734,83 @@ class TestLeaderWizardStep4:
         p2 = step4._build_tier2_preview()
         assert "Báo cáo Hoàn tất Đối soát BOM" in p2.subject
         assert "100% OK" in p2.html_body
+
+    def test_update_action_buttons_exist(
+        self,
+        qapp: QApplication,
+        tmp_path: Path,
+    ) -> None:
+        """Verify update action buttons are present in Step 4 UI."""
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step4 = view.step4_widget
+
+        assert hasattr(step4, "btn_update_plm")
+        assert hasattr(step4, "btn_update_r3")
+        assert hasattr(step4, "btn_update_both")
+        assert "PLM" in step4.btn_update_plm.text()
+        assert "R3" in step4.btn_update_r3.text()
+        assert "PLM & R3" in step4.btn_update_both.text()
+
+    @patch("src.core.inheritance_engine.refresh_workbook_pivots", return_value=True)
+    def test_update_plm_and_r3_actions_execute(
+        self,
+        mock_refresh: MagicMock,
+        qapp: QApplication,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Executing update actions updates BOM workbook sheets and moves superseded files."""
+        monkeypatch.setattr(QMessageBox, "information", lambda p, t, m: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda p, t, m, b: QMessageBox.StandardButton.Yes)
+
+        view = LeaderWorkspaceView(base_dir=tmp_path)
+        step4 = view.step4_widget
+
+        view.step1_widget.model_combo.setCurrentText("Virgo")
+        view.step1_widget.machine_table.setRowCount(0)
+        view.step1_widget._add_machine_row(code="11002YJ3NL0")
+        view.step1_widget.sync_state_from_ui()
+        step4.sync_machine_combo()
+
+        mach_dir = tmp_path / "Virgo" / "11002YJ3NL0"
+        mach_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Generate initial BOM workbook
+        out_file = step4.generate_master_bom_file()
+        assert out_file is not None
+        assert out_file.exists()
+
+        # 2. Setup new PLM file
+        plm_new = mach_dir / "PLM_New_Rev2.xlsx"
+        df_plm_new = pd.DataFrame([
+            {"level": 1, "item_id": "302FP02010", "item_name": "MOTOR BRACKET", "quantity": 2.0}
+        ])
+        df_plm_new.to_excel(plm_new, index=False)
+        view.state.machines[0].plm_file = plm_new
+
+        # 3. Test _on_update_plm_clicked
+        step4._on_update_plm_clicked()
+        assert "Cập nhật PLM thành công" in step4.lbl_bom_status.text()
+        assert not plm_new.exists()  # moved to capnhat/old
+
+        # 4. Setup new R3 file
+        r3_new = mach_dir / "R3_New_Rev2.xlsx"
+        df_r3_new = pd.DataFrame([
+            {"level": 1, "material": "302FP02010", "description": "MOTOR BRACKET", "quantity": 2.0}
+        ])
+        df_r3_new.to_excel(r3_new, index=False)
+        view.state.machines[0].r3_file = r3_new
+
+        # 5. Test _on_update_r3_clicked
+        step4._on_update_r3_clicked()
+        assert "Cập nhật R3 thành công" in step4.lbl_bom_status.text()
+        assert not r3_new.exists()  # moved to capnhat/old
+
+        # 6. Verify workbook has PLM_old and R3_old sheets
+        wb_check = openpyxl.load_workbook(out_file)
+        assert "PLM_old" in wb_check.sheetnames
+        assert "R3_old" in wb_check.sheetnames
+        wb_check.close()
 
 
 # =============================================================================

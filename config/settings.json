@@ -3,8 +3,11 @@
   "paths": {
     "shared_db_path": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\ssbom_master.db",
     "update_dir": "\\\\fstvn01\\Data\\00_KDTVN Common(KDTVN共通)\\⑤Production Engineering(製造技術)\\Hang muc can luu\\Vinh\\Pm_sosanhBOM\\release_update",
-    "last_download_dirs_by_model": {},
-    "last_download_dir": ""
+    "last_download_dirs_by_model": {
+      "Libra235ppm": "C:\\Users\\tvn183660\\AppData\\Local\\Temp\\pytest-of-tvn183660\\pytest-30\\Libra235ppm",
+      "PolarisNext": "PolarisNext"
+    },
+    "last_download_dir": "PolarisNext"
   },
   "custom_model_codes": {
     "6thNext": [
@@ -94,21 +97,8 @@
       ]
     },
     "Libra235ppm": {
-      "stage": "DMT (maT - tiền tố T10)",
-      "machines": [
-        {
-          "code": "T100C3CNL0",
-          "model_name": "Libra235ppm",
-          "is_excluded": false,
-          "note": ""
-        },
-        {
-          "code": "T100C3DNL0",
-          "model_name": "Libra235ppm",
-          "is_excluded": false,
-          "note": ""
-        }
-      ]
+      "stage": "MP (ma1 - tiền tố 110)",
+      "machines": []
     }
   },
   "last_selected_model": "Libra235ppm",

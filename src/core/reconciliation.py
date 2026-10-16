@@ -331,16 +331,22 @@ def reconcile_three_way(
     r3_map = r3_summary.set_index("part_code").to_dict(orient="index") if not r3_summary.empty else {}
 
     results = []
-    for _, row in df_cttt.iterrows():
-        raw_code = row[code_col] if code_col in row else ""
+    cttt_records = df_cttt.to_dict(orient="records") if not df_cttt.empty else []
+    for row in cttt_records:
+        raw_code = row.get(code_col, "") if code_col else ""
         norm_code = _clean_part_code(raw_code)
 
-        cttt_qty = _to_float(row[qty_col]) if qty_col and qty_col in row else 0.0
-        sub_val = str(row[sub_col]).strip() if sub_col and sub_col in row and pd.notna(row[sub_col]) else ""
-        page_val = str(row[page_col]).strip() if page_col and page_col in row and pd.notna(row[page_col]) else ""
-        name_val = str(row[name_col]).strip() if name_col and name_col in row and pd.notna(row[name_col]) else ""
-        pic_val = str(row[pic_col]).strip() if pic_col and pic_col in row and pd.notna(row[pic_col]) else ""
-        exp_val = str(row[exp_col]).strip() if exp_col and exp_col in row and pd.notna(row[exp_col]) else ""
+        cttt_qty = _to_float(row.get(qty_col)) if qty_col and qty_col in row else 0.0
+        sub_raw = row.get(sub_col) if sub_col else None
+        sub_val = str(sub_raw).strip() if sub_raw is not None and pd.notna(sub_raw) else ""
+        page_raw = row.get(page_col) if page_col else None
+        page_val = str(page_raw).strip() if page_raw is not None and pd.notna(page_raw) else ""
+        name_raw = row.get(name_col) if name_col else None
+        name_val = str(name_raw).strip() if name_raw is not None and pd.notna(name_raw) else ""
+        pic_raw = row.get(pic_col) if pic_col else None
+        pic_val = str(pic_raw).strip() if pic_raw is not None and pd.notna(pic_raw) else ""
+        exp_raw = row.get(exp_col) if exp_col else None
+        exp_val = str(exp_raw).strip() if exp_raw is not None and pd.notna(exp_raw) else ""
 
         # Lookup in PLM
         plm_entry = plm_map.get(norm_code, {})

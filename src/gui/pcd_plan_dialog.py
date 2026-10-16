@@ -31,10 +31,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.member_database import MemberDatabaseManager
-from src.gui.styles.theme_manager import get_theme_manager
+from src.core.member_database import MemberDatabaseManager, get_member_database_manager
+from src.gui.styles import (
+    apply_smart_dialog_geometry,
+    ensure_window_fits_screen,
+    get_theme_manager,
+)
 from src.reporting.outlook_mailer import EmailPreview, OutlookMailer
-from src.services.machine_dict_service import DEFAULT_DICT_PATH, MachineDictService, MachineInfo
+from src.services.machine_dict_service import DEFAULT_DICT_PATH, MachineDictService, MachineInfo, get_machine_dict_service
 from src.services.pcd_plan_service import PCDPlanItem, PCDPlanScanResult, PCDPlanService
 
 logger = logging.getLogger(__name__)
@@ -90,16 +94,30 @@ class PCDPlanScanDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.plan_service = plan_service or PCDPlanService()
-        self.dict_service = dict_service or MachineDictService()
+        self.dict_service = dict_service or get_machine_dict_service()
         self.mailer = mailer or OutlookMailer()
-        self.db_manager = db_manager or MemberDatabaseManager(base_dir=getattr(parent, "base_dir", None))
+        self.db_manager = db_manager or get_member_database_manager(base_dir=getattr(parent, "base_dir", None))
 
         self.setWindowTitle("Quét Kế Hoạch Sản Xuất Tháng PCD & Khởi Tạo Dự Án Tự Động")
-        self.resize(1020, 680)
+        self._is_compact = apply_smart_dialog_geometry(
+            self,
+            ideal_w=1020,
+            ideal_h=650,
+            min_w=750,
+            min_h=400,
+            max_w_ratio=0.94,
+            max_h_ratio=0.86,
+            margin_bottom=20,
+        )
 
         self._scanned_items: list[PCDPlanItem] = []
         self._init_ui()
         self._auto_detect_plan()
+
+    def showEvent(self, event: Any) -> None:
+        """Ensure dialog is cleanly clamped within available geometry before display."""
+        super().showEvent(event)
+        ensure_window_fits_screen(self, margin_bottom=20)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -210,7 +228,7 @@ class PCDPlanScanDialog(QDialog):
         self.btn_deselect_all = QPushButton("Bỏ chọn")
         self.btn_deselect_all.clicked.connect(lambda: self._set_all_rows_checked(False))
         self.btn_reload_dict = QPushButton("Tải lại từ điển Loại máy")
-        self.btn_reload_dict.setIcon(get_theme_manager().get_styled_icon("refresh-cw"))
+        self.btn_reload_dict.setIcon(get_theme_manager().get_styled_icon("refresh"))
         self.btn_reload_dict.clicked.connect(self._reload_dictionary)
 
         self.btn_add_to_dict = QPushButton("+ Thêm mã vào từ điển")
@@ -571,8 +589,9 @@ class PCDPlanScanDialog(QDialog):
                     chk.setChecked(checked)
 
     def _reload_dictionary(self) -> None:
-        if self.dict_service.load(force_reload=True):
-            QMessageBox.information(self, "Thông báo", "Đã tải lại từ điển Loại máy thành công!")
+        success, msg = self.dict_service.reload_from_excel()
+        if success:
+            QMessageBox.information(self, "Thông báo", msg)
             # Re-match items
             for item in self._scanned_items:
                 matched = self.dict_service.extract_and_lookup_material(item.material_code)
@@ -580,7 +599,7 @@ class PCDPlanScanDialog(QDialog):
                 item.machine_name = matched.machine_name if matched else ""
             self._populate_table()
         else:
-            QMessageBox.warning(self, "Lỗi", "Không thể tải lại từ điển từ file_loaimay_nhommail.xlsx!")
+            QMessageBox.warning(self, "Lỗi", msg)
 
     def _open_add_to_dict_dialog(self) -> None:
         """Dialog to add a new machine code and write back 2-way to file_loaimay_nhommail.xlsx."""
