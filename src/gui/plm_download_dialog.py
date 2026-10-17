@@ -736,6 +736,11 @@ class UnifiedBOMDownloadWorker(QObject):
             self._execute_run(total_parts)
         finally:
             try:
+                import gc
+                gc.collect()
+            except Exception:
+                pass
+            try:
                 import pythoncom
                 pythoncom.CoUninitialize()
             except Exception:
@@ -764,7 +769,6 @@ class UnifiedBOMDownloadWorker(QObject):
             self.log_message.emit(f"\n>> BƯỚC 1: TẢI TỪ SIEMENS TEAMCENTER (TC24) [Tài khoản: {self.tc_account}]")
             self.log_message.emit("   (Lưu ý: TC24 luôn tự động tải cây cấu trúc BOM mới nhất)")
 
-            tc_client = None
             try:
                 from selenium.webdriver.common.by import By
                 from selenium.webdriver.support import expected_conditions as EC
@@ -777,13 +781,6 @@ class UnifiedBOMDownloadWorker(QObject):
                 download_scratch = Path("scratch/downloads").resolve()
                 download_scratch.mkdir(parents=True, exist_ok=True)
 
-                config = BrowserConfig(
-                    download_dir=download_scratch,
-                    headless=True,
-                )
-                sm = TC2412SessionManager(config=config)
-                tc_client = TC2412AutomationClient(session_manager=sm)
-
                 tc_user = self.tc_account.strip() or "vn_pe02"
                 tc_pass = tc_user
                 try:
@@ -793,16 +790,6 @@ class UnifiedBOMDownloadWorker(QObject):
                 except Exception:
                     pass
 
-                self.log_message.emit(f"[*] [TC24] Đang đăng nhập tự động vào Teamcenter 2412 ({tc_user})...")
-                try:
-                    tc_client.login(username=tc_user, password=tc_pass)
-                    self.log_message.emit("[+] [TC24] Đăng nhập thành công! Bắt đầu trích xuất BOM.")
-                except Exception as login_err:
-                    self.log_message.emit(f"[-] [TC24] Cảnh báo đăng nhập: {login_err}")
-
-                driver = tc_client.driver
-                wait = WebDriverWait(driver, 25)
-
                 for idx, item in enumerate(self.items, 1):
                     part = item.part_number
                     current_step += 1
@@ -810,6 +797,8 @@ class UnifiedBOMDownloadWorker(QObject):
                     self.progress.emit(pct, f"[{current_step}/{total_steps}] TC24: Đang tải mã {part}...")
                     self.log_message.emit(f"\n--- [TC24] Xử lý mã ({idx}/{total_parts}): {part} ---")
 
+                    tc_client = None
+                    part_scratch = None
                     try:
                         part_model = self.part_model_map.get(part)
                         if not part_model:
@@ -833,6 +822,25 @@ class UnifiedBOMDownloadWorker(QObject):
                                     raw_file = cand
                                     break
 
+                        # Validate raw_file integrity - if corrupt or unexpanded (<10 rows), discard and download fresh
+                        if raw_file and raw_file.exists():
+                            is_valid_raw = False
+                            try:
+                                import zipfile
+                                if zipfile.is_zipfile(raw_file) and raw_file.stat().st_size > 15000:
+                                    wb_t = openpyxl.load_workbook(str(raw_file), read_only=True)
+                                    if wb_t.active.max_row and wb_t.active.max_row > 10:
+                                        is_valid_raw = True
+                                    wb_t.close()
+                            except Exception:
+                                is_valid_raw = False
+
+                            if not is_valid_raw:
+                                self.log_message.emit(
+                                    f"   [!] Bản lưu trữ {raw_file.name} không hoàn chỉnh (< 10 dòng hoặc lỗi). Sẽ tải mới từ TC24."
+                                )
+                                raw_file = None
+
                         target_dest = self.dest_dir / f"PLM_{part}.xlsx"
 
                         if raw_file and raw_file.exists():
@@ -847,119 +855,168 @@ class UnifiedBOMDownloadWorker(QObject):
                             )
                             plm_success += 1
                         else:
-                            self.log_message.emit(f"[*] [TC24] Tìm kiếm mã {part} trên hệ thống...")
-                            for f in download_scratch.glob("*"):
-                                try:
-                                    f.unlink()
-                                except Exception:
-                                    pass
+                            # 0. Clean and isolate per-part download directory & browser session
+                            part_scratch = download_scratch / f"{part}_{int(time.time() * 1000)}"
+                            part_scratch.mkdir(parents=True, exist_ok=True)
+
+                            self.log_message.emit(f"[*] [TC24] Khởi tạo phiên trình duyệt cô lập cho mã {part}...")
+                            config = BrowserConfig(
+                                download_dir=part_scratch,
+                                headless=True,
+                            )
+                            sm = TC2412SessionManager(config=config)
+                            tc_client = TC2412AutomationClient(session_manager=sm)
+
+                            self.log_message.emit(f"[*] [TC24] Đang đăng nhập tự động vào Teamcenter 2412 ({tc_user})...")
+                            try:
+                                tc_client.login(username=tc_user, password=tc_pass)
+                                self.log_message.emit("[+] [TC24] Đăng nhập thành công! Bắt đầu trích xuất BOM.")
+                            except Exception as login_err:
+                                self.log_message.emit(f"[-] [TC24] Cảnh báo đăng nhập: {login_err}")
+
+                            from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+                            driver = tc_client.driver
+                            wait = WebDriverWait(
+                                driver, 25, ignored_exceptions=(NoSuchElementException, StaleElementReferenceException)
+                            )
+
+                            try:
+                                driver.execute_cdp_cmd(
+                                    "Page.setDownloadBehavior",
+                                    {"behavior": "allow", "downloadPath": str(part_scratch.resolve())},
+                                )
+                            except Exception:
+                                pass
 
                             # 1. Search item (allow up to 45s for heavy BOM queries)
                             self.log_message.emit(f"[*] [TC24] Tìm kiếm mã {part} trên hệ thống...")
                             tc_client.search_item(part, timeout=45)
                             time.sleep(2.5)
 
-                            # 2. Content tab
-                            if "page=Content" not in driver.current_url:
-                                try:
-                                    content_tab = wait.until(
-                                        EC.element_to_be_clickable(
-                                            (
-                                                By.XPATH,
-                                                "//a[normalize-space()='Content' or @title='Content' or @data-locator='tab-tc_xrt_Content']"
-                                                " | //span[normalize-space()='Content' or @title='Content']"
-                                                " | //li[contains(@class,'sw-tab')]//a[normalize-space()='Content']",
-                                            )
-                                        )
-                                    )
-                                    content_tab.click()
-                                    time.sleep(3.5)
-                                except Exception:
-                                    tc_client.navigate_to_content_tab(timeout=15)
-                            else:
-                                self.log_message.emit("   [+] Tab Content đã mở sẵn.")
-
-                            # 3. Select root row and Expand Below
-                            try:
-                                root_cell = wait.until(
-                                    EC.element_to_be_clickable(
-                                        (By.CSS_SELECTOR, "div.aw-splm-tableRow div.aw-splm-tableCellText, div.aw-splm-tableRow")
-                                    )
+                            # 2. Content tab: Actively locate and click the Content tab element
+                            self.log_message.emit("   [*] Đang chuyển sang tab Content...")
+                            content_tab_found = False
+                            for attempt in range(10):
+                                tabs = driver.find_elements(
+                                    By.XPATH,
+                                    "//a[normalize-space()='Content' or @title='Content' or @data-locator='tab-tc_xrt_Content']"
+                                    " | //span[normalize-space()='Content' or @title='Content']"
+                                    " | //li[contains(@class,'sw-tab')]//a[normalize-space()='Content']",
                                 )
-                                try:
-                                    root_cell.click()
-                                except Exception:
-                                    driver.execute_script("arguments[0].click();", root_cell)
+                                for t in tabs:
+                                    try:
+                                        if t.is_displayed():
+                                            try:
+                                                t.click()
+                                            except Exception:
+                                                driver.execute_script("arguments[0].click();", t)
+                                            content_tab_found = True
+                                            break
+                                    except Exception:
+                                        pass
+                                if content_tab_found:
+                                    time.sleep(3)
+                                    exp_test = driver.find_elements(
+                                        By.CSS_SELECTOR,
+                                        "button[button-id='Awb0Expand'], button.aw-commandId-Awb0Expand, button[command-id='Awb0Expand']",
+                                    )
+                                    if exp_test and any(b.is_displayed() for b in exp_test):
+                                        break
                                 time.sleep(1)
-                            except Exception:
-                                pass
 
+                            # 3. Expand Below
                             exp_btn = wait.until(
                                 EC.element_to_be_clickable(
-                                    (By.CSS_SELECTOR, "button[command-id='Awb0Expand'], [command-id='Awb0Expand']")
+                                    (
+                                        By.CSS_SELECTOR,
+                                        "button[button-id='Awb0Expand'], button.aw-commandId-Awb0Expand, button[command-id='Awb0Expand']",
+                                    )
                                 )
                             )
                             try:
                                 exp_btn.click()
                             except Exception:
-                                driver.execute_script("arguments[0].click();", exp_btn)
-                            time.sleep(1.5)
+                                driver.execute_script(
+                                    "var b = document.querySelector(\"button[button-id='Awb0Expand'], button.aw-commandId-Awb0Expand, [command-id='Awb0Expand']\"); if(b) b.click();"
+                                )
+                            time.sleep(2)
 
-                            cmds = driver.find_elements(
-                                By.CSS_SELECTOR, "div.aw-widgets-cellListItem, [command-id='Awb0ExpandBelow'], div.sw-popup div, li[command-id='Awb0ExpandBelow']"
+                            cmds = wait.until(
+                                lambda d: d.find_elements(
+                                    By.CSS_SELECTOR,
+                                    "div.aw-widgets-cellListItem, [command-id='Awb0ExpandBelow'], button[button-id='Awb0ExpandBelow'], div.sw-popup div",
+                                )
                             )
-                            exp_below = [
-                                c for c in cmds if "expand below" in (c.text or "").lower() or c.get_attribute("command-id") == "Awb0ExpandBelow"
-                            ]
+                            exp_below = None
+                            for c in cmds:
+                                try:
+                                    txt = (c.text or "").lower()
+                                    cid = (c.get_attribute("command-id") or "").lower()
+                                    bid = (c.get_attribute("button-id") or "").lower()
+                                    if "expand below" in txt or cid == "awb0expandbelow" or bid == "awb0expandbelow":
+                                        exp_below = c
+                                        break
+                                except StaleElementReferenceException:
+                                    pass
+
                             if exp_below:
                                 try:
-                                    exp_below[0].click()
+                                    exp_below.click()
                                 except Exception:
-                                    driver.execute_script("arguments[0].click();", exp_below[0])
+                                    driver.execute_script("arguments[0].click();", exp_below)
                                 self.log_message.emit("   [*] Đang mở rộng toàn bộ cây BOM...")
                                 time.sleep(15)
 
                             # 4. Giữ chọn dòng gốc (Bỏ bước Select All theo khuyến nghị Slide 4:
                             # giúp xuất toàn bộ cây cấu trúc assembly nhanh hơn, tránh lỗi tải DOM ảo và không làm vỡ Template).
-                            try:
-                                root_cell = driver.find_element(
-                                    By.CSS_SELECTOR,
-                                    "div.aw-splm-tableRow[data-indexnumber='0'], div.aw-splm-tableRow",
-                                )
-                                driver.execute_script("arguments[0].click();", root_cell)
-                                time.sleep(1)
-                            except Exception:
-                                pass
 
                             # 5. Open Export to Excel
                             exp_imp_btn = wait.until(
                                 EC.element_to_be_clickable(
-                                    (By.CSS_SELECTOR, "button[command-id='Arm0ExportImport'], [command-id='Arm0ExportImport']")
+                                    (
+                                        By.CSS_SELECTOR,
+                                        "button[command-id='Arm0ExportImport'], button[button-id='Arm0ExportImport'], button.aw-commandId-Arm0ExportImport",
+                                    )
                                 )
                             )
                             try:
                                 exp_imp_btn.click()
                             except Exception:
-                                driver.execute_script("arguments[0].click();", exp_imp_btn)
+                                driver.execute_script(
+                                    "var b = document.querySelector(\"button[command-id='Arm0ExportImport'], button[button-id='Arm0ExportImport'], button.aw-commandId-Arm0ExportImport\"); if(b) b.click();"
+                                )
                             time.sleep(2)
 
-                            try:
-                                safe_trigger_export_to_excel(driver, timeout=10)
-                            except Exception:
-                                popup = wait.until(
-                                    EC.presence_of_element_located(
-                                        (By.CSS_SELECTOR, "div.aw-popup-commandListContainer, div.aw-popup, div.sw-popup")
-                                    )
+                            popup_items = wait.until(
+                                lambda d: d.find_elements(
+                                    By.CSS_SELECTOR, "div.aw-popup-commandListContainer, div.aw-popup, div.sw-popup"
                                 )
-                                for it in popup.find_elements(By.CSS_SELECTOR, ".aw-widgets-cellListItem, .aw-command, button, a, div"):
-                                    txt = (it.text or "").strip().lower()
-                                    if "export to excel" in txt and "import" not in txt:
+                            )
+                            target_btn = None
+                            for popup in popup_items:
+                                if popup.is_displayed():
+                                    for it in popup.find_elements(By.CSS_SELECTOR, ".aw-command, .aw-widgets-cellListItem, button, a, div"):
                                         try:
-                                            it.click()
-                                        except Exception:
-                                            driver.execute_script("arguments[0].click();", it)
-                                        break
-                            time.sleep(4)
+                                            txt = (it.text or "").strip().lower()
+                                            cid = (it.get_attribute("command-id") or "").lower()
+                                            if "import" in txt or "import" in cid:
+                                                continue
+                                            if "export to excel" in txt or cid == "awp0exporttoexcel":
+                                                target_btn = it
+                                                break
+                                        except StaleElementReferenceException:
+                                            pass
+                                if target_btn:
+                                    break
+
+                            if target_btn:
+                                try:
+                                    target_btn.click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", target_btn)
+                            else:
+                                safe_trigger_export_to_excel(driver, timeout=10)
+                            time.sleep(3)
 
                             # 6. Panel configuration
                             panel = wait.until(
@@ -1009,7 +1066,10 @@ class UnifiedBOMDownloadWorker(QObject):
                                 time.sleep(1.5)
                                 # Check if browser is actively downloading chunks
                                 cr_files = (
-                                    list(download_scratch.glob("*.crdownload"))
+                                    list(part_scratch.glob("*.crdownload"))
+                                    + list(part_scratch.glob("*.tmp"))
+                                    + list(part_scratch.glob("*.download"))
+                                    + list(download_scratch.glob("*.crdownload"))
                                     + list(download_scratch.glob("*.tmp"))
                                     + list(download_scratch.glob("*.download"))
                                 )
@@ -1017,7 +1077,7 @@ class UnifiedBOMDownloadWorker(QObject):
                                     continue
 
                                 cand_files = [
-                                    f for f in download_scratch.glob("*")
+                                    f for f in (list(part_scratch.glob("*")) + list(download_scratch.glob("*")))
                                     if f.is_file()
                                     and not f.name.endswith(".crdownload")
                                     and not f.name.endswith(".tmp")
@@ -1057,7 +1117,7 @@ class UnifiedBOMDownloadWorker(QObject):
                                 downloaded_path = ext_path
 
                             # Convert macro-enabled Excel export to pure .xlsx
-                            clean_xlsx = download_scratch / f"PLM_{part}.pure.xlsx"
+                            clean_xlsx = part_scratch / f"PLM_{part}.pure.xlsx"
                             if is_macro_file(downloaded_path):
                                 self.log_message.emit("   [*] Phát hiện file chứa macro/vba từ TC24, đang chuyển đổi sang pure .xlsx...")
                                 conv_ok = convert_to_pure_xlsx(downloaded_path, clean_xlsx)
@@ -1083,6 +1143,19 @@ class UnifiedBOMDownloadWorker(QObject):
                             )
                             self.log_message.emit(f"[+] [TC24] Tải và chuẩn hóa thành công: {orig_c:,} dòng raw -> {final_c:,} dòng chuẩn.")
                             plm_success += 1
+
+                            # Close Export command panel cleanly and clean up isolated scratch
+                            try:
+                                close_btns = driver.find_elements(
+                                    By.CSS_SELECTOR,
+                                    "button[command-id='Awp0ClosePanel'], button.aw-commands-close, button[aria-label='Close'], button[title='Close']",
+                                )
+                                for cb in close_btns:
+                                    if cb.is_displayed():
+                                        driver.execute_script("arguments[0].click();", cb)
+                                        time.sleep(0.5)
+                            except Exception:
+                                pass
 
                         # Apply BolocBom model filtering if requested
                         if self.apply_bolocbom and target_dest.exists() and self.tc_auto_standardize:
@@ -1117,14 +1190,28 @@ class UnifiedBOMDownloadWorker(QObject):
                                     break
 
                     except Exception as exc:
+                        import traceback
+                        logger.error("TC24 error for %s: %s\n%s", part, exc, traceback.format_exc())
                         error_messages.append(f"TC24 ({part}): {exc}")
                         self.log_message.emit(f"[-] [TC24] LỖI khi xử lý mã {part}: {exc}")
+                    finally:
+                        if tc_client is not None:
+                            try:
+                                tc_client.close()
+                            except Exception:
+                                pass
+                            tc_client = None
+                        if part_scratch is not None and part_scratch.exists():
+                            try:
+                                shutil.rmtree(part_scratch, ignore_errors=True)
+                            except Exception:
+                                pass
 
             except Exception as outer_tc_exc:
                 error_messages.append(f"TC24 (Kết nối/Đăng nhập): {outer_tc_exc}")
                 self.log_message.emit(f"[-] [TC24] Sự cố kết nối Teamcenter: {outer_tc_exc}")
             finally:
-                if tc_client:
+                if tc_client is not None:
                     try:
                         tc_client.close()
                     except Exception:
@@ -1218,6 +1305,15 @@ class UnifiedBOMDownloadWorker(QObject):
                             conn_mgr.logoff_and_exit(close_saplogon=True)
                     except Exception as logout_err:
                         self.log_message.emit(f"[-] [SAP R3] Cảnh báo khi thoát SAP GUI: {logout_err}")
+                    finally:
+                        sap_service = None
+                        session = None
+                        if conn_mgr is not None:
+                            try:
+                                conn_mgr.disconnect()
+                            except Exception:
+                                pass
+                            conn_mgr = None
 
         # ---------------------------------------------------------------------
         # Final Summary & Accurate Outcome

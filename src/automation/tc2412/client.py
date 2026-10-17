@@ -458,6 +458,14 @@ class TC2412AutomationClient:
         search_url = TC2412URLs.get_search_url(self.base_url, clean_item_id)
         wait = WebDriverWait(driver, timeout)
 
+        # If already on search page, navigate to Home first to force Angular route refresh
+        if "teamcenter.search.search" in driver.current_url:
+            try:
+                driver.get(TC2412URLs.get_home_url(self.base_url))
+                time.sleep(1.0)
+            except Exception:
+                pass
+
         try:
             driver.get(search_url)
         except WebDriverException as exc:
@@ -466,79 +474,119 @@ class TC2412AutomationClient:
         # Wait for either results list or 'no results' label
         by_list, val_list = TC2412Selectors.SEARCH_RESULTS_LIST
         by_no_res, val_no_res = TC2412Selectors.NO_RESULTS_LABEL
-
-        try:
-            wait.until(
-                lambda d: d.find_elements(by_list, val_list) or d.find_elements(by_no_res, val_no_res)
-            )
-        except TimeoutException as exc:
-            raise SearchTimeoutError(f"Search for '{clean_item_id}' timed out after {timeout}s.") from exc
-
-        no_res = driver.find_elements(by_no_res, val_no_res)
-        if no_res and any(e.is_displayed() for e in no_res):
-            raise ItemNotFoundError(f"Item '{clean_item_id}' not found on TC2412.")
-
         by_items, val_items = TC2412Selectors.SEARCH_RESULT_ITEMS
-        items = driver.find_elements(by_items, val_items)
-        if not items:
-            raise ItemNotFoundError(f"No result rows returned for '{clean_item_id}'.")
-
-        # Match revision or select target item
-        target_item = None
-        resolved_rev = part_rev or "Latest"
-
-        if part_rev:
-            clean_rev = part_rev.strip().lower()
-            for item in items:
-                item_text = (item.text or "").lower()
-                if clean_rev in item_text:
-                    target_item = item
-                    resolved_rev = part_rev
-                    break
-
-        if target_item is None:
-            # Prioritize Machine Body / Main Item (MBC_) over sub-boards (PBA-, RBA-)
-            for item in items:
-                txt = (item.text or "").lower()
-                if "mbc" in txt:
-                    target_item = item
-                    break
-
-            if target_item is None:
-                for item in items:
-                    txt = (item.text or "").lower()
-                    if "pba" not in txt and "rba" not in txt:
-                        target_item = item
-                        break
-
-            if target_item is None:
-                target_item = items[-1] if len(items) > 1 else items[0]
-
-        # Click to open into showObject
         by_title, val_title = TC2412Selectors.SEARCH_ITEM_TITLE
         by_open, val_open = TC2412Selectors.SEARCH_ITEM_OPEN_BTN
-        try:
-            link = target_item.find_element(by_title, val_title)
-            link.click()
-        except NoSuchElementException:
+
+        start_t = time.time()
+        resolved_rev = part_rev or "Latest"
+
+        while time.time() - start_t < timeout:
+            # If already on showObject page, return immediately
+            if "showObject?uid=" in driver.current_url or (
+                "showObject?" in driver.current_url and "showObjectSearch" not in driver.current_url
+            ):
+                self.session.touch()
+                return resolved_rev
+
             try:
-                open_btns = target_item.find_elements(by_open, val_open)
-                if open_btns:
-                    open_btns[0].click()
-                else:
-                    target_item.click()
-            except Exception:
-                target_item.click()
-        except Exception:
-            target_item.click()
+                # Check for explicit "No Results"
+                no_res = driver.find_elements(by_no_res, val_no_res)
+                if no_res:
+                    for nr in no_res:
+                        try:
+                            if nr.is_displayed():
+                                raise ItemNotFoundError(f"Item '{clean_item_id}' not found on TC2412.")
+                        except StaleElementReferenceException:
+                            pass
 
-        try:
-            wait.until(lambda d: "showObject" in d.current_url)
-        except Exception:
-            pass
+                items = driver.find_elements(by_items, val_items)
+                if not items:
+                    time.sleep(1.0)
+                    continue
 
-        self.session.touch()
-        return resolved_rev
+                # Filter displayed items and check for stability
+                visible_items: list[tuple[Any, str]] = []
+                for it in items:
+                    try:
+                        if it.is_displayed():
+                            t = (it.text or "").strip()
+                            if t:
+                                visible_items.append((it, t))
+                    except StaleElementReferenceException:
+                        pass
+
+                if not visible_items:
+                    time.sleep(1.0)
+                    continue
+
+                # Check if any item contains clean_item_id or valid text
+                matching_items = [
+                    (it, t) for (it, t) in visible_items
+                    if clean_item_id.lower() in t.lower()
+                ]
+                candidate_pool = matching_items if matching_items else visible_items
+
+                # Prioritize Revision or MBC_ over PBA-/RBA-
+                chosen = None
+                if part_rev:
+                    rev_clean = part_rev.strip().lower()
+                    for it, t in candidate_pool:
+                        if rev_clean in t.lower():
+                            chosen = it
+                            resolved_rev = part_rev
+                            break
+
+                if chosen is None:
+                    for it, t in candidate_pool:
+                        if "mbc" in t.lower():
+                            chosen = it
+                            break
+
+                if chosen is None:
+                    for it, t in candidate_pool:
+                        txt = t.lower()
+                        if "pba" not in txt and "rba" not in txt:
+                            chosen = it
+                            break
+
+                if chosen is None:
+                    chosen = candidate_pool[-1][0] if len(candidate_pool) > 1 else candidate_pool[0][0]
+
+                # Locate clickable link
+                click_target = None
+                try:
+                    click_target = chosen.find_element(by_title, val_title)
+                except Exception:
+                    open_btns = chosen.find_elements(by_open, val_open)
+                    click_target = open_btns[0] if open_btns else chosen
+
+                # Attempt click
+                try:
+                    click_target.click()
+                except Exception:
+                    try:
+                        driver.execute_script("arguments[0].click();", click_target)
+                    except Exception:
+                        pass
+
+                # Wait up to 4s for navigation. If not navigated yet, retry next iteration.
+                try:
+                    WebDriverWait(driver, 4).until(
+                        lambda d: "showObject?uid=" in d.current_url
+                        or ("showObject?" in d.current_url and "showObjectSearch" not in d.current_url)
+                    )
+                    self.session.touch()
+                    return resolved_rev
+                except TimeoutException:
+                    time.sleep(1.0)
+                    continue
+
+            except (StaleElementReferenceException, NoSuchElementException):
+                time.sleep(1.0)
+                continue
+
+        raise SearchTimeoutError(f"Search for '{clean_item_id}' timed out after {timeout}s.")
 
     def navigate_to_content_tab(self, timeout: int = 25) -> bool:
         """Navigate to the Content tab of the active object.
